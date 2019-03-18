@@ -1,0 +1,25 @@
+{
+  "name": "libscie-api",
+  "version": "0.0.1",
+  "description": "The base API for a p2p scholarly communication infrastructure.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/libscie/api.git"
+  },
+  "keywords": [
+    "p2p",
+    "dat",
+    "research",
+    "communication"
+  ],
+  "author": "CHJ Hartgerink",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/libscie/api/issues"
+  },
+  "homepage": "https://github.com/libscie/api#readme"
+}
