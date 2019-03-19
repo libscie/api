@@ -16,10 +16,13 @@
     "research",
     "communication"
   ],
-  "author": "CHJ Hartgerink",
+  "author": "Liberate Science",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/libscie/api/issues"
   },
-  "homepage": "https://github.com/libscie/api#readme"
+  "homepage": "https://github.com/libscie/api#readme",
+  "dependencies": {
+    "dat-node": "^3.5.14"
+  }
 }
