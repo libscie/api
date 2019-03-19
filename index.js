@@ -1,5 +1,6 @@
 const Dat = require('dat-node')
 const fs = require('fs')
+const path = require('path')
 
 // get environment variable
 let LIBSCIE_DIR = process.env.LIBSCIE
@@ -19,7 +20,20 @@ let LIBSCIE_DIR = process.env.LIBSCIE
 // save a checked out version of the module
 // put the versioned link in the profile
 
-// clone module
+// clone module (clean)
+function clone (hash) {
+    Dat(path.join(process.env.LIBSCIE_DIR, hash), {
+        key: hash
+    }, (err, dat) => {
+        if (err) throw err
+
+        dat.joinNetwork((err, res) => {
+            if (err) throw err
+            console.log('Replicating dat://' + hash)
+            dat.leaveNetwork()
+        })
+    })
+}
 
 // verify module
 
