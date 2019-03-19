@@ -20,6 +20,9 @@ let LIBSCIE_DIR = process.env.LIBSCIE
 // save a checked out version of the module
 // put the versioned link in the profile
 
+const Dat = require('dat-node')
+const path = require('path')
+
 // clone module (clean)
 function clone (hash) {
     Dat(path.join(process.env.LIBSCIE_DIR, hash), {
@@ -29,8 +32,9 @@ function clone (hash) {
 
         dat.joinNetwork((err, res) => {
             if (err) throw err
-            console.log('Replicating dat://' + hash)
+
             dat.leaveNetwork()
+            console.log('Finished replicating dat://' + hash)
         })
     })
 }
@@ -44,3 +48,5 @@ function clone (hash) {
 // compile network data
 
 // visualize network
+
+// export keys

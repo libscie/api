@@ -1,6 +1,6 @@
 # Liberate Science API
 
-![npm badge](https://www.npmjs.com/package/libscie-api)
+[![NPM](https://nodei.co/npm/libscie-api.png)](https://npmjs.org/package/libscie-api)
 
 The base API for a p2p scholarly communication infrastructure. More
 information on this infrastructure is available in this [conceptual
