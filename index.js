@@ -1,71 +1,11 @@
 const Dat = require('dat-node')
 const fs = require('fs')
 const path = require('path')
+const init = require('./lib/init')
 
-let LIBSCIE_DIR = process.env.LIBSCIE
+let LIBSCIE_DIR = process.env.LIBSCIE_DIR
+console.log(LIBSCIE_DIR)
 // create the environment directory if not available
-
-function init (type) {
-    // create skeleton metadata file
-    let datJSON = initSkel(type)
-    datJSON.title = title
-    datJSON.description = desc
-    // put metadata in folder
-    // create tmp folder if not existent
-    // init dat in folder (don't share yet)
-    Dat(path.join(LIBSCIE_DIR, 'tmp'), (err, dat) => {
-        if (err) throw err
-
-        dat.importFiles()
-        dat.key.toString('hex')
-        // rename folder to hash
-        fs.rename(path.join(LIBSCIE_DIR, 'tmp'),
-                  path.join(LIBSCIE_DIR, hash), (err) => {
-                      if (err) throw err
-                  })
-    })
-}
-
-// init skeleton for dat.json
-// no more than that
-function initSkel (type) {
-    let jsonSkel = {}
-
-    jsonSkel.title = ''
-    jsonSkel.description = ''
-    jsonSkel.url = '' // need to preprocess this
-    jsonSkel.parents = []
-    jsonSkel.roots = []
-    jsonSkel.main = ''
-
-    if (type === 'profile') {
-        jsonSkel = initProfile(jsonSkel)
-    } else if (type === 'module') {
-        jsonSkel = initModule(jsonSkel)
-    } else {
-        throw "Something went wrong. Error code 001."
-    }
-
-    return jsonSkel
-}
-
-// add profile skeleton
-function initProfile (obj) {
-    obj.type = "scholarly-profile"
-    obj.follows= []
-    obj.modules= []
-
-    return obj
-}
-
-
-// add module skeleton
-function initModule (obj) {
-    obj.type= "scholarly-module",
-    obj.authors= []
-
-    return obj
-}
 
 // create module
 
@@ -108,5 +48,4 @@ function clone (hash) {
 
 // testing
 
-console.log(initSkel('profile'))
-console.log(initSkel('module'))
+console.log(init('profile', 'CHJ Hartgerink', LIBSCIE_DIR))
