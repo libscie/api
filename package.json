@@ -23,6 +23,7 @@
   },
   "homepage": "https://github.com/libscie/api#readme",
   "dependencies": {
+    "chmodr": "^1.2.0",
     "dat-node": "^3.5.14",
     "fs-extra": "^7.0.1"
   }
