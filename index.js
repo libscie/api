@@ -1,27 +1,14 @@
+const chmodr = require('chmodr')
 const Dat = require('dat-node')
-const fs = require('fs')
+const fs = require('fs-extra')
 const path = require('path')
 const init = require('./lib/init')
+const register = require('./lib/register')
 
 let LIBSCIE_DIR = process.env.LIBSCIE_DIR
 console.log(LIBSCIE_DIR)
 
 // share profile/module
-
-// register module to profile
-function register (reg, dest, env) {
-    // check whether reg is a module
-    // check whether reg isOwned
-    // check whether dest is a profile
-    // check whether dest isOwned
-
-    // checkout Dat version to new folder
-    // do some checks on the module
-    // write versioned url to profile
-    // make sure version is shared on the network?
-}
-// save a checked out version of the module
-// put the versioned link in the profile
 
 // clone module (clean)
 function clone (hash) {
@@ -55,5 +42,16 @@ function clone (hash) {
 
 
 // testing
+// can't quite figure this out atm cuz async :(
+init('profile', 'CHJ Hartgerink', LIBSCIE_DIR)
+init('module', 'Dear Diary', LIBSCIE_DIR)
 
-console.log(init('profile', 'CHJ Hartgerink', LIBSCIE_DIR))
+register('c28c17ed0a8580f09b29d608b165b6d135b9bdde9decd9fcf8aa8423277ca585',
+         '52782b10068b0d48c9c04b9b8c693fffff4a3874a0d181f4f074d9095aa891dd',
+         LIBSCIE_DIR)
+
+// register('',
+//          '',
+//          LIBSCIE_DIR)
+
+// cleanup testing
