@@ -1,61 +1,164 @@
-const chmodr = require('chmodr')
 const Dat = require('dat-node')
 const fs = require('fs-extra')
 const path = require('path')
-const init = require('./lib/init')
-const register = require('./lib/register')
-const { hashShort, hashChecker } = require('./lib/utils.js')
 
-let LIBSCIE_DIR = process.env.LIBSCIE_DIR
-console.log(LIBSCIE_DIR)
+module.exports = { init,
+                   readCache
+                 }
 
-// set options
-// function sets the defaults, arguments can be adjusted
-// to deviate from those defaults
+// init
+function initSkel (type, title, description) {
+    let obj = {}
 
+    obj.title = title
+    obj.description = description
+    obj.url = ''
+    obj.parents = []
+    obj.roots = []
+    obj.main = ''
 
-// assume it has been cloned already
-// async function checkout (key, version) {
-//     Dat(path.join(LIBSCIE_DIR, key), (err, dat) => {
-//         if (err) throw err
+    if (type === 'profile') {
+        obj.type = 'profile'
+        obj.follows = []
+        obj.modules = []
+    } else if (type === 'module') {
+        obj.type = 'module'
+        obj.authors = []
+    } else {
+        throw 'Wrongly specified init type (ExAPIx0001).'
+    }
 
-//         let oldDat = dat.archive.checkout(version)
-
-//         console.log(Object.getOwnPropertyNames(oldDat.readdir('.'));
-//         return oldDat
-//     })
-// }
-
-
-// verify module
-// currently assumes it's cloned already?
-async function verify (x) {
-    let info = hashChecker(x)
-    if ( !info.version ) throw 'Error: verification requires versioned module'
-    let checkPath = path.join(LIBSCIE_DIR, info.key)
-    // let mod = await checkout(info.key, info.version)
-    let modRaw = await fs.readFile(path.join(checkPath, 'dat.json'), 'utf-8')
-    let modMeta = await JSON.parse(modRaw)
-    // REQ versioned module?
-    // get metadata
-    // REQ 'scholarly-module'
-    // get authors
-    // for i in authors check whether mentions module
-    // iff true for all authors, then true
+    return obj
 }
 
-// trawl N degrees of separation from profile
+function init (type, env, title, description) {
+    let datJSON = initSkel(type, title, description)
+    
+    let tmp = path.join(env,
+                        `tmp${Math.random().toString().replace('\.', '')}`)
+    
+    fs.ensureDir(tmp, err => {
+        Dat(tmp, (err, dat) => {
+            if (err) throw err
 
-// traceback from module
-// regardless whether it's profile or module
+            let hash = dat.key.toString('hex')
+            datJSON.url = `dat://${hash}`
 
-// compile network data
+            fs.writeFile(path.join(tmp, 'dat.json'),
+                         JSON.stringify(datJSON),
+                         (err) => {
+                             if (err) throw err                             
 
-// visualize network
+                             dat.importFiles('dat.json')
 
-// export keys
+                             fs.rename(
+                                 tmp,
+                                 path.join(env, hash),
+                                 (err) => {
+                                     if (err) throw err
 
-// cache operations
-// check size
-// clean (how?)
+                                     console.log(
+                                         `Initialized new ${type}, dat://${hash}`
+                                     )
 
+                                     return datJSON
+                                 })
+                         })
+        })
+    })
+}
+
+
+async function cache (env, dir, overwrite = false) {
+    // if overwrite = false
+    // check if already in cache.json
+    // if so, end function
+    // if not (or overwrite = true)
+    // read metadata
+    let meta = await fs.readFile(path.join(env, dir, 'dat.json')).toString()
+    let metaP = JSON.parse(meta)
+    // create object
+    obj = []
+    obj.hash = metaP.url.replace('dat://', '')
+    obj.type = metaP.type
+
+    // append/replace to/in cache.json
+}
+
+// cache
+// readCache returns parsed cache if exists
+async function readCache (env) {
+    let cached = []
+    // check if cache exists
+    if ( fs.existsSync(path.join(env, 'cache.json')) ) {
+        let cache = await fs.readFile(path.join(env, 'cache.json'))
+        cached = JSON.parse(cache.toString())
+    } else {
+        // write out empty cache file
+        await fs.writeFile(path.join(env, 'cache.json'),
+                           JSON.stringify(cached))
+    }
+
+    return cached
+}
+
+function cacheDirs (env) {
+    // TODO implement async
+    const isDirectory = env => fs.lstatSync(env).isDirectory()
+    const getDirs = fs.readdirSync(env).map(name => path.join(env, name)).filter(isDirectory)
+    let regexp = new RegExp(/\w{64}(\+\d+)?$/, 'g')
+    let obj = getDirs.filter(val => {
+        return regexp.test(val)
+    })
+    
+    return obj
+}
+
+
+// this one starts from scratch ALWAYS
+async function buildCache (env) {
+    // init cache obj
+    let cached = []
+    // get all hash based dirs
+    let dirs = cacheDirs(env)
+    // for each dir
+    for ( dir in dirs ) {
+        // define object to store things in
+        let obj = {}
+        // read metadata
+        let meta = fs.readFileSync(path.join(dirs[dir], 'dat.json')).toString()
+        let metaP = JSON.parse(meta)
+        // Promises not yet implemented in dat-node
+        // https://github.com/datproject/dat-node/issues/221
+        // https://github.com/datproject/dat-node/issues/236
+        // let isOwner = await Dat(dirs[dir], (err,
+        
+        obj.title = metaP.title
+        obj.hash = metaP.url.replace('dat://', '')
+        obj.type = metaP.type
+        // obj.version 
+        // obj.verified = false
+        // obj.shared = false
+        // obj.registered = false
+
+        cached.push(obj)
+    }
+
+    // write away cache
+    fs.writeFileSync(path.join(env, 'cache.json'),
+                     JSON.stringify(cached))
+
+    console.log(`Built cache database from ${dirs.length} modules`)
+}
+
+async function cacheRefresh (env) {}
+
+// update
+async function update (hash, env) {
+    
+}
+
+
+// register
+
+buildCache('/home/chjh/.libscie')
