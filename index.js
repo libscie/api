@@ -3,7 +3,8 @@ const fs = require('fs-extra')
 const path = require('path')
 
 module.exports = { init,
-                   readCache
+                   readCache,
+                   buildCache
                  }
 
 // init
@@ -66,8 +67,8 @@ function init (type, env, title, description) {
                          })
         })
     })
+    // add auto-cache addition
 }
-
 
 async function cache (env, dir, overwrite = false) {
     // if overwrite = false
@@ -106,7 +107,7 @@ function cacheDirs (env) {
     // TODO implement async
     const isDirectory = env => fs.lstatSync(env).isDirectory()
     const getDirs = fs.readdirSync(env).map(name => path.join(env, name)).filter(isDirectory)
-    let regexp = new RegExp(/\w{64}(\+\d+)?$/, 'g')
+    let regexp = new RegExp(/\w{64}(\+\d+)?$/)
     let obj = getDirs.filter(val => {
         return regexp.test(val)
     })
@@ -161,4 +162,3 @@ async function update (hash, env) {
 
 // register
 
-buildCache('/home/chjh/.libscie')
