@@ -4,8 +4,11 @@ const path = require('path')
 
 module.exports = { init,
                    readCache,
-                   buildCache
+                   buildCache,
+                   reg
                  }
+
+////////////////////////////////////////////////////////////////////////////////
 
 // init
 function initSkel (type, title, description) {
@@ -32,62 +35,34 @@ function initSkel (type, title, description) {
     return obj
 }
 
-function init (type, env, title, description) {
+async function init (type, env, title, description) {
     let datJSON = initSkel(type, title, description)
     
     let tmp = path.join(env,
                         `tmp${Math.random().toString().replace('\.', '')}`)
     
-    fs.ensureDir(tmp, err => {
-        Dat(tmp, (err, dat) => {
-            if (err) throw err
+    await fs.ensureDir(tmp)
+    let dat = await Dat(tmp)
+    let hash = dat.key.toString('hex')
+    datJSON.url = `dat://${hash}`
 
-            let hash = dat.key.toString('hex')
-            datJSON.url = `dat://${hash}`
+    await fs.writeFile(path.join(tmp, 'dat.json'),
+                       JSON.stringify(datJSON))
+    await dat.importFiles('dat.json')
+    await fs.rename(
+        tmp,
+        path.join(env, hash))
+    console.log(`Initialized new ${type}, dat://${hash}`)
 
-            fs.writeFile(path.join(tmp, 'dat.json'),
-                         JSON.stringify(datJSON),
-                         (err) => {
-                             if (err) throw err                             
+    cache(hash, env)
 
-                             dat.importFiles('dat.json')
+    return datJSON
 
-                             fs.rename(
-                                 tmp,
-                                 path.join(env, hash),
-                                 (err) => {
-                                     if (err) throw err
-
-                                     console.log(
-                                         `Initialized new ${type}, dat://${hash}`
-                                     )
-
-                                     return datJSON
-                                 })
-                         })
-        })
-    })
-    // add auto-cache addition
+    // add auto cache?
 }
 
-async function cache (env, dir, overwrite = false) {
-    // if overwrite = false
-    // check if already in cache.json
-    // if so, end function
-    // if not (or overwrite = true)
-    // read metadata
-    let meta = await fs.readFile(path.join(env, dir, 'dat.json')).toString()
-    let metaP = JSON.parse(meta)
-    // create object
-    obj = []
-    obj.hash = metaP.url.replace('dat://', '')
-    obj.type = metaP.type
+////////////////////////////////////////////////////////////////////////////////
 
-    // append/replace to/in cache.json
-}
-
-// cache
-// readCache returns parsed cache if exists
 async function readCache (env) {
     let cached = []
     // check if cache exists
@@ -103,6 +78,11 @@ async function readCache (env) {
     return cached
 }
 
+async function writeCache (obj, env) {
+    await fs.writeFile(path.join(env, 'cache.json'),
+                     JSON.stringify(obj))
+}
+
 function cacheDirs (env) {
     // TODO implement async
     const isDirectory = env => fs.lstatSync(env).isDirectory()
@@ -115,16 +95,16 @@ function cacheDirs (env) {
     return obj
 }
 
-
 // this one starts from scratch ALWAYS
 async function buildCache (env) {
+    // ensure env exists
     // init cache obj
     let cached = []
     // get all hash based dirs
     let dirs = cacheDirs(env)
     // for each dir
     for ( dir in dirs ) {
-        // define object to store things in
+        // need to factor this out and use cache()
         let obj = {}
         // read metadata
         let meta = fs.readFileSync(path.join(dirs[dir], 'dat.json')).toString()
@@ -132,11 +112,12 @@ async function buildCache (env) {
         // Promises not yet implemented in dat-node
         // https://github.com/datproject/dat-node/issues/221
         // https://github.com/datproject/dat-node/issues/236
-        // let isOwner = await Dat(dirs[dir], (err,
-        
+        let dat = await Dat(dirs[dir])
+
         obj.title = metaP.title
         obj.hash = metaP.url.replace('dat://', '')
         obj.type = metaP.type
+        obj.isOwner = dat.writable
         // obj.version 
         // obj.verified = false
         // obj.shared = false
@@ -145,20 +126,74 @@ async function buildCache (env) {
         cached.push(obj)
     }
 
-    // write away cache
-    fs.writeFileSync(path.join(env, 'cache.json'),
-                     JSON.stringify(cached))
+    await writeCache(cached, env)
 
     console.log(`Built cache database from ${dirs.length} modules`)
 }
 
-async function cacheRefresh (env) {}
+// cache a single hash
+async function cache (hash, env) {
+    let cache = await readCache(env)
+    let dat = await Dat(path.join(env, hash))
+    // check if already exists
+    let index = cache.indexOf(cac => cac.hash === hash)
+    if ( index === -1 ) {                  
+        let obj = await readMeta(hash, env)
+        obj.isOwner = dat.writable
+        cache.push(obj)
+    } else {
+        // maybe add a check for double cached items?
+        let obj = cache[index]
+        obj.isOwner = dat.writable
+        cache[index] = obj
+    }
 
-// update
-async function update (hash, env) {
-    
+    // obj.version = dat.archive.version
+    // obj.verified
+    // need to implement verify() first
+    // obj.shared
+    // 
+    // obj.registered
+    // replace cached obj
+    await writeCache(cache, env)
 }
 
 
-// register
+////////////////////////////////////////////////////////////////////////////////
 
+// register
+async function reg (register, registerTo, env) {
+    let dat = await Dat(path.join(env, register))
+    let datV = dat.archive.version
+    let regV = `dat://${register}+${datV}`
+
+    // create a version specific copy in env (READ ONLY)
+    // read dat.json of registerTo
+    let regTo = await readMeta(registerTo, env)
+    if ( !regTo.modules.includes(regV) ) {
+        regTo.modules.push(regV)
+        await writeMeta(registerTo, regTo, env)
+        // update cache
+        await cache(registerTo, env)
+
+        console.log(`Registered ${regV} to ${registerTo}`)
+    } else {
+        console.log(`Already registered!`)
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// utils
+
+async function readMeta (hash, env) {
+    let file = path.join(env, hash, 'dat.json')
+    let meta = fs.readFileSync(file)
+
+    return JSON.parse(meta)
+}
+
+async function writeMeta (hash, obj, env) {
+    fs.writeFileSync(path.join(env, hash, 'dat.json'),
+                     JSON.stringify(obj))
+}
