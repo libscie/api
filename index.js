@@ -1,11 +1,13 @@
 const Dat = require('dat-node')
 const fs = require('fs-extra')
 const path = require('path')
+const utils = require('./lib/utils')
 
 module.exports = { init,
                    readCache,
                    buildCache,
-                   reg
+                   reg,
+                   readSettings
                  }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -52,13 +54,11 @@ async function init (type, env, title, description) {
     await fs.rename(
         tmp,
         path.join(env, hash))
-    console.log(`Initialized new ${type}, dat://${hash}`)
+    console.log(`Initialized new ${type}, dat://${utils.hashShort(hash)}`)
 
     cache(hash, env)
 
     return datJSON
-
-    // add auto cache?
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -80,7 +80,7 @@ async function readCache (env) {
 
 async function writeCache (obj, env) {
     await fs.writeFile(path.join(env, 'cache.json'),
-                     JSON.stringify(obj))
+                       JSON.stringify(obj))
 }
 
 function cacheDirs (env) {
@@ -182,18 +182,50 @@ async function reg (register, registerTo, env) {
     }
 }
 
+// spawn
+
+async function spawn (parent, env) {
+    // when spawning a non-versioned module
+    // it automatically registers
+    // then adds as parent
+    // make sure to allow multiple parents ie multiSelect
+    // https://github.com/terkelg/prompts#autocompletemultiselectsame
+}
 ////////////////////////////////////////////////////////////////////////////////
 
 // utils
 
 async function readMeta (hash, env) {
     let file = path.join(env, hash, 'dat.json')
-    let meta = fs.readFileSync(file)
+    let meta = await fs.readFile(file)
 
     return JSON.parse(meta)
 }
 
 async function writeMeta (hash, obj, env) {
     fs.writeFileSync(path.join(env, hash, 'dat.json'),
+                     JSON.stringify(obj))
+}
+
+///////////////////////////////////
+async function initSettings (env) {
+    let obj = {}
+
+    await writeSettings(obj, env)
+}
+
+async function readSettings (env) {
+    let file = path.join(env, 'settings.json')
+    if ( !fs.existsSync(file) ) {
+        initSettings(env)
+    }
+    
+    let settings = await fs.readFile(file)
+
+    return JSON.parse(settings)
+}
+
+async function writeSettings (obj, env) {
+    fs.writeFileSync(path.join(env, 'settings.json'),
                      JSON.stringify(obj))
 }
