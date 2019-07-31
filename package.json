@@ -1,14 +1,14 @@
 {
-  "name": "libscie-api",
+  "name": "libscie-sdk",
   "version": "0.0.1",
-  "description": "The base API for a p2p scholarly communication infrastructure.",
+  "description": "The SDK for p2p public collaborative project infrastructure",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test.js"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/libscie/api.git"
+    "url": "git+https://github.com/libscie/sdk.git"
   },
   "keywords": [
     "p2p",
@@ -19,12 +19,17 @@
   "author": "Liberate Science",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/libscie/api/issues"
+    "url": "https://github.com/libscie/sdk/issues"
   },
-  "homepage": "https://github.com/libscie/api#readme",
+  "homepage": "https://github.com/libscie/sdk#readme",
   "dependencies": {
-    "chmodr": "^1.2.0",
     "dat-node": "^3.5.14",
-    "fs-extra": "^7.0.1"
+    "events": "^3.0.0",
+    "fs-extra": "^7.0.1",
+    "hyperdiscovery": "^8.0.0",
+    "hyperdrive": "^9.14.5",
+    "mirror-folder": "^3.0.0",
+    "mkdirp": "^0.5.1",
+    "random-access-memory": "^3.1.1"
   }
 }
