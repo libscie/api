@@ -8,6 +8,10 @@ publication](https://doi.org/10.3390/publications6020021) and this
 [technical publication](https://chartgerink.github.io/2018dat-com/)
 (note these might have been extended by now).
 
+## Install
+
+`npm install @p2pcommons/sdk-js`
+
 ## Usage
 
 This is an `npm` module that does not export any processes to your
@@ -16,9 +20,24 @@ your NodeJS packages, but does not provide any direct functionality
 outside of it. If you are looking for a Command Line Interface (CLI),
 [we got you covered](https://github.com/libscie/cli).
 
-## Installation
+## Example
 
-```bash
-npm install libscie-api        #if you want to use it in node directly
-npm install libscie-api --save #if you want to use it in development of software
+```javascript
+const libsdk = require('@p2pcommons/sdk-js') // liberate science constructor function
+
+const content = libsdk({ type: 'content' })
+const profile = libsdk({ type: 'profile' })
+
+;(async () => {
+  await module.init() // ~/.p2pcommons/hash/dat.json --> type: content
+  await profile.init() // ~/.p2pcommons/hash/dat.json --> type: profile
+})()
 ```
+
+## API
+
+### Init
+
+### Create
+
+
