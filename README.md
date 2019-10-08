@@ -8,6 +8,8 @@ publication](https://doi.org/10.3390/publications6020021) and this
 [technical publication](https://chartgerink.github.io/2018dat-com/)
 (note these might have been extended by now).
 
+:warning: **Work In Progress**
+
 ## Install
 
 `npm install @p2pcommons/sdk-js`
@@ -23,14 +25,11 @@ outside of it. If you are looking for a Command Line Interface (CLI),
 ## Example
 
 ```javascript
-const libsdk = require('@p2pcommons/sdk-js') // liberate science constructor function
-
-const content = libsdk({ type: 'content' })
-const profile = libsdk({ type: 'profile' })
+const libsdk = require('@p2pcommons/sdk-js')({}) // liberate science constructor function
 
 ;(async () => {
-  await module.init() // ~/.p2pcommons/hash/dat.json --> type: content
-  await profile.init() // ~/.p2pcommons/hash/dat.json --> type: profile
+  await libsdk.init({ type: 'content' }) // ~/.p2pcommons/hash/dat.json --> type: content
+  await libsdk.init({ type: 'profile' }) // ~/.p2pcommons/hash/dat.json --> type: profile
 })()
 ```
 
