@@ -1,5 +1,5 @@
 {
-  "name": "libscie-sdk",
+  "name": "@p2pcommons/sdk-js",
   "version": "0.0.1",
   "description": "The SDK for p2p public collaborative project infrastructure",
   "main": "index.js",

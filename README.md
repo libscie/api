@@ -19,17 +19,18 @@ publication](https://doi.org/10.3390/publications6020021) and this
 This is an `npm` module that does not export any processes to your
 global environment. In other words, it is a module that you can use in
 your NodeJS packages, but does not provide any direct functionality
-outside of it. If you are looking for a Command Line Interface (CLI),
-[we got you covered](https://github.com/libscie/cli).
+outside of it.
 
 ## Example
 
 ```javascript
-const libsdk = require('@p2pcommons/sdk-js')({}) // liberate science constructor function
+const P2PCommons = require('@p2pcommons/sdk-js')
+
+const p2p = P2PCommons()
 
 ;(async () => {
-  await libsdk.init({ type: 'content' }) // ~/.p2pcommons/hash/dat.json --> type: content
-  await libsdk.init({ type: 'profile' }) // ~/.p2pcommons/hash/dat.json --> type: profile
+  await p2p.init({ type: 'content' }) // ~/.p2pcommons/hash/dat.json --> type: content
+  await p2p.init({ type: 'profile' }) // ~/.p2pcommons/hash/dat.json --> type: profile
 })()
 ```
 

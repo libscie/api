@@ -63,9 +63,7 @@ class SDK {
 
   async init ({ type, title = '', description = '', ...rest }) {
     // follow module spec: https://github.com/p2pcommons/specs/pull/1/files?short_path=2d471ef#diff-2d471ef4e3a452b579a3367eb33ccfb9
-    // 1. create folder with name uniqueString()?
-    //   1. check if folder exists.
-    //   2. If exists, err unless opts overwrite is set to true.
+    // 1. create folder with unique name
     // 2. initialize an hyperdrive inside
     // 3. createDatJSON with the corrent metadata and save it there
     //
@@ -109,9 +107,6 @@ class SDK {
 
     // write dat.json
     await writeFile(join(tmp, 'dat.json'), JSON.stringify(datJSON))
-
-    // Note(dk): not necessary anymore?
-    // await dat.importFiles('dat.json')
 
     await rename(tmp, join(this.baseDir, hash))
 
