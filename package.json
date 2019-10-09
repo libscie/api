@@ -1,7 +1,7 @@
 {
   "name": "@p2pcommons/sdk-js",
   "version": "0.0.1",
-  "description": "The SDK for p2p public collaborative project infrastructure",
+  "description": "The SDK for the p2p commons",
   "main": "index.js",
   "scripts": {
     "test": "node test.js",
@@ -10,20 +10,19 @@
   "precommit": "prettier-standard --lint --staged",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/libscie/sdk.git"
+    "url": "git+https://github.com/p2pcommons/sdk-js.git"
   },
   "keywords": [
     "p2p",
     "dat",
-    "research",
     "communication"
   ],
   "author": "Liberate Science",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/libscie/sdk/issues"
+    "url": "https://github.com/p2pcommons/sdk-js/issues"
   },
-  "homepage": "https://github.com/libscie/sdk#readme",
+  "homepage": "https://github.com/p2pcommons/sdk-js#readme",
   "dependencies": {
     "@geut/hyperdrive-promise": "^1.0.0",
     "corestore": "^2.0.0",
