@@ -1,35 +1,46 @@
 {
-  "name": "libscie-sdk",
+  "name": "@p2pcommons/sdk-js",
   "version": "0.0.1",
-  "description": "The SDK for p2p public collaborative project infrastructure",
+  "description": "The SDK for the p2p commons",
   "main": "index.js",
   "scripts": {
-    "test": "node test.js"
+    "test": "node test.js",
+    "format": "prettier-standard --format"
   },
+  "precommit": "prettier-standard --lint --staged",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/libscie/sdk.git"
+    "url": "git+https://github.com/p2pcommons/sdk-js.git"
   },
   "keywords": [
     "p2p",
     "dat",
-    "research",
     "communication"
   ],
   "author": "Liberate Science",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/libscie/sdk/issues"
+    "url": "https://github.com/p2pcommons/sdk-js/issues"
   },
-  "homepage": "https://github.com/libscie/sdk#readme",
+  "homepage": "https://github.com/p2pcommons/sdk-js#readme",
   "dependencies": {
-    "dat-node": "^3.5.14",
-    "events": "^3.0.0",
+    "@geut/hyperdrive-promise": "^1.0.0",
+    "corestore": "^2.0.0",
+    "dat-encoding": "^5.0.1",
     "fs-extra": "^7.0.1",
-    "hyperdiscovery": "^8.0.0",
-    "hyperdrive": "^9.14.5",
-    "mirror-folder": "^3.0.0",
-    "mkdirp": "^0.5.1",
-    "random-access-memory": "^3.1.1"
+    "hyperdiscovery": "^10.1.0",
+    "random-access-memory": "^3.1.1",
+    "unique-string": "^2.0.0",
+    "universal-dat-storage": "^1.3.5"
+  },
+  "devDependencies": {
+    "debug": "^4.1.1",
+    "eslint": "^6.5.1",
+    "eslint-config-standard": "^14.1.0",
+    "eslint-plugin-import": "^2.18.2",
+    "eslint-plugin-node": "^10.0.0",
+    "eslint-plugin-promise": "^4.2.1",
+    "eslint-plugin-standard": "^4.0.1",
+    "prettier-standard": "^15.0.1"
   }
 }

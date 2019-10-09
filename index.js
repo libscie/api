@@ -1,231 +1,127 @@
-const Dat = require('dat-node')
+const assert = require('assert')
+const { join } = require('path')
+const { homedir, tmpdir, platform } = require('os')
+const {
+  promises: { writeFile, rename }
+} = require('fs')
 const fs = require('fs-extra')
-const path = require('path')
-const utils = require('./lib/utils')
+const RAM = require('random-access-memory')
+const discovery = require('hyperdiscovery')
+const uniqueString = require('unique-string')
+const DatEncoding = require('dat-encoding')
+const debug = require('debug')('libsdk')
+const DatHelper = require('./lib/dat-helper')
 
-module.exports = { init,
-                   readCache,
-                   buildCache,
-                   reg,
-                   readSettings
-                 }
-
-////////////////////////////////////////////////////////////////////////////////
-
-// init
-function initSkel (type, title, description) {
-    let obj = {}
-
-    obj.title = title
-    obj.description = description
-    obj.url = ''
-    obj.parents = []
-    obj.roots = []
-    obj.main = ''
-
-    if (type === 'profile') {
-        obj.type = 'profile'
-        obj.follows = []
-        obj.modules = []
-    } else if (type === 'module') {
-        obj.type = 'module'
-        obj.authors = []
-    } else {
-        throw 'Wrongly specified init type (ExAPIx0001).'
-    }
-
-    return obj
+const DEFAULT_SWARM_OPTS = {
+  extensions: []
 }
 
-async function init (type, env, title, description) {
-    let datJSON = initSkel(type, title, description)
-    
-    let tmp = path.join(env,
-                        `tmp${Math.random().toString().replace('\.', '')}`)
-    
+const createDatJSON = (type, title = '', description = '') => {
+  const obj = {}
+  obj.title = title
+  obj.description = description
+  obj.url = ''
+  obj.roots = []
+  obj.main = ''
+  obj.license = ''
+
+  if (type.endsWith('profile')) {
+    obj.type = 'profile'
+    obj.follows = []
+    obj.contents = []
+  } else {
+    obj.type = 'content'
+    obj.authors = []
+    obj.parents = []
+  }
+
+  return obj
+}
+
+class SDK {
+  constructor (opts = {}) {
+    debug('libsdk:constructor')
+    this.platform = platform()
+    this.home =
+      process.env.HOME ||
+      (this.windows && this.windowsHome()) ||
+      homedir() ||
+      tmpdir()
+    this.windows = this.platform === 'win32'
+    opts.baseDir = opts.baseDir || '.p2pcommons'
+    this.baseDir = join(this.home, opts.baseDir)
+    this.persist = opts.persist || true
+    this.storage = opts.storage || undefined
+    // instantiate local db here
+    // start hyperswarm
+    this.disableSwarm = !!opts.disableSwarm
+    if (!this.disableSwarm) {
+      debug('libsdk:constructor starting swarm')
+      this.swarm = discovery(Object.assign({}, DEFAULT_SWARM_OPTS, opts.swarm))
+    }
+  }
+
+  async init ({ type, title = '', description = '', ...rest }) {
+    // follow module spec: https://github.com/p2pcommons/specs/pull/1/files?short_path=2d471ef#diff-2d471ef4e3a452b579a3367eb33ccfb9
+    // 1. create folder with unique name
+    // 2. initialize an hyperdrive inside
+    // 3. createDatJSON with the corrent metadata and save it there
+    //
+    assert.ok(typeof type === 'string', 'type is required')
+    assert.ok(
+      type.endsWith('profile') || type.endsWith('content'),
+      "type should be 'content' or 'profile'"
+    )
+    debug(`libsdk:init ${type}`)
+    const datJSON = createDatJSON(type, title, description)
+
+    const tmp = join(this.baseDir, uniqueString())
+
     await fs.ensureDir(tmp)
-    let dat = await Dat(tmp)
-    let hash = dat.key.toString('hex')
+
+    const datHelper = await DatHelper(tmp, {
+      persist: this.persist,
+      storageFn: this.storage,
+      storageOpts: { ...rest.storageOpts }
+    })
+    const { archive } = datHelper
+    await archive.ready()
+
+    const hash = archive.key.toString('hex')
+
+    debug('libsdk:hash', hash)
+    if (!this.disableSwarm) {
+      this.swarm.add(archive)
+
+      archive.once('close', () => {
+        debug(`libsdk:closing archive ${archive.publicKey}...`)
+        const discoveryKey = DatEncoding.encode(archive.discoveryKey)
+        this.swarm.leave(discoveryKey)
+        this.swarm._replicatingFeeds.delete(discoveryKey)
+        // Note(dk): should we handle multiple drives?
+        // drives.delete(stringKey)
+      })
+    }
+
     datJSON.url = `dat://${hash}`
 
-    await fs.writeFile(path.join(tmp, 'dat.json'),
-                       JSON.stringify(datJSON))
-    await dat.importFiles('dat.json')
-    await fs.rename(
-        tmp,
-        path.join(env, hash))
-    console.log(`Initialized new ${type}, dat://${utils.hashShort(hash)}`)
+    // write dat.json
+    await writeFile(join(tmp, 'dat.json'), JSON.stringify(datJSON))
 
-    cache(hash, env)
+    await rename(tmp, join(this.baseDir, hash))
+
+    console.log(`Initialized new ${datJSON.type}, dat://${hash}`)
+
+    // cache(hash, env)
 
     return datJSON
+  }
+
+  async destroy () {
+    debug('libsdk:destroying swarm')
+    if (this.disableSwarm) return
+    return this.swarm.close()
+  }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-async function readCache (env) {
-    let cached = []
-    // check if cache exists
-    if ( fs.existsSync(path.join(env, 'cache.json')) ) {
-        let cache = await fs.readFile(path.join(env, 'cache.json'))
-        cached = JSON.parse(cache.toString())
-    } else {
-        // write out empty cache file
-        await fs.writeFile(path.join(env, 'cache.json'),
-                           JSON.stringify(cached))
-    }
-
-    return cached
-}
-
-async function writeCache (obj, env) {
-    await fs.writeFile(path.join(env, 'cache.json'),
-                       JSON.stringify(obj))
-}
-
-function cacheDirs (env) {
-    // TODO implement async
-    const isDirectory = env => fs.lstatSync(env).isDirectory()
-    const getDirs = fs.readdirSync(env).map(name => path.join(env, name)).filter(isDirectory)
-    let regexp = new RegExp(/\w{64}(\+\d+)?$/)
-    let obj = getDirs.filter(val => {
-        return regexp.test(val)
-    })
-    
-    return obj
-}
-
-// this one starts from scratch ALWAYS
-async function buildCache (env) {
-    // ensure env exists
-    // init cache obj
-    let cached = []
-    // get all hash based dirs
-    let dirs = cacheDirs(env)
-    // for each dir
-    for ( dir in dirs ) {
-        // need to factor this out and use cache()
-        let obj = {}
-        // read metadata
-        let meta = fs.readFileSync(path.join(dirs[dir], 'dat.json')).toString()
-        let metaP = JSON.parse(meta)
-        // Promises not yet implemented in dat-node
-        // https://github.com/datproject/dat-node/issues/221
-        // https://github.com/datproject/dat-node/issues/236
-        let dat = await Dat(dirs[dir])
-
-        obj.title = metaP.title
-        obj.hash = metaP.url.replace('dat://', '')
-        obj.type = metaP.type
-        obj.isOwner = dat.writable
-        // obj.version 
-        // obj.verified = false
-        // obj.shared = false
-        // obj.registered = false
-
-        cached.push(obj)
-    }
-
-    await writeCache(cached, env)
-
-    console.log(`Built cache database from ${dirs.length} modules`)
-}
-
-// cache a single hash
-async function cache (hash, env) {
-    let cache = await readCache(env)
-    let dat = await Dat(path.join(env, hash))
-    // check if already exists
-    let index = cache.indexOf(cac => cac.hash === hash)
-    if ( index === -1 ) {                  
-        let obj = await readMeta(hash, env)
-        obj.isOwner = dat.writable
-        cache.push(obj)
-    } else {
-        // maybe add a check for double cached items?
-        let obj = cache[index]
-        obj.isOwner = dat.writable
-        cache[index] = obj
-    }
-
-    // obj.version = dat.archive.version
-    // obj.verified
-    // need to implement verify() first
-    // obj.shared
-    // 
-    // obj.registered
-    // replace cached obj
-    await writeCache(cache, env)
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-
-// register
-async function reg (register, registerTo, env) {
-    let dat = await Dat(path.join(env, register))
-    let datV = dat.archive.version
-    let regV = `dat://${register}+${datV}`
-
-    // create a version specific copy in env (READ ONLY)
-    // read dat.json of registerTo
-    let regTo = await readMeta(registerTo, env)
-    if ( !regTo.modules.includes(regV) ) {
-        regTo.modules.push(regV)
-        await writeMeta(registerTo, regTo, env)
-        // update cache
-        await cache(registerTo, env)
-
-        console.log(`Registered ${regV} to ${registerTo}`)
-    } else {
-        console.log(`Already registered!`)
-    }
-}
-
-// spawn
-
-async function spawn (parent, env) {
-    // when spawning a non-versioned module
-    // it automatically registers
-    // then adds as parent
-    // make sure to allow multiple parents ie multiSelect
-    // https://github.com/terkelg/prompts#autocompletemultiselectsame
-}
-////////////////////////////////////////////////////////////////////////////////
-
-// utils
-
-async function readMeta (hash, env) {
-    let file = path.join(env, hash, 'dat.json')
-    let meta = await fs.readFile(file)
-
-    return JSON.parse(meta)
-}
-
-async function writeMeta (hash, obj, env) {
-    fs.writeFileSync(path.join(env, hash, 'dat.json'),
-                     JSON.stringify(obj))
-}
-
-///////////////////////////////////
-async function initSettings (env) {
-    let obj = {}
-
-    await writeSettings(obj, env)
-}
-
-async function readSettings (env) {
-    let file = path.join(env, 'settings.json')
-    if ( !fs.existsSync(file) ) {
-        initSettings(env)
-    }
-    
-    let settings = await fs.readFile(file)
-
-    return JSON.parse(settings)
-}
-
-async function writeSettings (obj, env) {
-    fs.writeFileSync(path.join(env, 'settings.json'),
-                     JSON.stringify(obj))
-}
+module.exports = (...args) => new SDK(...args)
