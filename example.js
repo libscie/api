@@ -1,7 +1,9 @@
-const libsdk = require('.')({ disableSwarm: true }) // liberate science constructor function
+const P2PCommons = require('.') // liberate science constructor function
+const commons = P2PCommons({ disableSwarm: true })
 
-process.once('SIGINT', () => libsdk.destroy())
+process.once('SIGINT', () => commons.destroy())
 ;(async () => {
-  await libsdk.init({ type: 'content' }) // ~/.p2pcommons/hash/dat.json --> type: content
-  await libsdk.init({ type: 'profile' }) // ~/.p2pcommons/hash/dat.json --> type: profile
+  await commons.ready() // initializes local db
+  await commons.init({ type: 'content' }) // ~/.p2pcommons/hash/dat.json --> type: content
+  await commons.init({ type: 'profile' }) // ~/.p2pcommons/hash/dat.json --> type: profile
 })()
