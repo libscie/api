@@ -1,0 +1,35 @@
+{
+  "name": "Content",
+  "type": "record",
+  "fields": [
+    {"name": "title", "type": "string"},
+    {"name": "description", "type": "string"},
+    {"name": "url", "type": "string"},
+    {
+      "name": "type",
+      "type": {
+        "name": "Type",
+        "type": "enum",
+        "symbols": ["content", "profile"]
+      }
+    },
+    {"name": "main", "type": "string"},
+    {"name": "license", "type": "string"},
+    {
+      "name": "authors",
+      "type": {
+        "type": "array",
+        "items": "string"
+      },
+      "default": []
+    },
+    {
+      "name": "parents",
+      "type": {
+        "type": "array",
+        "items": "string"
+      },
+      "default": []
+    }
+  ]
+}
