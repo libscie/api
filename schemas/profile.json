@@ -1,14 +1,14 @@
 {
   "name": "Profile",
+  "namespace": "P2PCommons",
   "type": "record",
   "fields": [
     {"name": "title", "type": "string"},
     {"name": "description", "type": "string"},
-    {"name": "url", "type": "string"},
+    {"name": "url", "type": "bytes"},
     {
       "name": "type",
       "type": {
-        "name": "Type",
         "type": "enum",
         "symbols": ["content", "profile"]
       }
@@ -19,7 +19,7 @@
       "name": "follows",
       "type": {
         "type": "array",
-        "items": "string"
+        "items": "bytes"
       },
       "default": []
     },
@@ -27,7 +27,7 @@
       "name": "contents",
       "type": {
         "type": "array",
-        "items": "string"
+        "items": "bytes"
       },
       "default": []
     }
