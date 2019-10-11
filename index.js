@@ -6,13 +6,14 @@ const {
 } = require('fs')
 const { ensureDir } = require('fs-extra')
 const level = require('level')
-const avro = require('avsc')
+const { Type } = require('@avro/types')
 const envPaths = require('env-paths')
 const discovery = require('hyperdiscovery')
 const uniqueString = require('unique-string')
 const DatEncoding = require('dat-encoding')
 const debug = require('debug')('p2pcommons')
 const DatHelper = require('./lib/dat-helper')
+const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
 
@@ -70,24 +71,14 @@ class SDK {
     await ensureDir(this.dbPath)
     return new Promise((resolve, reject) => {
       // start local db
-      this.contentType = avro.Type.forSchema(ContentSchema)
-      this.profileType = avro.Type.forSchema(ProfileSchema)
-      this.contentTypeCodec = {
-        type: 'AvroContentType',
-        encode: datum => this.contentType.toBuffer(datum),
-        decode: datum => this.contentType.fromBuffer(datum),
-        buffer: true
-      }
-      this.profileTypeCodec = {
-        type: 'AvroProfileType',
-        encode: datum => this.profileType.toBuffer(datum),
-        decode: datum => this.profileType.fromBuffer(datum),
-        buffer: true
-      }
+      const registry = {}
+      this.contentType = Type.forSchema(ContentSchema, { registry })
+      this.profileType = Type.forSchema(ProfileSchema, { registry })
+      const codec = new Codec(registry)
       level(
         join(this.dbPath, 'db'),
         {
-          valueEncoding: 'binary'
+          valueEncoding: codec
         },
         (err, db) => {
           if (err instanceof level.errors.OpenError) {
@@ -99,6 +90,20 @@ class SDK {
         }
       )
     })
+  }
+
+  getAvroTypeName (appType) {
+    // Note(dk): fix this. Decide between keeping an type === content || profile or '-profile' (endsWith)
+    if (appType === 'content') {
+      return this.contentType.name
+    }
+    if (appType === 'profile') {
+      return this.profileType.name
+    }
+  }
+
+  keyFromMetadata (metadata) {
+    return `${metadata.type}_${metadata.url.toString('hex')}`
   }
 
   async init ({ type, title = '', description = '', ...rest }) {
@@ -143,7 +148,7 @@ class SDK {
       })
     }
 
-    datJSON.url = `dat://${hash}`
+    datJSON.url = archive.key
 
     // write dat.json
     await writeFile(join(tmp, 'dat.json'), JSON.stringify(datJSON))
@@ -152,12 +157,32 @@ class SDK {
 
     console.log(`Initialized new ${datJSON.type}, dat://${hash}`)
     debug('p2pcommons:datJSON', datJSON)
-    // cache(hash, env)
-    const codec =
-      datJSON.type === 'content' ? this.contentTypeCodec : this.profileTypeCodec
-    await this.db.put(hash, datJSON, { valueEncoding: codec })
-    console.log(`Saved new ${datJSON.type}, wth key: ${hash}`)
+
+    await this.db.put(this.keyFromMetadata(datJSON), {
+      type: this.getAvroTypeName(datJSON.type),
+      value: datJSON
+    })
+    console.log(`Saved new ${datJSON.type}, with key: ${hash}`)
     return datJSON
+  }
+
+  async set (hash, values = {}) {
+    assert.ok(hash, 'hash is required')
+    assert.strictEqual(typeof values, 'object', 'values should be an object')
+    assert.ok(
+      values.type.endsWith('profile') || values.type.endsWith('content'),
+      "type should be 'content' or 'profile'"
+    )
+
+    return this.db.put(hash, {
+      type: this.getAvroTypeName(values.type),
+      value: values
+    })
+  }
+
+  async get (hash) {
+    // retrieves metadata using hash as key
+    return this.db.get(hash)
   }
 
   async destroy () {
