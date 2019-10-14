@@ -1,6 +1,6 @@
 {
   "name": "@p2pcommons/sdk-js",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "The SDK for the p2p commons",
   "main": "index.js",
   "scripts": {
@@ -17,6 +17,9 @@
     "dat",
     "communication"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "author": "Liberate Science",
   "license": "MIT",
   "bugs": {
