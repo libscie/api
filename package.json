@@ -17,6 +17,9 @@
     "dat",
     "communication"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "author": "Liberate Science",
   "license": "MIT",
   "bugs": {
