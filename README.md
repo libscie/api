@@ -36,8 +36,36 @@ const p2p = P2PCommons()
 
 ## API
 
+`const P2PCommons = require('@p2pcommons/sdk-js')`
+
+### Constructor
+
+> `P2PCommons(opts)`
+
+Returns a new instance of the sdk. `opts` can include the following:
+```javascript
+{
+  baseDir: // defaults to '~/.p2pcommons'
+  persist: // Indicates if the drives should be persisted - defaults to true
+  storage: // Accepts a storage function - defaults to undefined
+  disableSwarm: // defaults to undefined
+  swarm: // swarm options - defaults to undefined
+}
+```
+
 ### Init
 
-### Create
+> _async_ `init(data)`
+
+Creates a new folder for 'content' or 'profile' according to the received `data.type` value.
+`data` values follows the [p2pcommons module spec](https://github.com/p2pcommons/specs/blob/master/module.md). The only required field is `type`.
+
+Returns an object containing the metadata for the newly created module.
+
+### Destroy
+
+> _async_ `destroy()`
+
+Closes the swarm instance (if created).
 
 
