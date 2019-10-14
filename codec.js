@@ -8,7 +8,6 @@ class Codec {
     assert.ok(registry, 'registry is required')
     Type.forSchema(GenericType, { registry })
     this.registry = registry
-    debug('p2pcommons:Codec:registry', this.registry)
     this.buffer = true
     this.type = 'AvroTypes'
   }
@@ -33,8 +32,11 @@ class Codec {
   }
 
   decode (buf) {
+    debug('p2pcommons:Codec:decode', buf)
     assert.ok(buf, 'buffer is required')
     const { type, value } = this.decodeGeneric(buf)
+    debug('p2pcommons:Codec:decode type', type)
+    debug('p2pcommons:Codec:decode value', value)
     return this.registry[type].fromBuffer(value)
   }
 
