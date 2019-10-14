@@ -6,6 +6,8 @@ const {
 } = require('fs')
 const { ensureDir } = require('fs-extra')
 const level = require('level')
+const sub = require('subleveldown')
+const AutoIndex = require('level-auto-index')
 const { Type } = require('@avro/types')
 const envPaths = require('env-paths')
 const discovery = require('hyperdiscovery')
@@ -16,6 +18,7 @@ const DatHelper = require('./lib/dat-helper')
 const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
+const keyReducer = AutoIndex.keyReducer
 
 const DEFAULT_SWARM_OPTS = {
   extensions: []
@@ -75,20 +78,60 @@ class SDK {
       this.contentType = Type.forSchema(ContentSchema, { registry })
       this.profileType = Type.forSchema(ProfileSchema, { registry })
       const codec = new Codec(registry)
-      level(
-        join(this.dbPath, 'db'),
-        {
-          valueEncoding: codec
-        },
-        (err, db) => {
-          if (err instanceof level.errors.OpenError) {
-            console.error('p2pcommons:failed to open database')
-            reject(err)
-          }
-          this.db = db
-          resolve()
+      debug('p2pcommons:ready dbpath', this.dbPath)
+      level(join(this.dbPath, 'db'), { valueEncoding: codec }, (err, db) => {
+        if (err instanceof level.errors.OpenError) {
+          console.error('p2pcommons:failed to open database')
+          reject(err)
         }
-      )
+        this.db = db
+        // create partitions
+        this.contentdb = sub(this.db, 'content', {
+          valueEncoding: codec
+        })
+
+        this.profiledb = sub(this.db, 'profile', {
+          valueEncoding: codec
+        })
+
+        // create index
+        this.idx = {
+          title: sub(this.db, 'title'),
+          description: sub(this.db, 'description')
+        }
+
+        // indexes / filters
+        this.by = {}
+        this.by.title = AutoIndex(this.contentdb, this.idx.title, container =>
+          container.value.title.toLowerCase()
+        )
+
+        this.by.description = AutoIndex(
+          this.contentdb,
+          this.idx.description,
+          container => container.value.description.toLowerCase()
+        )
+
+        /*
+        this.profileByFollows = AutoIndex(
+          this.profiledb,
+          this.idx.follows,
+          profile => {
+            if (
+              !profile ||
+              !profile.follows ||
+              !Array.isArray(profile.follows)
+            ) {
+              return
+            }
+            return profile.follows.map(
+              p => `${p}_${profile.url.toString('hex')}`
+            )
+          }
+        )
+        */
+        resolve()
+      })
     })
   }
 
@@ -158,36 +201,118 @@ class SDK {
     console.log(`Initialized new ${datJSON.type}, dat://${hash}`)
     debug('p2pcommons:datJSON', datJSON)
 
-    await this.db.put(this.keyFromMetadata(datJSON), {
-      type: this.getAvroTypeName(datJSON.type),
-      value: datJSON
-    })
+    await this.saveItem(datJSON)
+
     console.log(`Saved new ${datJSON.type}, with key: ${hash}`)
     return datJSON
   }
 
-  async set (hash, values = {}) {
-    assert.ok(hash, 'hash is required')
+  async saveItem (metadata) {
+    debug('p2pcommons:saveItem', metadata)
+    assert.strictEqual(typeof metadata, 'object', 'An object is expected')
+    if (metadata.type.endsWith('profile')) {
+      await this.profiledb.put(metadata.url.toString('hex'), {
+        type: this.getAvroTypeName(metadata.type),
+        value: metadata
+      })
+    } else {
+      await this.contentdb.put(metadata.url.toString('hex'), {
+        type: this.getAvroTypeName(metadata.type),
+        value: metadata
+      })
+    }
+  }
+
+  async set (values = {}) {
     assert.strictEqual(typeof values, 'object', 'values should be an object')
+    assert.ok(values.url, 'Invalid metadata. Missing param: url')
     assert.ok(
       values.type.endsWith('profile') || values.type.endsWith('content'),
       "type should be 'content' or 'profile'"
     )
 
-    return this.db.put(hash, {
-      type: this.getAvroTypeName(values.type),
-      value: values
+    await this.saveItem(values)
+  }
+
+  async get (type, hash) {
+    assert.strictEqual(typeof type, 'string', 'type is required')
+    assert.strictEqual(typeof hash, 'string', 'hash is required')
+    if (type.endsWith('content')) {
+      return this.contentdb.get(hash)
+    } else if (type.endsWith('profile')) {
+      return this.profiledb.get(hash)
+    }
+    throw new Error(`Unknown type: ${type}`)
+  }
+
+  async filterExact (feature, criteria) {
+    assert.strictEqual(
+      typeof feature,
+      'string',
+      'A valid filter type is required'
+    )
+    assert.ok(criteria, 'filter criteria is required')
+    return new Promise((resolve, reject) => {
+      this.by[feature].get(criteria, (err, data) => {
+        if (err) return reject(err)
+
+        if (!Array.isArray(data)) return resolve([data])
+        return resolve(data)
+      })
     })
   }
 
-  async get (hash) {
-    // retrieves metadata using hash as key
-    return this.db.get(hash)
+  async filter (feature, criteria) {
+    assert.strictEqual(
+      typeof feature,
+      'string',
+      'A valid filter type is required'
+    )
+    assert.ok(criteria, 'filter criteria is required')
+    return new Promise((resolve, reject) => {
+      const out = []
+      const criteriaLower = criteria.toLowerCase()
+      const s = this.by[feature].createValueStream({
+        gte: criteriaLower
+      })
+      s.on('data', v => {
+        if (v[feature] && v[feature].includes(criteriaLower)) {
+          out.push(v)
+        }
+      })
+      s.on('end', () => resolve(out))
+      s.on('error', reject)
+    })
+  }
+
+  async allContent () {
+    return new Promise((resolve, reject) => {
+      const out = []
+      const s = this.contentdb.createValueStream()
+      s.on('data', val => {
+        out.push(val)
+      })
+      s.on('end', () => resolve(out))
+      s.on('error', reject)
+    })
+  }
+
+  async allProfiles () {
+    return new Promise((resolve, reject) => {
+      const out = []
+      const s = this.profiledb.createValueStream()
+      s.on('data', val => {
+        out.push(val)
+      })
+      s.on('end', () => resolve(out))
+      s.on('error', reject)
+    })
   }
 
   async destroy () {
     debug('p2pcommons:destroying swarm')
     if (this.disableSwarm) return
+    await this.db.close()
     return this.swarm.close()
   }
 }
