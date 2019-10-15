@@ -2,7 +2,7 @@ const assert = require('assert')
 const { join } = require('path')
 const { homedir, tmpdir, platform } = require('os')
 const {
-  promises: { writeFile, rename }
+  promises: { writeFile, rename, open }
 } = require('fs')
 const { ensureDir } = require('fs-extra')
 const level = require('level')
@@ -18,19 +18,27 @@ const DatHelper = require('./lib/dat-helper')
 const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
-const keyReducer = AutoIndex.keyReducer
 
 const DEFAULT_SWARM_OPTS = {
   extensions: []
 }
 
-const createDatJSON = (type, title = '', description = '') => {
+const createDatJSON = ({
+  type,
+  title = '',
+  description = '',
+  url = '',
+  writable
+}) => {
+  assert.strictEqual(typeof type, 'string', 'type is required')
   const obj = {}
   obj.title = title
   obj.description = description
-  obj.url = ''
+  obj.url = url
   obj.main = ''
   obj.license = ''
+  obj.modType = type
+  obj.writable = writable
 
   if (type.endsWith('profile')) {
     obj.type = 'profile'
@@ -153,7 +161,7 @@ class SDK {
     // follow module spec: https://github.com/p2pcommons/specs/pull/1/files?short_path=2d471ef#diff-2d471ef4e3a452b579a3367eb33ccfb9
     // 1. create folder with unique name
     // 2. initialize an hyperdrive inside
-    // 3. createDatJSON with the corrent metadata and save it there
+    // 3. createDatJSON with the correct metadata and save it there
     //
     assert.ok(typeof type === 'string', 'type is required')
     assert.ok(
@@ -161,7 +169,6 @@ class SDK {
       "type should be 'content' or 'profile'"
     )
     debug(`p2pcommons:init ${type}`)
-    const datJSON = createDatJSON(type, title, description)
 
     const tmp = join(this.baseDir, uniqueString())
 
@@ -177,7 +184,7 @@ class SDK {
 
     const hash = archive.key.toString('hex')
 
-    debug('p2pcommons:hash', hash)
+    debug('p2pcommons:init hash', hash)
     if (!this.disableSwarm) {
       this.swarm.add(archive)
 
@@ -191,7 +198,13 @@ class SDK {
       })
     }
 
-    datJSON.url = archive.key
+    const datJSON = createDatJSON({
+      type,
+      title,
+      description,
+      url: archive.key,
+      writable: archive.writable
+    })
 
     // write dat.json
     await writeFile(join(tmp, 'dat.json'), JSON.stringify(datJSON))
@@ -199,7 +212,7 @@ class SDK {
     await rename(tmp, join(this.baseDir, hash))
 
     console.log(`Initialized new ${datJSON.type}, dat://${hash}`)
-    debug('p2pcommons:datJSON', datJSON)
+    debug('p2pcommons:init datJSON', datJSON)
 
     await this.saveItem(datJSON)
 
@@ -285,28 +298,41 @@ class SDK {
     })
   }
 
-  async allContent () {
+  async listContent () {
     return new Promise((resolve, reject) => {
       const out = []
       const s = this.contentdb.createValueStream()
       s.on('data', val => {
-        out.push(val)
+        if (val.writable) out.push(val)
       })
       s.on('end', () => resolve(out))
       s.on('error', reject)
     })
   }
 
-  async allProfiles () {
+  async listProfiles () {
     return new Promise((resolve, reject) => {
       const out = []
       const s = this.profiledb.createValueStream()
       s.on('data', val => {
-        out.push(val)
+        if (val.writable) out.push(val)
       })
       s.on('end', () => resolve(out))
       s.on('error', reject)
     })
+  }
+
+  async openFile (key) {
+    assert.strictEqual(typeof key, 'string', 'key is required')
+    try {
+      const { main } = await this.db.get(key)
+      if (!main) {
+        throw new Error('Empty main file')
+      }
+      return open(main)
+    } catch (err) {
+      console.error(`Could not open file. metadata not found for key: ${key}`)
+    }
   }
 
   async destroy () {
