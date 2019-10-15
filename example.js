@@ -21,6 +21,7 @@ process.once('SIGINT', () => commons.destroy())
 
   // create a profile
   await commons.init({ type: 'profile' }) // ~/.p2pcommons/hash/dat.json --> type: profile
+
   const key = contentMetadata1.url.toString('hex')
   const out = await commons.get('content', key)
   console.log(`Retrieved type: ${out.type}`)
@@ -39,8 +40,8 @@ process.once('SIGINT', () => commons.destroy())
   const filter = await commons.filter(feature, criteria)
   console.log(`Results with ${feature}: ${criteria}`, filter.length)
 
-  const allContent = await commons.allContent()
-  const allProfiles = await commons.allProfiles()
+  const allContent = await commons.listContent()
+  const allProfiles = await commons.listProfiles()
   console.log('Content length', allContent.length)
   console.log('Profiles length', allProfiles.length)
 })()
