@@ -32,11 +32,10 @@ class Codec {
   }
 
   decode (buf) {
-    debug('p2pcommons:Codec:decode', buf)
+    debug('p2pcommons:Codec:decode')
     assert.ok(buf, 'buffer is required')
     const { type, value } = this.decodeGeneric(buf)
     debug('p2pcommons:Codec:decode type', type)
-    debug('p2pcommons:Codec:decode value', value)
     return this.registry[type].fromBuffer(value)
   }
 
