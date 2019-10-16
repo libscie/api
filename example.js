@@ -1,5 +1,5 @@
 const P2PCommons = require('.') // liberate science constructor function
-const commons = P2PCommons({ disableSwarm: true })
+const commons = new P2PCommons({ disableSwarm: true, verbose: true })
 
 process.once('SIGINT', () => commons.destroy())
 ;(async () => {
@@ -7,17 +7,19 @@ process.once('SIGINT', () => commons.destroy())
   await commons.ready()
 
   // create some content
-  const contentMetadata1 = await commons.init({ type: 'content' }) // ~/.p2pcommons/hash/dat.json --> type: content
-  const contentMetadata2 = await commons.init({
+  const contentMetadata1 = await commons.init({
+    type: 'content'
+  }) // ~/.p2pcommons/hash/dat.json --> type: content
+  await commons.init({
     type: 'content',
     title: 'Sample Content 2',
     description: 'lorem ipsum alfa beta'
-  }) // ~/.p2pcommons/hash/dat.json --> type: content
-  const contentMetadata3 = await commons.init({
+  })
+  await commons.init({
     type: 'content',
     title: 'Reference content',
     description: 'lorem ipsum'
-  }) // ~/.p2pcommons/hash/dat.json --> type: content
+  })
 
   // create a profile
   await commons.init({ type: 'profile' }) // ~/.p2pcommons/hash/dat.json --> type: profile
@@ -25,20 +27,22 @@ process.once('SIGINT', () => commons.destroy())
   const key = contentMetadata1.url.toString('hex')
   const out = await commons.get('content', key)
   console.log(`Retrieved type: ${out.type}`)
+
   out.title = 'Sample Content'
   out.description = 'This is a short abstract about nothing'
+
   console.log('Updating content...')
   await commons.set(out)
 
   // check out updated value from local db
   const result = await commons.get('content', key)
-  console.log('Content updated', result)
+  console.log('Content updated:', result)
 
   // filter content
-  const criteria = 'abstract about nothing'
   const feature = 'description'
+  const criteria = 'about nothing'
   const filter = await commons.filter(feature, criteria)
-  console.log(`Results with ${feature}: ${criteria}`, filter.length)
+  console.log(`Results with ${feature}: ${criteria}`, filter)
 
   const allContent = await commons.listContent()
   const allProfiles = await commons.listProfiles()
