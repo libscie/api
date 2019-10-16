@@ -69,6 +69,7 @@ class SDK {
     this.baseDir = join(this.home, opts.baseDir)
     this.persist = opts.persist || true
     this.storage = opts.storage || undefined
+    this.verbose = opts.verbose || false
     this.dbPath = opts.dbPath || this.paths.data
     // start hyperswarm
     this.disableSwarm = !!opts.disableSwarm
@@ -76,6 +77,23 @@ class SDK {
       debug('p2pcommons:constructor starting swarm')
       this.swarm = discovery(Object.assign({}, DEFAULT_SWARM_OPTS, opts.swarm))
     }
+  }
+
+  _getAvroTypeName (appType) {
+    // Note(dk): fix this. Decide between keeping an type === content || profile or '-profile' (endsWith)
+    if (appType === 'content') {
+      return this.contentType.name
+    }
+    if (appType === 'profile') {
+      return this.profileType.name
+    }
+  }
+
+  _getDb (type) {
+    assert.ok(type, 'type is required')
+    if (type.endsWith('profile')) return this.profiledb
+    if (type.endsWith('content')) return this.contentdb
+    throw new Error(`Unknown type: ${type}`)
   }
 
   async ready () {
@@ -89,7 +107,9 @@ class SDK {
       debug('p2pcommons:ready dbpath', this.dbPath)
       level(join(this.dbPath, 'db'), { valueEncoding: codec }, (err, db) => {
         if (err instanceof level.errors.OpenError) {
-          console.error('p2pcommons:failed to open database')
+          if (this.verbose) {
+            console.error('p2pcommons:failed to open database')
+          }
           reject(err)
         }
         this.db = db
@@ -141,20 +161,6 @@ class SDK {
         resolve()
       })
     })
-  }
-
-  getAvroTypeName (appType) {
-    // Note(dk): fix this. Decide between keeping an type === content || profile or '-profile' (endsWith)
-    if (appType === 'content') {
-      return this.contentType.name
-    }
-    if (appType === 'profile') {
-      return this.profileType.name
-    }
-  }
-
-  keyFromMetadata (metadata) {
-    return `${metadata.type}_${metadata.url.toString('hex')}`
   }
 
   async init ({ type, title = '', description = '', ...rest }) {
@@ -211,51 +217,52 @@ class SDK {
 
     await rename(tmp, join(this.baseDir, hash))
 
-    console.log(`Initialized new ${datJSON.type}, dat://${hash}`)
+    if (this.verbose) {
+      // Note(dk): this kind of output can be part of the cli
+      console.log(`Initialized new ${datJSON.type}, dat://${hash}`)
+    }
     debug('p2pcommons:init datJSON', datJSON)
 
     await this.saveItem(datJSON)
 
-    console.log(`Saved new ${datJSON.type}, with key: ${hash}`)
+    if (this.verbose) {
+      console.log(`Saved new ${datJSON.type}, with key: ${hash}`)
+    }
     return datJSON
   }
 
   async saveItem (metadata) {
     debug('p2pcommons:saveItem', metadata)
     assert.strictEqual(typeof metadata, 'object', 'An object is expected')
-    if (metadata.type.endsWith('profile')) {
-      await this.profiledb.put(metadata.url.toString('hex'), {
-        type: this.getAvroTypeName(metadata.type),
-        value: metadata
-      })
-    } else {
-      await this.contentdb.put(metadata.url.toString('hex'), {
-        type: this.getAvroTypeName(metadata.type),
-        value: metadata
-      })
-    }
+    assert.strictEqual(
+      typeof metadata.type,
+      'string',
+      'type property is required'
+    )
+
+    const db = this._getDb(metadata.type)
+    return db.put(metadata.url.toString('hex'), {
+      type: this._getAvroTypeName(metadata.type),
+      value: metadata
+    })
   }
 
-  async set (values = {}) {
+  async set (values) {
     assert.strictEqual(typeof values, 'object', 'values should be an object')
-    assert.ok(values.url, 'Invalid metadata. Missing param: url')
+    assert.ok(values.url, 'Invalid metadata. Missing property: url')
     assert.ok(
       values.type.endsWith('profile') || values.type.endsWith('content'),
       "type should be 'content' or 'profile'"
     )
 
-    await this.saveItem(values)
+    return this.saveItem(values)
   }
 
   async get (type, hash) {
     assert.strictEqual(typeof type, 'string', 'type is required')
     assert.strictEqual(typeof hash, 'string', 'hash is required')
-    if (type.endsWith('content')) {
-      return this.contentdb.get(hash)
-    } else if (type.endsWith('profile')) {
-      return this.profiledb.get(hash)
-    }
-    throw new Error(`Unknown type: ${type}`)
+    const db = this._getDb(type)
+    return db.get(hash)
   }
 
   async filterExact (feature, criteria) {
@@ -289,7 +296,7 @@ class SDK {
         gte: criteriaLower
       })
       s.on('data', v => {
-        if (v[feature] && v[feature].includes(criteriaLower)) {
+        if (v[feature] && v[feature].toLowerCase().includes(criteriaLower)) {
           out.push(v)
         }
       })
@@ -322,17 +329,14 @@ class SDK {
     })
   }
 
-  async openFile (key) {
+  async openFile (type, key) {
+    assert.strictEqual(typeof type, 'string', 'type is required')
     assert.strictEqual(typeof key, 'string', 'key is required')
-    try {
-      const { main } = await this.db.get(key)
-      if (!main) {
-        throw new Error('Empty main file')
-      }
-      return open(main)
-    } catch (err) {
-      console.error(`Could not open file. metadata not found for key: ${key}`)
+    const { main } = await this.get(type, key)
+    if (!main) {
+      throw new Error('Empty main file')
     }
+    return open(main)
   }
 
   async destroy () {
@@ -343,4 +347,4 @@ class SDK {
   }
 }
 
-module.exports = (...args) => new SDK(...args)
+module.exports = SDK
