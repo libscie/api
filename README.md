@@ -1,6 +1,6 @@
 # Liberate Science API
 
-[![NPM](https://nodei.co/npm/libscie-api.png)](https://npmjs.org/package/libscie-api)
+![npm version](https://img.shields.io/npm/v/@p2pcommons/sdk-js?color=4F2D84&style=flat-square)
 
 The base API for a p2p scholarly communication infrastructure. More
 information on this infrastructure is available in this [conceptual
@@ -21,15 +21,20 @@ global environment. In other words, it is a module that you can use in
 your NodeJS packages, but does not provide any direct functionality
 outside of it.
 
-## Example
+### Example
 
 ```javascript
 const P2PCommons = require('@p2pcommons/sdk-js')
 
-const p2p = P2PCommons()
+const p2p = new P2PCommons()
 
 ;(async () => {
+  // call this method first
+  await p2p.ready()
+
+  // create a content module
   await p2p.init({ type: 'content' }) // ~/.p2pcommons/hash/dat.json --> type: content
+  // create a profile module
   await p2p.init({ type: 'profile' }) // ~/.p2pcommons/hash/dat.json --> type: profile
 })()
 ```
@@ -38,11 +43,13 @@ const p2p = P2PCommons()
 
 `const P2PCommons = require('@p2pcommons/sdk-js')`
 
-### Constructor
+### constructor
 
 > `P2PCommons(opts)`
 
-Returns a new instance of the sdk. `opts` can include the following:
+Returns a new instance of the sdk.
+
+- `opts` can include the following:
 ```javascript
 {
   baseDir: // defaults to '~/.p2pcommons'
@@ -53,19 +60,68 @@ Returns a new instance of the sdk. `opts` can include the following:
 }
 ```
 
-### Init
+### ready
 
-> _async_ `init(data)`
+> _async_ `ready()`
+
+After creating a new instance the next **required** step is call the ready method. This method will create (if needed) the db and open it.
+
+Returns a promise. Call this method before any other for expected behavior.
+
+### init
+
+> _async_ `init(data: object)`
 
 Creates a new folder for 'content' or 'profile' according to the received `data.type` value.
-`data` values follows the [p2pcommons module spec](https://github.com/p2pcommons/specs/blob/master/module.md). The only required field is `type`.
+
+- `data` object follows the [p2pcommons module spec](https://github.com/p2pcommons/specs/blob/master/module.md). The only required field is `type`.
 
 Returns an object containing the metadata for the newly created module.
 
-### Destroy
+### get
+
+> _async_ `get(type: string, hash: string)`
+
+Retrieves metadata item from the local db.
+
+- type: indicates the module type to retrieve. Allowed values: `profile`, `content`.
+- hash: represents the key (`url`) to be looked for. It is the buffer archive key `.toString('hex')`
+
+### set
+
+> _async_ `set(metadata: object)`
+
+Used to update a previously retrieved value.
+
+- metadata: it is an object with the updated values. The only required field is the `url` property, which is used as the object key.
+
+### filter
+
+> _async_ `filter(feature: string, criteria: string)`
+
+Handy method for querying **content** values from the local db.
+
+Returns a promise which can resolve to an array of 0 or more values.
+
+- feature: indicates the filter property, e.g.: filter by `title` or `description` (currently supported filter types)
+- criteria: it is the filter value.
+
+### listContent
+
+> _async_ `listContent()`
+
+Returns an array containing all the `content` modules saved in the local db.
+
+### listProfiles
+
+> _async_ `listProfiles()`
+
+Returns an array containing all the `profile` modules saved in the local db.
+
+### destroy
 
 > _async_ `destroy()`
 
-Closes the swarm instance (if created).
+Closes the swarm instance (if created) and the local db.
 
 
