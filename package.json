@@ -35,7 +35,7 @@
     "fs-extra": "^7.0.1",
     "hyperdiscovery": "^10.1.0",
     "level": "^5.0.1",
-    "level-auto-index": "^2.0.0",
+    "level-auto-index": "geut/level-auto-index",
     "random-access-memory": "^3.1.1",
     "subleveldown": "^4.1.4",
     "unique-string": "^2.0.0",
