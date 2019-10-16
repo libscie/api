@@ -6,7 +6,7 @@
     {"name": "title", "type": "string"},
     {"name": "description", "type": "string"},
     {"name": "url", "type": "bytes"},
-    {"name": "writable", "type": "boolean"},
+    {"name": "writable", "type": "boolean", "default": false},
     {
       "name": "type",
       "type": {
