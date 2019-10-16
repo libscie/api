@@ -14,18 +14,13 @@ class Codec {
 
   encode (obj) {
     debug('p2pcommons:Codec:encode', obj)
-    assert.ok(obj, 'object is required')
     assert.strictEqual(
       typeof obj,
       'object',
       `Expected an object. Received: ${obj}`
     )
-    assert.strictEqual(
-      typeof obj.type,
-      'string',
-      'object should have a type property'
-    )
-    assert.ok(obj.value, 'obj should have a value property')
+    assert.strictEqual(typeof obj.type, 'string', 'Missing property: type')
+    assert.ok(obj.value, 'Missing property: value')
     const newVal = this.registry[obj.type].toBuffer(obj.value)
     // return a new generic
     return this.registry.Generic.toBuffer({ type: obj.type, value: newVal })
