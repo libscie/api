@@ -118,6 +118,15 @@ Returns an array containing all the `content` modules saved in the local db.
 
 Returns an array containing all the `profile` modules saved in the local db.
 
+### openFile
+
+> _async_ `openFile(type: string, key: string)`
+
+Used to obtain a file descriptor from the `main` file of a module.
+
+- type: indicates the module type to retrieve. Allowed values: `profile`, `content`.
+- key: represents the module key (`url`) to be looked for. It is the buffer archive key `.toString('hex')`
+
 ### destroy
 
 > _async_ `destroy()`
