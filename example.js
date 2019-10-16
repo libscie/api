@@ -1,7 +1,51 @@
-const libsdk = require('.')({ disableSwarm: true }) // liberate science constructor function
+const P2PCommons = require('.') // liberate science constructor function
+const commons = new P2PCommons({ disableSwarm: true, verbose: true })
 
-process.once('SIGINT', () => libsdk.destroy())
+process.once('SIGINT', () => commons.destroy())
 ;(async () => {
-  await libsdk.init({ type: 'content' }) // ~/.p2pcommons/hash/dat.json --> type: content
-  await libsdk.init({ type: 'profile' }) // ~/.p2pcommons/hash/dat.json --> type: profile
+  // initializes local db first
+  await commons.ready()
+
+  // create some content
+  const contentMetadata1 = await commons.init({
+    type: 'content'
+  }) // ~/.p2pcommons/hash/dat.json --> type: content
+  await commons.init({
+    type: 'content',
+    title: 'Sample Content 2',
+    description: 'lorem ipsum alfa beta'
+  })
+  await commons.init({
+    type: 'content',
+    title: 'Reference content',
+    description: 'lorem ipsum'
+  })
+
+  // create a profile
+  await commons.init({ type: 'profile' }) // ~/.p2pcommons/hash/dat.json --> type: profile
+
+  const key = contentMetadata1.url.toString('hex')
+  const out = await commons.get('content', key)
+  console.log(`Retrieved type: ${out.type}`)
+
+  out.title = 'Sample Content'
+  out.description = 'This is a short abstract about nothing'
+
+  console.log('Updating content...')
+  await commons.set(out)
+
+  // check out updated value from local db
+  const result = await commons.get('content', key)
+  console.log('Content updated:', result)
+
+  // filter content
+  const feature = 'description'
+  const criteria = 'about nothing'
+  const filter = await commons.filter(feature, criteria)
+  console.log(`Results with ${feature}: ${criteria}`, filter)
+
+  const allContent = await commons.listContent()
+  const allProfiles = await commons.listProfiles()
+  console.log('Content length', allContent.length)
+  console.log('Profiles length', allProfiles.length)
 })()

@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "Generic",
+  "fields": [
+    {
+      "type": "string",
+      "name": "type"
+    },
+    {
+      "type": "bytes",
+      "name": "value"
+    }
+  ]
+}
