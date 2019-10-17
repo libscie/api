@@ -74,17 +74,16 @@ Returns a promise. Call this method before any other for expected behavior.
 
 Creates a new folder for 'content' or 'profile' according to the received `data.type` value.
 
-- `data` object follows the [p2pcommons module spec](https://github.com/p2pcommons/specs/blob/master/module.md). The only required field is `type`.
+- `data` object following the [p2pcommons module spec](https://github.com/p2pcommons/specs/blob/master/module.md). The only required field is `type`.
 
 Returns an object containing the metadata for the newly created module.
 
 ### get
 
-> _async_ `get(type: string, hash: string)`
+> _async_ `get(hash: string)`
 
 Retrieves metadata item from the local db.
 
-- type: indicates the module type to retrieve. Allowed values: `profile`, `content`.
 - hash: represents the key (`url`) to be looked for. It is the buffer archive key `.toString('hex')`
 
 ### set
@@ -120,7 +119,7 @@ Returns an array containing all the `profile` modules saved in the local db.
 
 ### openFile
 
-> _async_ `openFile(type: string, key: string)`
+> _async_ `openFile(key: string)`
 
 Used to obtain a file descriptor from the `main` file of a module.
 
