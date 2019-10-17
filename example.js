@@ -23,9 +23,8 @@ process.once('SIGINT', () => commons.destroy())
 
   // create a profile
   await commons.init({ type: 'profile' }) // ~/.p2pcommons/hash/dat.json --> type: profile
-
   const key = contentMetadata1.url.toString('hex')
-  const out = await commons.get('content', key)
+  const out = await commons.get(key)
   console.log(`Retrieved type: ${out.type}`)
 
   out.title = 'Sample Content'
@@ -35,14 +34,15 @@ process.once('SIGINT', () => commons.destroy())
   await commons.set(out)
 
   // check out updated value from local db
-  const result = await commons.get('content', key)
+  const result = await commons.get(key)
   console.log('Content updated:', result)
 
   // filter content
   const feature = 'description'
   const criteria = 'about nothing'
   const filter = await commons.filter(feature, criteria)
-  console.log(`Results with ${feature}: ${criteria}`, filter)
+
+  console.log(`Results with ${feature}: ${criteria}`, filter.length)
 
   const allContent = await commons.listContent()
   const allProfiles = await commons.listProfiles()
