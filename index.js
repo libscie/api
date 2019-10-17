@@ -1,8 +1,8 @@
 const assert = require('assert')
-const { join } = require('path')
+const { join, isAbsolute } = require('path')
 const { homedir, tmpdir, platform } = require('os')
 const {
-  promises: { writeFile, rename, open }
+  promises: { rename, open }
 } = require('fs')
 const { ensureDir } = require('fs-extra')
 const level = require('level')
@@ -14,7 +14,7 @@ const discovery = require('hyperdiscovery')
 const uniqueString = require('unique-string')
 const DatEncoding = require('dat-encoding')
 const debug = require('debug')('p2pcommons')
-const DatHelper = require('./lib/dat-helper')
+const dat = require('./lib/dat-helper')
 const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
@@ -23,13 +23,7 @@ const DEFAULT_SWARM_OPTS = {
   extensions: []
 }
 
-const createDatJSON = ({
-  type,
-  title = '',
-  description = '',
-  url = '',
-  writable
-}) => {
+const createDatJSON = ({ type, title = '', description = '', url = '' }) => {
   assert.strictEqual(typeof type, 'string', 'type is required')
   const obj = {}
   obj.title = title
@@ -37,8 +31,7 @@ const createDatJSON = ({
   obj.url = url
   obj.main = ''
   obj.license = ''
-  obj.modType = type
-  obj.writable = writable
+  obj.subtype = type
 
   if (type.endsWith('profile')) {
     obj.type = 'profile'
@@ -66,7 +59,9 @@ class SDK {
       tmpdir()
     this.windows = this.platform === 'win32'
     opts.baseDir = opts.baseDir || '.p2pcommons'
-    this.baseDir = join(this.home, opts.baseDir)
+    this.baseDir = isAbsolute(opts.baseDir)
+      ? opts.baseDir
+      : join(this.home, opts.baseDir)
     this.persist = opts.persist || true
     this.storage = opts.storage || undefined
     this.verbose = opts.verbose || false
@@ -79,13 +74,12 @@ class SDK {
     }
   }
 
-  _getAvroTypeName (appType) {
-    // Note(dk): fix this. Decide between keeping an type === content || profile or '-profile' (endsWith)
+  _getAvroType (appType) {
     if (appType === 'content') {
-      return this.contentType.name
+      return this.contentType
     }
     if (appType === 'profile') {
-      return this.profileType.name
+      return this.profileType
     }
   }
 
@@ -113,31 +107,22 @@ class SDK {
           reject(err)
         }
         this.db = db
-        // create partitions
-        this.contentdb = sub(this.db, 'content', {
-          valueEncoding: codec
-        })
-
-        this.profiledb = sub(this.db, 'profile', {
-          valueEncoding: codec
-        })
-
+        // create partitions - required by level-auto-index
+        this.localdb = sub(this.db, 'localdb', { valueEncoding: codec })
         // create index
         this.idx = {
           title: sub(this.db, 'title'),
           description: sub(this.db, 'description')
         }
-
-        // indexes / filters
+        // create filters
         this.by = {}
-        this.by.title = AutoIndex(this.contentdb, this.idx.title, container =>
-          container.value.title.toLowerCase()
+        this.by.title = AutoIndex(this.localdb, this.idx.title, container =>
+          container.rawJSON.title.toLowerCase()
         )
-
         this.by.description = AutoIndex(
-          this.contentdb,
+          this.localdb,
           this.idx.description,
-          container => container.value.description.toLowerCase()
+          container => container.rawJSON.description.toLowerCase()
         )
 
         /*
@@ -180,12 +165,11 @@ class SDK {
 
     await ensureDir(tmp)
 
-    const datHelper = await DatHelper(tmp, {
+    const archive = dat.create(tmp, {
       persist: this.persist,
       storageFn: this.storage,
       storageOpts: { ...rest.storageOpts }
     })
-    const { archive } = datHelper
     await archive.ready()
 
     const hash = archive.key.toString('hex')
@@ -204,18 +188,24 @@ class SDK {
       })
     }
 
+    // create dat.json metadata
     const datJSON = createDatJSON({
       type,
       title,
       description,
-      url: archive.key,
-      writable: archive.writable
+      url: archive.key
     })
+    // Note(dk): validate earlier
+    const avroType = this._getAvroType(datJSON.type)
+
+    if (!avroType.isValid(datJSON)) {
+      throw new Error('Invalid metadata')
+    }
 
     // write dat.json
-    await writeFile(join(tmp, 'dat.json'), JSON.stringify(datJSON))
-
-    await rename(tmp, join(this.baseDir, hash))
+    await archive.writeFile('dat.json', JSON.stringify(datJSON))
+    const newPath = join(this.baseDir, hash)
+    await rename(tmp, newPath)
 
     if (this.verbose) {
       // Note(dk): this kind of output can be part of the cli
@@ -223,7 +213,12 @@ class SDK {
     }
     debug('p2pcommons:init datJSON', datJSON)
 
-    await this.saveItem(datJSON)
+    const stat = await archive.stat('dat.json')
+    await this.saveItem({
+      isWritable: archive.writable,
+      lastModified: stat.mtime,
+      metadata: datJSON
+    })
 
     if (this.verbose) {
       console.log(`Saved new ${datJSON.type}, with key: ${hash}`)
@@ -231,8 +226,9 @@ class SDK {
     return datJSON
   }
 
-  async saveItem (metadata) {
+  async saveItem ({ isWritable, lastModified, metadata, persist = false }) {
     debug('p2pcommons:saveItem', metadata)
+    assert.strictEqual(typeof isWritable, 'boolean', 'isWritable is required')
     assert.strictEqual(typeof metadata, 'object', 'An object is expected')
     assert.strictEqual(
       typeof metadata.type,
@@ -240,29 +236,46 @@ class SDK {
       'type property is required'
     )
 
-    const db = this._getDb(metadata.type)
-    return db.put(metadata.url.toString('hex'), {
-      type: this._getAvroTypeName(metadata.type),
-      value: metadata
+    await this.localdb.put(metadata.url.toString('hex'), {
+      isWritable,
+      lastModified,
+      rawJSON: metadata,
+      avroType: this._getAvroType(metadata.type).name
     })
+
+    if (persist) {
+      const datJSONDir = join(this.baseDir, metadata.url.toString('hex'))
+      const archive = dat.open(datJSONDir)
+      await archive.ready()
+      await archive.writeFile('dat.json', JSON.stringify(metadata))
+    }
   }
 
-  async set (values) {
-    assert.strictEqual(typeof values, 'object', 'values should be an object')
-    assert.ok(values.url, 'Invalid metadata. Missing property: url')
+  async set (metadata) {
+    assert.strictEqual(
+      typeof metadata,
+      'object',
+      'metadata should be an object'
+    )
+    assert.ok(metadata.url, 'Invalid metadata. Missing property: url')
     assert.ok(
-      values.type.endsWith('profile') || values.type.endsWith('content'),
+      metadata.type === 'profile' || metadata.type === 'content',
       "type should be 'content' or 'profile'"
     )
 
-    return this.saveItem(values)
+    const tmp = await this.get(metadata.url.toString('hex'), false)
+    debug('p2pcommons:set', { ...tmp })
+    return this.saveItem({ ...tmp, metadata, persist: tmp.isWritable })
   }
 
-  async get (type, hash) {
-    assert.strictEqual(typeof type, 'string', 'type is required')
+  async get (hash, onlyMetadata = true) {
     assert.strictEqual(typeof hash, 'string', 'hash is required')
-    const db = this._getDb(type)
-    return db.get(hash)
+    const dbitem = await this.localdb.get(hash)
+    debug('p2pcommons:get', dbitem)
+    if (onlyMetadata) {
+      return dbitem.rawJSON
+    }
+    return dbitem
   }
 
   async filterExact (feature, criteria) {
@@ -296,7 +309,11 @@ class SDK {
         gte: criteriaLower
       })
       s.on('data', v => {
-        if (v[feature] && v[feature].toLowerCase().includes(criteriaLower)) {
+        if (
+          v.rawJSON &&
+          v.rawJSON[feature] &&
+          v.rawJSON[feature].toLowerCase().includes(criteriaLower)
+        ) {
           out.push(v)
         }
       })
@@ -308,9 +325,9 @@ class SDK {
   async listContent () {
     return new Promise((resolve, reject) => {
       const out = []
-      const s = this.contentdb.createValueStream()
+      const s = this.localdb.createValueStream()
       s.on('data', val => {
-        if (val.writable) out.push(val)
+        if (val.isWritable && val.rawJSON.type === 'content') out.push(val)
       })
       s.on('end', () => resolve(out))
       s.on('error', reject)
@@ -320,19 +337,18 @@ class SDK {
   async listProfiles () {
     return new Promise((resolve, reject) => {
       const out = []
-      const s = this.profiledb.createValueStream()
+      const s = this.localdb.createValueStream()
       s.on('data', val => {
-        if (val.writable) out.push(val)
+        if (val.isWritable && val.rawJSON.type === 'profile') out.push(val)
       })
       s.on('end', () => resolve(out))
       s.on('error', reject)
     })
   }
 
-  async openFile (type, key) {
-    assert.strictEqual(typeof type, 'string', 'type is required')
+  async openFile (key) {
     assert.strictEqual(typeof key, 'string', 'key is required')
-    const { main } = await this.get(type, key)
+    const { main } = await this.get(key)
     if (!main) {
       throw new Error('Empty main file')
     }
