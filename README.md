@@ -1,6 +1,7 @@
 # Liberate Science API
 
-![npm version](https://img.shields.io/npm/v/@p2pcommons/sdk-js?color=4F2D84&style=flat-square)
+![npm version](https://img.shields.io/npm/v/@p2pcommons/sdk-js?color=4F2D84)
+[![Build Status](https://travis-ci.com/p2pcommons/sdk-js.svg?branch=master)](https://travis-ci.com/p2pcommons/sdk-js)
 
 The base API for a p2p scholarly communication infrastructure. More
 information on this infrastructure is available in this [conceptual
