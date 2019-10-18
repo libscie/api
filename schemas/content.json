@@ -6,7 +6,6 @@
     {"name": "title", "type": "string"},
     {"name": "description", "type": "string"},
     {"name": "url", "type": "bytes"},
-    {"name": "writable", "type": "boolean", "default": false},
     {
       "name": "type",
       "type": {
@@ -14,7 +13,7 @@
         "symbols": ["content", "profile"]
       }
     },
-    {"name": "modType", "type": "string"},
+    {"name": "subtype", "type": "string"},
     {"name": "main", "type": "string"},
     {"name": "license", "type": "string"},
     {

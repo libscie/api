@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "name": "DBItem",
+  "fields": [
+    {
+      "type": "boolean",
+      "name": "isWritable"
+    },
+    {
+      "type": "long",
+      "name": "lastModified"
+    },
+    {
+      "type": "bytes",
+      "name": "rawJSON"
+    }
+  ]
+}
