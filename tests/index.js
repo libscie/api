@@ -25,7 +25,10 @@ test('init: create content module', async t => {
   t.same(output.title, metadata.title)
   t.same(output.description, metadata.description)
   t.ok(Buffer.isBuffer(output.url))
-  t.same(output.license, '')
+  t.same(
+    output.license,
+    'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+  )
   t.same(output.authors, [])
   t.same(output.parents, [])
   t.end()
@@ -48,7 +51,10 @@ test('init: create profile module', async t => {
   t.same(output.title, metadata.title)
   t.same(output.description, metadata.description)
   t.ok(Buffer.isBuffer(output.url))
-  t.same(output.license, '')
+  t.same(
+    output.license,
+    'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+  )
   t.same(output.follows, [])
   t.same(output.contents, [])
   t.end()
