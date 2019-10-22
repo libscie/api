@@ -2,16 +2,15 @@ const assert = require('assert')
 const { join, isAbsolute } = require('path')
 const { homedir, tmpdir, platform } = require('os')
 const {
-  promises: { rename, open }
+  promises: { open, writeFile }
 } = require('fs')
 const { ensureDir } = require('fs-extra')
 const level = require('level')
 const sub = require('subleveldown')
 const AutoIndex = require('level-auto-index')
 const { Type } = require('@avro/types')
-const envPaths = require('env-paths')
 const discovery = require('hyperdiscovery')
-const uniqueString = require('unique-string')
+const crypto = require('hypercore-crypto')
 const DatEncoding = require('dat-encoding')
 const debug = require('debug')('p2pcommons')
 const dat = require('./lib/dat-helper')
@@ -30,7 +29,7 @@ const createDatJSON = ({ type, title = '', description = '', url = '' }) => {
   obj.description = description
   obj.url = url
   obj.main = ''
-  obj.license = ''
+  obj.license = 'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
   obj.subtype = type
 
   if (type.endsWith('profile')) {
@@ -48,8 +47,7 @@ const createDatJSON = ({ type, title = '', description = '', url = '' }) => {
 
 class SDK {
   constructor (opts = {}) {
-    debug('p2pcommons:constructor')
-    this.paths = envPaths('p2pcommons')
+    debug('constructor')
     this.platform = platform()
     // NOTE(dk): consider switch to envPaths usage
     this.home =
@@ -65,11 +63,11 @@ class SDK {
     this.persist = opts.persist || true
     this.storage = opts.storage || undefined
     this.verbose = opts.verbose || false
-    this.dbPath = opts.dbPath || this.paths.data
+    this.dbPath = opts.dbPath || this.baseDir
     // start hyperswarm
     this.disableSwarm = !!opts.disableSwarm
     if (!this.disableSwarm) {
-      debug('p2pcommons:constructor starting swarm')
+      debug('constructor starting swarm')
       this.swarm = discovery(Object.assign({}, DEFAULT_SWARM_OPTS, opts.swarm))
     }
   }
@@ -98,11 +96,11 @@ class SDK {
       this.contentType = Type.forSchema(ContentSchema, { registry })
       this.profileType = Type.forSchema(ProfileSchema, { registry })
       const codec = new Codec(registry)
-      debug('p2pcommons:ready dbpath', this.dbPath)
+      debug('ready dbpath', this.dbPath)
       level(join(this.dbPath, 'db'), { valueEncoding: codec }, (err, db) => {
         if (err instanceof level.errors.OpenError) {
           if (this.verbose) {
-            console.error('p2pcommons:failed to open database')
+            console.error('failed to open database')
           }
           reject(err)
         }
@@ -148,9 +146,14 @@ class SDK {
     })
   }
 
-  async init ({ type, title = '', description = '', ...rest }) {
+  async init ({
+    type,
+    title = '',
+    description = '',
+    datOpts = { datStorage: {} }
+  }) {
     // follow module spec: https://github.com/p2pcommons/specs/pull/1/files?short_path=2d471ef#diff-2d471ef4e3a452b579a3367eb33ccfb9
-    // 1. create folder with unique name
+    // 1. create folder with unique name (pk)
     // 2. initialize an hyperdrive inside
     // 3. createDatJSON with the correct metadata and save it there
     //
@@ -159,27 +162,35 @@ class SDK {
       type.endsWith('profile') || type.endsWith('content'),
       "type should be 'content' or 'profile'"
     )
-    debug(`p2pcommons:init ${type}`)
+    debug(`init ${type}`)
 
-    const tmp = join(this.baseDir, uniqueString())
+    const { publicKey, secretKey } = crypto.keyPair()
+    debug(`init pk ${publicKey.toString('hex')}`)
 
-    await ensureDir(tmp)
+    // NOTE(dk): check out datStorage options: https://github.com/RangerMauve/universal-dat-storage#api
+    datOpts.datStorage.storageLocation = datOpts.datStorage.storageLocation
+      ? datOpts.datStorage.storageLocation
+      : join(this.baseDir, publicKey.toString('hex'))
+    debug(`init storageLocation ${datOpts.datStorage.storageLocation}`)
 
-    const archive = dat.create(tmp, {
+    await ensureDir(datOpts.datStorage.storageLocation)
+    const archive = dat.create(datOpts.datStorage.storageLocation, publicKey, {
       persist: this.persist,
       storageFn: this.storage,
-      storageOpts: { ...rest.storageOpts }
+      hyperdrive: {
+        secretKey
+      },
+      storageOpts: { ...datOpts.datStorage }
     })
     await archive.ready()
 
     const hash = archive.key.toString('hex')
 
-    debug('p2pcommons:init hash', hash)
     if (!this.disableSwarm) {
       this.swarm.add(archive)
 
       archive.once('close', () => {
-        debug(`p2pcommons:closing archive ${archive.publicKey}...`)
+        debug(`closing archive ${archive.publicKey}...`)
         const discoveryKey = DatEncoding.encode(archive.discoveryKey)
         this.swarm.leave(discoveryKey)
         this.swarm._replicatingFeeds.delete(discoveryKey)
@@ -203,15 +214,16 @@ class SDK {
     }
 
     // write dat.json
-    await archive.writeFile('dat.json', JSON.stringify(datJSON))
-    const newPath = join(this.baseDir, hash)
-    await rename(tmp, newPath)
+    const folderPath = join(this.baseDir, publicKey.toString('hex'))
+    await writeFile(join(folderPath, 'dat.json'), JSON.stringify(datJSON))
+    await dat.importFiles(archive, folderPath)
 
     if (this.verbose) {
       // Note(dk): this kind of output can be part of the cli
       console.log(`Initialized new ${datJSON.type}, dat://${hash}`)
     }
-    debug('p2pcommons:init datJSON', datJSON)
+
+    debug('init datJSON', datJSON)
 
     const stat = await archive.stat('dat.json')
     await this.saveItem({
@@ -227,7 +239,7 @@ class SDK {
   }
 
   async saveItem ({ isWritable, lastModified, metadata, persist = false }) {
-    debug('p2pcommons:saveItem', metadata)
+    debug('saveItem', metadata)
     assert.strictEqual(typeof isWritable, 'boolean', 'isWritable is required')
     assert.strictEqual(typeof metadata, 'object', 'An object is expected')
     assert.strictEqual(
@@ -264,14 +276,17 @@ class SDK {
     )
 
     const tmp = await this.get(metadata.url.toString('hex'), false)
-    debug('p2pcommons:set', { ...tmp })
+    debug('set', { ...tmp })
     return this.saveItem({ ...tmp, metadata, persist: tmp.isWritable })
   }
 
-  async get (hash, onlyMetadata = true) {
-    assert.strictEqual(typeof hash, 'string', 'hash is required')
-    const dbitem = await this.localdb.get(hash)
-    debug('p2pcommons:get', dbitem)
+  async get (key, onlyMetadata = true) {
+    assert.ok(key, 'key is required')
+    if (key instanceof Buffer) {
+      key = key.toString('hex')
+    }
+    const dbitem = await this.localdb.get(key)
+    debug('get', dbitem)
     if (onlyMetadata) {
       return dbitem.rawJSON
     }
@@ -356,7 +371,7 @@ class SDK {
   }
 
   async destroy () {
-    debug('p2pcommons:destroying swarm')
+    debug('destroying swarm')
     if (this.disableSwarm) return
     await this.db.close()
     return this.swarm.close()
