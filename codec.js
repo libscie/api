@@ -1,5 +1,5 @@
 const assert = require('assert')
-const debug = require('debug')('p2pcommons')
+const debug = require('debug')('p2pcommons:codec')
 const { Type } = require('@avro/types')
 const GenericType = require('./schemas/generic.json')
 const DBItemType = require('./schemas/dbitem.json')
