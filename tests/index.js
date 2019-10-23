@@ -34,6 +34,25 @@ test('init: create content module', async t => {
   t.end()
 })
 
+test('init: creation should fail due to missing params', async t => {
+  const p2p = new SDK({
+    disableSwarm: true,
+    persist: false,
+    dbPath: tempy.directory()
+  })
+  await p2p.ready()
+  const metadata = {
+    type: 'content'
+  }
+  try {
+    await p2p.init(metadata)
+  } catch (err) {
+    t.ok(err, 'An error should happen')
+    t.strictEqual(err.message, 'title is required')
+    t.end()
+  }
+})
+
 test('init: create profile module', async t => {
   const p2p = new SDK({
     disableSwarm: true,
@@ -121,10 +140,10 @@ test('list content', async t => {
       type: 'content',
       title: 'demo 2'
     },
-    { type: 'content' }
+    { type: 'content', title: 'sample' }
   ]
 
-  const sampleDataProfile = [{ type: 'profile' }]
+  const sampleDataProfile = [{ type: 'profile', title: 'Professor X' }]
 
   await Promise.all(
     []
@@ -154,10 +173,10 @@ test('list profiles', async t => {
       type: 'content',
       title: 'demo 2'
     },
-    { type: 'content' }
+    { type: 'content', title: 'sample' }
   ]
 
-  const sampleDataProfile = [{ type: 'profile' }]
+  const sampleDataProfile = [{ type: 'profile', title: 'Professor X' }]
 
   await Promise.all(
     []
