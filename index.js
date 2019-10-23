@@ -22,8 +22,11 @@ const DEFAULT_SWARM_OPTS = {
   extensions: []
 }
 
-const createDatJSON = ({ type, title = '', description = '', url = '' }) => {
-  assert.strictEqual(typeof type, 'string', 'type is required')
+const createDatJSON = ({ type, title, description = '', url = '' }) => {
+  assert.ok(type, 'type is required')
+  assert.ok(title, 'title is required')
+  assert.strictEqual(typeof type, 'string', 'type should be a string')
+  assert.strictEqual(typeof title, 'string', 'title should be a string')
   const obj = {}
   obj.title = title
   obj.description = description
