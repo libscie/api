@@ -415,6 +415,38 @@ class SDK {
     return open(main)
   }
 
+  async register (source, dest) {
+    assert.strictEqual(source.type, 'content')
+    assert.strictEqual(dest.type, 'profile')
+    const destType = this._getAvroType(dest.type)
+    const destValid = destType.isValid(dest)
+    if (!destValid) {
+      throw new Error('Invalid module')
+    }
+    const sourceType = this._getAvroType(source.type)
+    const sourceValid = sourceType.isValid(source)
+    if (!sourceValid) {
+      throw new Error('Invalid module')
+    }
+    // verify content first?
+
+    // register new content
+    dest.contents.push(source.url)
+  }
+
+  async verify (source, dest) {
+    assert.strictEqual(source.type, 'content')
+    assert.strictEqual(dest.type, 'profile')
+    // TODO(dk): check versions
+    return Promise.all(
+      source.authors.reduce(async (prevProm, authorKey) => {
+        const prev = await prevProm
+        const profile = await this.get(authorKey)
+        return prev && profile.contents.includes(source.url)
+      }, Promise.resolve(true))
+    )
+  }
+
   async destroy () {
     debug('destroying swarm')
     await this.localdb.close()
