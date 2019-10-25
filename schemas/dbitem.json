@@ -11,6 +11,10 @@
       "name": "lastModified"
     },
     {
+      "type": "int",
+      "name": "version"
+    },
+    {
       "type": "bytes",
       "name": "rawJSON"
     }
