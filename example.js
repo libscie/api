@@ -8,7 +8,8 @@ process.once('SIGINT', () => commons.destroy())
 
   // create some content
   const contentMetadata1 = await commons.init({
-    type: 'content'
+    type: 'content',
+    title: 'intro to lorem ipsum'
   }) // ~/.p2pcommons/hash/dat.json --> type: content
   await commons.init({
     type: 'content',
@@ -22,7 +23,7 @@ process.once('SIGINT', () => commons.destroy())
   })
 
   // create a profile
-  await commons.init({ type: 'profile' }) // ~/.p2pcommons/hash/dat.json --> type: profile
+  await commons.init({ type: 'profile', title: 'Professor X' }) // ~/.p2pcommons/hash/dat.json --> type: profile
   const key = contentMetadata1.url.toString('hex')
   const out = await commons.get(key)
   console.log(`Retrieved type: ${out.type}`)
