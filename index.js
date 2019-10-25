@@ -15,6 +15,7 @@ const DatEncoding = require('dat-encoding')
 const debug = require('debug')('p2pcommons')
 const dat = require('./lib/dat-helper')
 const Codec = require('./codec')
+const { JSONencode } = require('./lib/utils')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
 
@@ -92,79 +93,77 @@ class SDK {
   }
 
   async ready () {
-    await ensureDir(this.dbPath)
-    return new Promise((resolve, reject) => {
-      // start local db
-      const registry = {}
-      this.contentType = Type.forSchema(ContentSchema, { registry })
-      this.profileType = Type.forSchema(ProfileSchema, { registry })
-      const codec = new Codec(registry)
-      debug('ready dbpath', this.dbPath)
-      level(join(this.dbPath, 'db'), { valueEncoding: codec }, (err, db) => {
-        if (err instanceof level.errors.OpenError) {
-          if (this.verbose) {
-            console.error('failed to open database')
-          }
-          reject(err)
-        }
-        this.db = db
-        // create partitions - required by level-auto-index
-        this.localdb = sub(this.db, 'localdb', { valueEncoding: codec })
-        // create index
-        this.idx = {
-          title: sub(this.db, 'title'),
-          description: sub(this.db, 'description')
-        }
-        // create filters
-        this.by = {}
-        this.by.title = AutoIndex(this.localdb, this.idx.title, container =>
-          container.rawJSON.title.toLowerCase()
-        )
-        this.by.description = AutoIndex(
-          this.localdb,
-          this.idx.description,
-          container => container.rawJSON.description.toLowerCase()
-        )
-
-        /*
-        this.profileByFollows = AutoIndex(
-          this.profiledb,
-          this.idx.follows,
-          profile => {
-            if (
-              !profile ||
-              !profile.follows ||
-              !Array.isArray(profile.follows)
-            ) {
-              return
+    return Promise.all([
+      ensureDir(this.dbPath),
+      new Promise((resolve, reject) => {
+        // start local db
+        const registry = {}
+        this.contentType = Type.forSchema(ContentSchema, { registry })
+        this.profileType = Type.forSchema(ProfileSchema, { registry })
+        const codec = new Codec(registry)
+        debug('ready dbpath', this.dbPath)
+        level(join(this.dbPath, 'db'), { valueEncoding: codec }, (err, db) => {
+          if (err instanceof level.errors.OpenError) {
+            if (this.verbose) {
+              console.error('failed to open database')
             }
-            return profile.follows.map(
-              p => `${p}_${profile.url.toString('hex')}`
-            )
+            reject(err)
           }
-        )
-        */
-        resolve()
+          this.db = db
+          // create partitions - required by level-auto-index
+          this.localdb = sub(this.db, 'localdb', { valueEncoding: codec })
+          // create index
+          this.idx = {
+            title: sub(this.db, 'title'),
+            description: sub(this.db, 'description')
+          }
+          // create filters
+          this.by = {}
+          this.by.title = AutoIndex(this.localdb, this.idx.title, container =>
+            container.rawJSON.title.toLowerCase()
+          )
+          this.by.description = AutoIndex(
+            this.localdb,
+            this.idx.description,
+            container => container.rawJSON.description.toLowerCase()
+          )
+
+          /*
+          this.profileByFollows = AutoIndex(
+            this.profiledb,
+            this.idx.follows,
+            profile => {
+              if (
+                !profile ||
+                !profile.follows ||
+                !Array.isArray(profile.follows)
+              ) {
+                return
+              }
+              return profile.follows.map(
+                p => `${p}_${profile.url.toString('hex')}`
+              )
+            }
+          )
+          */
+          resolve()
+        })
       })
-    })
+    ])
   }
 
-  async init ({
-    type,
-    title = '',
-    description = '',
-    datOpts = { datStorage: {} }
-  }) {
+  async init ({ type, title, description = '', datOpts = { datStorage: {} } }) {
     // follow module spec: https://github.com/p2pcommons/specs/pull/1/files?short_path=2d471ef#diff-2d471ef4e3a452b579a3367eb33ccfb9
     // 1. create folder with unique name (pk)
     // 2. initialize an hyperdrive inside
     // 3. createDatJSON with the correct metadata and save it there
     //
-    assert.ok(typeof type === 'string', 'type is required')
+    assert.strictEqual(typeof type, 'string', 'type is required')
     assert.ok(
       type.endsWith('profile') || type.endsWith('content'),
       "type should be 'content' or 'profile'"
     )
+    assert.strictEqual(typeof title, 'string', 'title is required')
     debug(`init ${type}`)
 
     const { publicKey, secretKey } = crypto.keyPair()
@@ -218,7 +217,7 @@ class SDK {
 
     // write dat.json
     const folderPath = join(this.baseDir, publicKey.toString('hex'))
-    await writeFile(join(folderPath, 'dat.json'), JSON.stringify(datJSON))
+    await writeFile(join(folderPath, 'dat.json'), JSONencode(datJSON))
     await dat.importFiles(archive, folderPath)
 
     if (this.verbose) {
@@ -232,6 +231,7 @@ class SDK {
     await this.saveItem({
       isWritable: archive.writable,
       lastModified: stat.mtime,
+      version: archive.version,
       metadata: datJSON
     })
 
@@ -241,7 +241,7 @@ class SDK {
     return datJSON
   }
 
-  async saveItem ({ isWritable, lastModified, metadata, persist = false }) {
+  async saveItem ({ isWritable, lastModified, version, metadata }) {
     debug('saveItem', metadata)
     assert.strictEqual(typeof isWritable, 'boolean', 'isWritable is required')
     assert.strictEqual(typeof metadata, 'object', 'An object is expected')
@@ -251,19 +251,22 @@ class SDK {
       'type property is required'
     )
 
+    const datJSONDir = join(this.baseDir, metadata.url.toString('hex'))
+    const archive = dat.open(datJSONDir)
+    await archive.ready()
+    let stat
+    if (isWritable) {
+      await archive.writeFile('dat.json', JSON.stringify(metadata))
+      stat = await archive.stat('/dat.json')
+    }
+
     await this.localdb.put(metadata.url.toString('hex'), {
       isWritable,
-      lastModified,
+      lastModified: stat ? stat.mtime : lastModified,
+      version: archive.version,
       rawJSON: metadata,
       avroType: this._getAvroType(metadata.type).name
     })
-
-    if (persist) {
-      const datJSONDir = join(this.baseDir, metadata.url.toString('hex'))
-      const archive = dat.open(datJSONDir)
-      await archive.ready()
-      await archive.writeFile('dat.json', JSON.stringify(metadata))
-    }
   }
 
   async set (metadata) {
@@ -278,9 +281,15 @@ class SDK {
       "type should be 'content' or 'profile'"
     )
 
+    // NOTE(dk): some properties are read only (license, follows, ...)
+    const { license, follows, contents, authors, parents, ...mod } = metadata
+
     const tmp = await this.get(metadata.url.toString('hex'), false)
-    debug('set', { ...tmp })
-    return this.saveItem({ ...tmp, metadata, persist: tmp.isWritable })
+    debug('set', { ...mod })
+    return this.saveItem({
+      ...tmp,
+      metadata: { ...tmp.rawJSON, ...mod }
+    })
   }
 
   async get (key, onlyMetadata = true) {
@@ -375,8 +384,8 @@ class SDK {
 
   async destroy () {
     debug('destroying swarm')
+    await this.localdb.close()
     if (this.disableSwarm) return
-    await this.db.close()
     return this.swarm.close()
   }
 }
