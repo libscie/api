@@ -15,7 +15,6 @@ const DatEncoding = require('dat-encoding')
 const debug = require('debug')('p2pcommons')
 const dat = require('./lib/dat-helper')
 const Codec = require('./codec')
-const { JSONencode } = require('./lib/utils')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
 
@@ -196,8 +195,6 @@ class SDK {
         const discoveryKey = DatEncoding.encode(archive.discoveryKey)
         this.swarm.leave(discoveryKey)
         this.swarm._replicatingFeeds.delete(discoveryKey)
-        // Note(dk): should we handle multiple drives?
-        // drives.delete(stringKey)
       })
     }
 
@@ -206,7 +203,7 @@ class SDK {
       type,
       title,
       description,
-      url: archive.key
+      url: hash
     })
     // Note(dk): validate earlier
     const avroType = this._getAvroType(datJSON.type)
@@ -216,8 +213,8 @@ class SDK {
     }
 
     // write dat.json
-    const folderPath = join(this.baseDir, publicKey.toString('hex'))
-    await writeFile(join(folderPath, 'dat.json'), JSONencode(datJSON))
+    const folderPath = join(this.baseDir, hash)
+    await writeFile(join(folderPath, 'dat.json'), JSON.stringify(datJSON))
     await dat.importFiles(archive, folderPath)
 
     if (this.verbose) {
@@ -284,7 +281,7 @@ class SDK {
     // NOTE(dk): some properties are read only (license, follows, ...)
     const { license, follows, contents, authors, parents, ...mod } = metadata
 
-    const tmp = await this.get(metadata.url.toString('hex'), false)
+    const tmp = await this.get(DatEncoding.encode(metadata.url), false)
     debug('set', { ...mod })
     return this.saveItem({
       ...tmp,
