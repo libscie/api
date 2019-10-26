@@ -13,7 +13,6 @@ test('ready', async t => {
   const p2p = createDb()
   t.doesNotThrow(async () => p2p.ready(), 'ready method should not throw')
   t.end()
-  await p2p.destroy()
 })
 
 test('init: create content module', async t => {
