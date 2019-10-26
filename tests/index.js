@@ -24,10 +24,11 @@ test('init: create content module', async t => {
     description: 'lorem ipsum'
   }
   const output = await p2p.init(metadata)
+
   t.same(output.type, metadata.type)
   t.same(output.title, metadata.title)
   t.same(output.description, metadata.description)
-  t.ok(Buffer.isBuffer(output.url))
+  t.same(typeof output.url, 'string', 'url is a string')
   t.same(
     output.license,
     'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
@@ -66,7 +67,7 @@ test('init: create profile module', async t => {
   t.same(output.type, metadata.type)
   t.same(output.title, metadata.title)
   t.same(output.description, metadata.description)
-  t.ok(Buffer.isBuffer(output.url))
+  t.same(typeof output.url, 'string', 'url is a string')
   t.same(
     output.license,
     'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
