@@ -378,6 +378,18 @@ class SDK {
     })
   }
 
+  async list () {
+    return new Promise((resolve, reject) => {
+      const out = []
+      const s = this.localdb.createValueStream()
+      s.on('data', val => {
+        if (val.isWritable) out.push(val)
+      })
+      s.on('end', () => resolve(out))
+      s.on('error', reject)
+    })
+  }
+
   async openFile (key) {
     assert.strictEqual(typeof key, 'string', 'key is required')
     const { main } = await this.get(key)

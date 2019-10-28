@@ -118,6 +118,12 @@ Returns an array containing all the `content` modules saved in the local db.
 
 Returns an array containing all the `profile` modules saved in the local db.
 
+### list
+
+> _async_ `list()`
+
+Returns an array containing all the modules saved in the local db.
+
 ### openFile
 
 > _async_ `openFile(key: string)`
