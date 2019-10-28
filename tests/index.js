@@ -205,3 +205,27 @@ test('list profiles', async t => {
   t.end()
   await p2p.destroy()
 })
+
+test('list modules', async t => {
+  const p2p = createDb()
+  await p2p.ready()
+  const sampleData = [
+    {
+      type: 'content',
+      title: 'demo',
+      description: 'lorem ipsum'
+    },
+    {
+      type: 'content',
+      title: 'demo 2'
+    },
+    { type: 'content', title: 'sample' },
+    { type: 'profile', title: 'Professor X' }
+  ]
+
+  await Promise.all([].concat(sampleData).map(d => p2p.init(d)))
+  const result = await p2p.list()
+  t.same(result.length, sampleData.length)
+  t.end()
+  await p2p.destroy()
+})
