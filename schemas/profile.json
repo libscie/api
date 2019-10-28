@@ -5,7 +5,7 @@
   "fields": [
     {"name": "title", "type": "string"},
     {"name": "description", "type": "string"},
-    {"name": "url", "type": "bytes"},
+    {"name": "url", "type": "string"},
     {
       "name": "type",
       "type": {
@@ -20,7 +20,7 @@
       "name": "follows",
       "type": {
         "type": "array",
-        "items": "bytes"
+        "items": "string"
       },
       "default": []
     },
@@ -28,7 +28,7 @@
       "name": "contents",
       "type": {
         "type": "array",
-        "items": "bytes"
+        "items": "string"
       },
       "default": []
     }

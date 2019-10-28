@@ -42,6 +42,7 @@ class Codec {
     return this.registry.DBItem.toBuffer({
       isWritable: obj.isWritable,
       lastModified: obj.lastModified,
+      version: obj.version,
       rawJSON: raw
     })
   }
