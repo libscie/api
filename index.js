@@ -249,11 +249,19 @@ class SDK {
     )
 
     const datJSONDir = join(this.baseDir, metadata.url.toString('hex'))
-    const archive = dat.open(datJSONDir)
+    const storageOpts = {
+      storageLocation: join(this.baseDir, metadata.url.toString('hex'))
+    }
+    const archive = dat.open(
+      metadata.url.toString('hex'),
+      undefined,
+      storageOpts
+    )
     await archive.ready()
     let stat
     if (isWritable) {
-      await archive.writeFile('dat.json', JSON.stringify(metadata))
+      await writeFile(join(datJSONDir, 'dat.json'), JSON.stringify(metadata))
+      await dat.importFiles(archive, datJSONDir)
       stat = await archive.stat('/dat.json')
     }
 
