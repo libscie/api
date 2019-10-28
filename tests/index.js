@@ -116,6 +116,36 @@ test('set: update a value', async t => {
   await p2p.destroy()
 })
 
+test('update: check version change', async t => {
+  const p2p = createDb()
+  await p2p.ready()
+  const sampleData = {
+    type: 'content',
+    title: 'demo',
+    description: 'lorem ipsum'
+  }
+  const metadata = await p2p.init(sampleData)
+  const key = metadata.url.toString('hex')
+
+  const result1 = await p2p.get(key, false)
+
+  metadata.description = 'A more accurate description'
+  await p2p.set(metadata)
+  const result2 = await p2p.get(key, false)
+
+  t.same(result2.rawJSON.description, metadata.description)
+  t.ok(
+    result2.version > result1.version,
+    'latest version should be bigger than previous version after update'
+  )
+  t.ok(
+    result2.lastModified > result1.lastModified,
+    'lastModified should be bigger than previous lastModified'
+  )
+  t.end()
+  await p2p.destroy()
+})
+
 test('list content', async t => {
   const p2p = createDb()
   await p2p.ready()
