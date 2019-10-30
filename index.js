@@ -1,10 +1,10 @@
-const assert = require('assert')
 const { join, isAbsolute } = require('path')
 const { homedir, tmpdir, platform } = require('os')
 const {
   promises: { open, writeFile }
 } = require('fs')
 const { ensureDir } = require('fs-extra')
+const assert = require('nanocustomassert')
 const level = require('level')
 const sub = require('subleveldown')
 const AutoIndex = require('level-auto-index')
@@ -17,16 +17,15 @@ const dat = require('./lib/dat-helper')
 const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
+const { InvalidKeyError, ValidationError } = require('./lib/errors')
 
 const DEFAULT_SWARM_OPTS = {
   extensions: []
 }
 
 const createDatJSON = ({ type, title, description = '', url = '' }) => {
-  assert.ok(type, 'type is required')
-  assert.ok(title, 'title is required')
-  assert.strictEqual(typeof type, 'string', 'type should be a string')
-  assert.strictEqual(typeof title, 'string', 'title should be a string')
+  assert(typeof type === 'string', ValidationError, 'string', type)
+  assert(typeof title === 'string', ValidationError, 'string', title)
   const obj = {}
   obj.title = title
   obj.description = description
@@ -75,6 +74,10 @@ class SDK {
     }
   }
 
+  allowedProperties () {
+    return ['title', 'description', 'main', 'subtype']
+  }
+
   _getAvroType (appType) {
     if (appType === 'content') {
       return this.contentType
@@ -82,13 +85,6 @@ class SDK {
     if (appType === 'profile') {
       return this.profileType
     }
-  }
-
-  _getDb (type) {
-    assert.ok(type, 'type is required')
-    if (type.endsWith('profile')) return this.profiledb
-    if (type.endsWith('content')) return this.contentdb
-    throw new Error(`Unknown type: ${type}`)
   }
 
   async ready () {
@@ -157,12 +153,15 @@ class SDK {
     // 2. initialize an hyperdrive inside
     // 3. createDatJSON with the correct metadata and save it there
     //
-    assert.strictEqual(typeof type, 'string', 'type is required')
-    assert.ok(
-      type.endsWith('profile') || type.endsWith('content'),
-      "type should be 'content' or 'profile'"
+    assert(typeof type === 'string', ValidationError, 'string', type)
+    assert(
+      type === 'profile' || type === 'content',
+      ValidationError,
+      "'content' or 'profile'",
+      type
     )
-    assert.strictEqual(typeof title, 'string', 'title is required')
+    assert(typeof title === 'string', ValidationError, 'string', title)
+
     debug(`init ${type}`)
 
     const { publicKey, secretKey } = crypto.keyPair()
@@ -240,13 +239,13 @@ class SDK {
 
   async saveItem ({ isWritable, lastModified, version, metadata }) {
     debug('saveItem', metadata)
-    assert.strictEqual(typeof isWritable, 'boolean', 'isWritable is required')
-    assert.strictEqual(typeof metadata, 'object', 'An object is expected')
-    assert.strictEqual(
-      typeof metadata.type,
-      'string',
-      'type property is required'
+    assert(
+      typeof isWritable === 'boolean',
+      ValidationError,
+      'boolean',
+      isWritable
     )
+    assert(typeof metadata === 'object', ValidationError, 'object', metadata)
 
     const datJSONDir = join(this.baseDir, metadata.url.toString('hex'))
     const storageOpts = {
@@ -275,21 +274,26 @@ class SDK {
   }
 
   async set (metadata) {
-    assert.strictEqual(
-      typeof metadata,
-      'object',
-      'metadata should be an object'
-    )
-    assert.ok(metadata.url, 'Invalid metadata. Missing property: url')
-    assert.ok(
-      metadata.type === 'profile' || metadata.type === 'content',
-      "type should be 'content' or 'profile'"
+    assert(typeof metadata === 'object', ValidationError, 'object', metadata)
+    assert(
+      typeof metadata.url === 'string' || Buffer.isBuffer(metadata.url),
+      ValidationError,
+      "'string' or Buffer",
+      metadata.url
     )
 
     // NOTE(dk): some properties are read only (license, follows, ...)
-    const { license, follows, contents, authors, parents, ...mod } = metadata
+    const { url, ...mod } = metadata
 
-    const tmp = await this.get(DatEncoding.encode(metadata.url), false)
+    const receivedKeys = Object.keys(mod)
+    const allowedProperties = this.allowedProperties()
+    for (const key of receivedKeys) {
+      if (!allowedProperties.includes(key)) {
+        throw new InvalidKeyError(key)
+      }
+    }
+
+    const tmp = await this.get(DatEncoding.encode(url), false)
     debug('set', { ...mod })
     return this.saveItem({
       ...tmp,
@@ -298,10 +302,13 @@ class SDK {
   }
 
   async get (key, onlyMetadata = true) {
-    assert.ok(key, 'key is required')
-    if (key instanceof Buffer) {
-      key = key.toString('hex')
-    }
+    assert(
+      typeof key === 'string' || Buffer.isBuffer(key),
+      ValidationError,
+      "'string' or Buffer",
+      key
+    )
+    key = DatEncoding.encode(key)
     const dbitem = await this.localdb.get(key)
     debug('get', dbitem)
     if (onlyMetadata) {
@@ -311,12 +318,8 @@ class SDK {
   }
 
   async filterExact (feature, criteria) {
-    assert.strictEqual(
-      typeof feature,
-      'string',
-      'A valid filter type is required'
-    )
-    assert.ok(criteria, 'filter criteria is required')
+    assert(typeof feature === 'string', ValidationError, 'string', feature)
+    assert(typeof criteria === 'string', ValidationError, 'string', criteria)
     return new Promise((resolve, reject) => {
       this.by[feature].get(criteria, (err, data) => {
         if (err) return reject(err)
@@ -328,12 +331,8 @@ class SDK {
   }
 
   async filter (feature, criteria) {
-    assert.strictEqual(
-      typeof feature,
-      'string',
-      'A valid filter type is required'
-    )
-    assert.ok(criteria, 'filter criteria is required')
+    assert(typeof feature === 'string', ValidationError, 'string', feature)
+    assert(typeof criteria === 'string', ValidationError, 'string', criteria)
     return new Promise((resolve, reject) => {
       const out = []
       const criteriaLower = criteria.toLowerCase()
@@ -391,7 +390,7 @@ class SDK {
   }
 
   async openFile (key) {
-    assert.strictEqual(typeof key, 'string', 'key is required')
+    assert(typeof key === 'string', ValidationError, 'string', key)
     const { main } = await this.get(key)
     if (!main) {
       throw new Error('Empty main file')
@@ -407,4 +406,8 @@ class SDK {
   }
 }
 
+SDK.errors = { ValidationError, InvalidKeyError }
+
 module.exports = SDK
+
+exports.errors = { ValidationError, InvalidKeyError }
