@@ -28,11 +28,11 @@ process.once('SIGINT', () => commons.destroy())
   const out = await commons.get(key)
   console.log(`Retrieved type: ${out.type}`)
 
-  out.title = 'Sample Content'
-  out.description = 'This is a short abstract about nothing'
+  const title = 'Sample Content'
+  const description = 'This is a short abstract about nothing'
 
   console.log('Updating content...')
-  await commons.set(out)
+  await commons.set({ url: key, title, description })
 
   // check out updated value from local db
   const result = await commons.get(key)

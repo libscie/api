@@ -139,4 +139,18 @@ Used to obtain a file descriptor from the `main` file of a module.
 
 Closes the swarm instance (if created) and the local db.
 
+## Errors
 
+The SDK exports some custom errors: `SDK.errors`
+
+### ValidationError
+
+Indicates there is a difference between what is expected and what was received
+
+### InvalidKeyError
+
+Some keys are _read only_. This error indicates the user is trying to modificate a read only property.
+
+### MissingParam
+
+A more general error, used to indicate if something is missing.

@@ -1,12 +1,13 @@
-const assert = require('assert')
 const debug = require('debug')('p2pcommons:codec')
+const assert = require('nanocustomassert')
 const { Type } = require('@avro/types')
 const GenericType = require('./schemas/generic.json')
 const DBItemType = require('./schemas/dbitem.json')
+const { MissingParam, ValidationError } = require('./lib/errors')
 
 class Codec {
   constructor (registry) {
-    assert.ok(registry, 'registry is required')
+    assert(registry, MissingParam, 'registry')
     Type.forSchema(GenericType, { registry })
     Type.forSchema(DBItemType, { registry })
     this.registry = registry
@@ -16,20 +17,18 @@ class Codec {
 
   encode (obj) {
     debug('p2pcommons:Codec:encode', obj)
-    assert.strictEqual(
-      typeof obj,
+    assert(typeof obj === 'object', ValidationError, 'object', obj)
+    assert(
+      typeof obj.rawJSON === 'object',
+      ValidationError,
       'object',
-      `Expected an object. Received: ${obj}`
+      obj.rawJSON
     )
-    assert.strictEqual(
-      typeof obj.rawJSON,
-      'object',
-      'Missing property: rawJSON'
-    )
-    assert.strictEqual(
-      typeof obj.rawJSON.type,
+    assert(
+      typeof obj.rawJSON.type === 'string',
+      ValidationError,
       'string',
-      'Missing property: rawJSON.type'
+      obj.rawJSON.type
     )
 
     const newVal = this.registry[obj.avroType].toBuffer(obj.rawJSON)
@@ -49,7 +48,7 @@ class Codec {
 
   decode (buf) {
     debug('p2pcommons:Codec:decode')
-    assert.ok(buf, 'buffer is required')
+    assert(buf, MissingParam, 'buf')
     const dbitem = this.decodeGeneric(buf)
     debug('p2pcommons:Codec:decode dbitem', dbitem)
 
