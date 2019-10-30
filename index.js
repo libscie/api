@@ -17,7 +17,11 @@ const dat = require('./lib/dat-helper')
 const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
-const { InvalidKeyError, ValidationError } = require('./lib/errors')
+const {
+  InvalidKeyError,
+  ValidationError,
+  MissingParam
+} = require('./lib/errors')
 
 const DEFAULT_SWARM_OPTS = {
   extensions: []
@@ -406,8 +410,6 @@ class SDK {
   }
 }
 
-SDK.errors = { ValidationError, InvalidKeyError }
+SDK.errors = { ValidationError, InvalidKeyError, MissingParam }
 
 module.exports = SDK
-
-exports.errors = { ValidationError, InvalidKeyError }
