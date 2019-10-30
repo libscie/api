@@ -27,23 +27,28 @@ const DEFAULT_SWARM_OPTS = {
   extensions: []
 }
 
-const createDatJSON = ({ type, title, description = '', url = '' }) => {
+const createDatJSON = ({
+  type,
+  title,
+  subtype = '',
+  description = '',
+  url = ''
+}) => {
   assert(typeof type === 'string', ValidationError, 'string', type)
   assert(typeof title === 'string', ValidationError, 'string', title)
   const obj = {}
+  obj.type = type
   obj.title = title
   obj.description = description
   obj.url = url
   obj.main = ''
   obj.license = 'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
-  obj.subtype = type
+  obj.subtype = subtype
 
-  if (type.endsWith('profile')) {
-    obj.type = 'profile'
+  if (type === 'profile') {
     obj.follows = []
     obj.contents = []
   } else {
-    obj.type = 'content'
     obj.authors = []
     obj.parents = []
   }
@@ -151,7 +156,13 @@ class SDK {
     ])
   }
 
-  async init ({ type, title, description = '', datOpts = { datStorage: {} } }) {
+  async init ({
+    type,
+    title,
+    subtype = '',
+    description = '',
+    datOpts = { datStorage: {} }
+  }) {
     // follow module spec: https://github.com/p2pcommons/specs/pull/1/files?short_path=2d471ef#diff-2d471ef4e3a452b579a3367eb33ccfb9
     // 1. create folder with unique name (pk)
     // 2. initialize an hyperdrive inside
@@ -165,6 +176,7 @@ class SDK {
       type
     )
     assert(typeof title === 'string', ValidationError, 'string', title)
+    assert(typeof subtype === 'string', ValidationError, 'string', subtype)
 
     debug(`init ${type}`)
 
@@ -205,6 +217,7 @@ class SDK {
     const datJSON = createDatJSON({
       type,
       title,
+      subtype,
       description,
       url: hash
     })

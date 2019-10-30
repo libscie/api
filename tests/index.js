@@ -20,12 +20,14 @@ test('init: create content module', async t => {
   await p2p.ready()
   const metadata = {
     type: 'content',
+    subtype: 'Theory',
     title: 'demo',
     description: 'lorem ipsum'
   }
   const output = await p2p.init(metadata)
 
   t.same(output.type, metadata.type)
+  t.same(output.subtype, metadata.subtype)
   t.same(output.title, metadata.title)
   t.same(output.description, metadata.description)
   t.same(typeof output.url, 'string', 'url is a string')
@@ -49,7 +51,10 @@ test('init: creation should throw a ValidationError', async t => {
     await p2p.init(metadata)
   } catch (err) {
     t.ok(err, 'An error should happen')
-    t.ok(err instanceof SDK.errors.ValidationError, 'It should be a custom SDK error')
+    t.ok(
+      err instanceof SDK.errors.ValidationError,
+      'It should be a custom SDK error'
+    )
     t.end()
     await p2p.destroy()
   }
