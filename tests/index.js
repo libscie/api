@@ -313,6 +313,7 @@ test('multiple writes with persistance', async t => {
   }
 })
 
+>>>>>>> Update: verification - initial steps
 test('verify', async t => {
   const p2p = createDb()
   await p2p.ready()
