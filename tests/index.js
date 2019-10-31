@@ -256,3 +256,49 @@ test('list modules', async t => {
   t.end()
   await p2p.destroy()
 })
+
+test('verify', async t => {
+  const p2p = createDb()
+  await p2p.ready()
+  const sampleData = [
+    {
+      type: 'content',
+      title: 'demo',
+      description: 'lorem ipsum'
+    },
+    {
+      type: 'content',
+      title: 'demo 2'
+    },
+    { type: 'profile', title: 'Professor X' }
+  ]
+
+  await Promise.all([].concat(sampleData).map(d => p2p.init(d)))
+
+  const profiles = await p2p.listProfiles()
+  const contents = await p2p.listContent()
+
+  const profile = profiles[0]
+  const content1 = contents[0]
+  const content2 = contents[1]
+  const authors = [profile.url]
+
+  // ATOMIC OP
+  // update author
+  await p2p.set({ url: content1.url, authors })
+  // update content in author profile
+  await p2p.set({ url: profile.url, contents: [content1.url] })
+  // END ATOMIC OP
+
+  const updated = await p2p.get(content1.url)
+
+  const result = await p2p.verify(updated, profile)
+
+  t.ok(result, 'content1 meets the verification requirements')
+
+  const result2 = await p2p.verify(content2, profile)
+  t.notOk(result2, 'content2 does not has authors registered')
+
+  t.end()
+  await p2p.destroy()
+})
