@@ -94,7 +94,7 @@ class SDK {
   }
 
   allowedProperties () {
-    return ['title', 'description', 'main', 'subtype']
+    return ['title', 'description', 'main', 'subtype', 'authors', 'contents']
   }
 
   _getAvroType (appType) {
@@ -380,7 +380,7 @@ class SDK {
     })
   }
 
-  async filter (feature, criteria) {
+  async filter (feature, criteria, dbitem = false) {
     assert(typeof feature === 'string', ValidationError, 'string', feature)
     assert(typeof criteria === 'string', ValidationError, 'string', criteria)
     return new Promise((resolve, reject) => {
@@ -395,7 +395,7 @@ class SDK {
           v.rawJSON[feature] &&
           v.rawJSON[feature].toLowerCase().includes(criteriaLower)
         ) {
-          out.push(v)
+          out.push(dbitem ? v : v.rawJSON)
         }
       })
       s.on('end', () => resolve(out))
@@ -403,36 +403,40 @@ class SDK {
     })
   }
 
-  async listContent () {
+  async listContent (dbitem = false) {
     return new Promise((resolve, reject) => {
       const out = []
       const s = this.localdb.createValueStream()
       s.on('data', val => {
-        if (val.isWritable && val.rawJSON.type === 'content') out.push(val)
+        if (val.isWritable && val.rawJSON.type === 'content') {
+          out.push(dbitem ? val : val.rawJSON)
+        }
       })
       s.on('end', () => resolve(out))
       s.on('error', reject)
     })
   }
 
-  async listProfiles () {
+  async listProfiles (dbitem = false) {
     return new Promise((resolve, reject) => {
       const out = []
       const s = this.localdb.createValueStream()
       s.on('data', val => {
-        if (val.isWritable && val.rawJSON.type === 'profile') out.push(val)
+        if (val.isWritable && val.rawJSON.type === 'profile') {
+          out.push(dbitem ? val : val.rawJSON)
+        }
       })
       s.on('end', () => resolve(out))
       s.on('error', reject)
     })
   }
 
-  async list () {
+  async list (dbitem = false) {
     return new Promise((resolve, reject) => {
       const out = []
       const s = this.localdb.createValueStream()
       s.on('data', val => {
-        if (val.isWritable) out.push(val)
+        if (val.isWritable) out.push(dbitem ? val : val.rawJSON)
       })
       s.on('end', () => resolve(out))
       s.on('error', reject)
@@ -449,8 +453,9 @@ class SDK {
   }
 
   async register (source, dest) {
-    assert.strictEqual(source.type, 'content')
-    assert.strictEqual(dest.type, 'profile')
+    // TODO(dk): add custom errors for register and validation maybe....
+    assert(source.type === 'content', ValidationError, 'content', source.type)
+    assert(dest.type === 'profile', ValidationError, 'profile', dest.type)
     const destType = this._getAvroType(dest.type)
     const destValid = destType.isValid(dest)
     if (!destValid) {
@@ -461,23 +466,27 @@ class SDK {
     if (!sourceValid) {
       throw new Error('Invalid module')
     }
+
+    if (dest.authors.length === 0) {
+      throw new Error('Authors is empty')
+    }
     // verify content first?
+    this.verify(source, dest)
 
     // register new content
     dest.contents.push(source.url)
   }
 
   async verify (source, dest) {
-    assert.strictEqual(source.type, 'content')
-    assert.strictEqual(dest.type, 'profile')
+    assert(source.type === 'content', ValidationError, 'content', source.type)
+    assert(dest.type === 'profile', ValidationError, 'profile', dest.type)
     // TODO(dk): check versions
-    return Promise.all(
-      source.authors.reduce(async (prevProm, authorKey) => {
-        const prev = await prevProm
-        const profile = await this.get(authorKey)
-        return prev && profile.contents.includes(source.url)
-      }, Promise.resolve(true))
-    )
+    if (source.authors.length === 0) return false
+    return source.authors.reduce(async (prevProm, authorKey) => {
+      const prev = await prevProm
+      const profile = await this.get(authorKey)
+      return prev && profile.contents.includes(source.url)
+    }, Promise.resolve(true))
   }
 
   async destroy () {
