@@ -471,7 +471,7 @@ class SDK {
     if (!source) {
       // 2 - if no module is found on localdb, then fetch from hyperdrive
       // something like:
-      // const sourceDat = dat.open(source)
+      // const sourceDat = dat.open(source) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
       // await sourceDat.ready()
       // 3 - after fetching module we still need to read the dat.json file
       // try {
@@ -486,7 +486,7 @@ class SDK {
     if (!dest) {
       // 2 - if no module is found on localdb, then fetch from hyperdrive
       // something like:
-      // const destDat = dat.open(dest)
+      // const destDat = dat.open(dest) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
       // await destDat.ready()
       // 3 - after fetching module we still need to read the dat.json file
       // try {
