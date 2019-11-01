@@ -419,10 +419,56 @@ class SDK {
     return open(main)
   }
 
-  async register (source, dest) {
+  async register (sourceKey, destKey) {
+    assert(
+      typeof sourceKey === 'string' || Buffer.isBuffer(sourceKey),
+      ValidationError,
+      "'string' or Buffer",
+      sourceKey
+    )
+    assert(
+      typeof destKey === 'string' || Buffer.isBuffer(destKey),
+      ValidationError,
+      "'string' or Buffer",
+      destKey
+    )
+    // fetch source and dest
+    // 1 - try to get source from localdb
+    const source = await this.get(DatEncoding.encode(sourceKey))
+    if (!source) {
+      // 2 - if no module is found on localdb, then fetch from hyperdrive
+      // something like:
+      // const sourceDat = dat.open(source)
+      // await sourceDat.ready()
+      // 3 - after fetching module we still need to read the dat.json file
+      // try {
+      //   source = await sourceDat.readFile('dat.json')
+      // } catch (err) {
+      //   throw new Error('Module not found')
+      // }
+      // 4 - populate localdb with the new module ??? VALIDATE FIRST
+    }
+    // 1 - try to get dest from localdb
+    const dest = await this.get(DatEncoding.encode(destKey))
+    if (!dest) {
+      // 2 - if no module is found on localdb, then fetch from hyperdrive
+      // something like:
+      // const destDat = dat.open(dest)
+      // await destDat.ready()
+      // 3 - after fetching module we still need to read the dat.json file
+      // try {
+      //   dest  = await destDat.readFile('dat.json')
+      // } catch (err) {
+      //   throw new Error('Module not found')
+      // }
+      //
+      // 4 - populate localdb with the new module ??? VALIDATE FIRST
+    }
+
     // TODO(dk): add custom errors for register and validation maybe....
     assert(source.type === 'content', ValidationError, 'content', source.type)
     assert(dest.type === 'profile', ValidationError, 'profile', dest.type)
+
     const destType = this._getAvroType(dest.type)
     const destValid = destType.isValid(dest)
     if (!destValid) {
@@ -434,19 +480,24 @@ class SDK {
       throw new Error('Invalid module')
     }
 
+    // Note(dk): at this point is safe to save the new modules if necessary
+
     if (dest.authors.length === 0) {
       throw new Error('Authors is empty')
     }
-    // verify content first?
-    this.verify(source, dest)
+    // verify content first
+    const verified = await this.verify(source)
+
+    if (!verified) {
+      throw new Error('source module does not met the requirements')
+    }
 
     // register new content
     dest.contents.push(source.url)
   }
 
-  async verify (source, dest) {
+  async verify (source) {
     assert(source.type === 'content', ValidationError, 'content', source.type)
-    assert(dest.type === 'profile', ValidationError, 'profile', dest.type)
     // TODO(dk): check versions
     if (source.authors.length === 0) return false
     return source.authors.reduce(async (prevProm, authorKey) => {

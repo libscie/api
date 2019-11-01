@@ -283,8 +283,8 @@ test('verify', async t => {
   const content2 = contents[1]
   const authors = [profile.url]
 
-  // ATOMIC OP
-  // update author
+  // ATOMIC OP?
+  // update author on content module
   await p2p.set({ url: content1.url, authors })
   // update content in author profile
   await p2p.set({ url: profile.url, contents: [content1.url] })
