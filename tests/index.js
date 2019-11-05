@@ -256,3 +256,33 @@ test('list modules', async t => {
   t.end()
   await p2p.destroy()
 })
+
+test('multiple writes with persistance', async t => {
+  try {
+    const dir = tempy.directory()
+    const p2p1 = new SDK({
+      baseDir: dir
+    })
+
+    await p2p1.ready()
+    const { url } = await p2p1.init({ type: 'content', title: 'title' })
+    t.same(typeof url, 'string')
+    await p2p1.destroy()
+
+    // create a new instance with same basedir
+    const p2p2 = new SDK({
+      baseDir: dir
+    })
+    await p2p2.ready()
+    const metadata = { url, title: 'beep' }
+    await p2p2.set(metadata)
+    await p2p2.set({ url, description: 'boop' })
+    const out = await p2p2.get(url)
+    t.same(out.title, metadata.title)
+    t.same(out.description, 'boop')
+    await p2p2.destroy()
+    t.end()
+  } catch (err) {
+    t.error(err)
+  }
+})
