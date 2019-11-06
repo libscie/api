@@ -13,6 +13,9 @@ class RequiredString extends LogicalType {
   }
 
   _fromValue (val) {
+    if (val === undefined || val === null) {
+      throw new ValidationError('non empty string', val)
+    }
     if (!this._pattern.test(val)) {
       throw new ValidationError('non empty string', val)
     }
@@ -20,6 +23,10 @@ class RequiredString extends LogicalType {
   }
 
   _toValue (val) {
+    if (val === undefined || val === null) {
+      throw new ValidationError('non empty string', val)
+    }
+
     if (!this._pattern.test(val)) {
       throw new ValidationError('non empty string', val)
     }
@@ -34,6 +41,9 @@ class DatUrl extends LogicalType {
   }
 
   _fromValue (val) {
+    if (val === undefined || val === null) {
+      throw new ValidationError('non empty string', val)
+    }
     if (!this._pattern.test(val)) {
       throw new ValidationError('valid dat url', val)
     }
@@ -41,6 +51,9 @@ class DatUrl extends LogicalType {
   }
 
   _toValue (val) {
+    if (val === undefined || val === null) {
+      throw new ValidationError('non empty string', val)
+    }
     if (!this._pattern.test(val)) {
       throw new ValidationError('valid dat url', val)
     }
@@ -55,6 +68,9 @@ class DatUrlVersion extends LogicalType {
   }
 
   _fromValue (val) {
+    if (val === undefined || val === null) {
+      throw new ValidationError('non empty string', val)
+    }
     if (!this._pattern.test(val)) {
       throw new ValidationError('valid dat url', val)
     }
@@ -62,6 +78,9 @@ class DatUrlVersion extends LogicalType {
   }
 
   _toValue (val) {
+    if (val === undefined || val === null) {
+      throw new ValidationError('non empty string', val)
+    }
     if (!this._pattern.test(val)) {
       throw new ValidationError('valid dat url', val)
     }
