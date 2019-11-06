@@ -17,6 +17,7 @@ const dat = require('./lib/dat-helper')
 const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
+const ValidationTypes = require('./validation')
 const {
   InvalidKeyError,
   ValidationError,
@@ -54,6 +55,15 @@ const createDatJSON = ({
   }
 
   return obj
+}
+
+// helper assert fn
+const assertValid = (type, val) => {
+  return type.isValid(val, { errorHook: hook })
+
+  function hook (path, any) {
+    throw new ValidationError(path.join(), any)
+  }
 }
 
 class SDK {
@@ -102,8 +112,22 @@ class SDK {
       new Promise((resolve, reject) => {
         // start local db
         const registry = {}
-        this.contentType = Type.forSchema(ContentSchema, { registry })
-        this.profileType = Type.forSchema(ProfileSchema, { registry })
+        this.contentType = Type.forSchema(ContentSchema, {
+          registry,
+          logicalTypes: {
+            'required-string': ValidationTypes.RequiredString,
+            'dat-url': ValidationTypes.DatUrl,
+            'dat-versioned-url': ValidationTypes.DatUrlVersion
+          }
+        })
+        this.profileType = Type.forSchema(ProfileSchema, {
+          registry,
+          logicalTypes: {
+            'required-string': ValidationTypes.RequiredString,
+            'dat-url': ValidationTypes.DatUrl,
+            'dat-versioned-url': ValidationTypes.DatUrlVersion
+          }
+        })
         const codec = new Codec(registry)
         debug('ready dbpath', this.dbPath)
         level(join(this.dbPath, 'db'), { valueEncoding: codec }, (err, db) => {
@@ -224,9 +248,7 @@ class SDK {
     // Note(dk): validate earlier
     const avroType = this._getAvroType(datJSON.type)
 
-    if (!avroType.isValid(datJSON)) {
-      throw new Error('Invalid metadata')
-    }
+    assertValid(avroType, datJSON)
 
     // write dat.json
     const folderPath = join(this.baseDir, hash)
@@ -302,6 +324,7 @@ class SDK {
     // NOTE(dk): some properties are read only (license, follows, ...)
     const { url, ...mod } = metadata
 
+    // Check if received keys are valid (editable)
     const receivedKeys = Object.keys(mod)
     const allowedProperties = this.allowedProperties()
     for (const key of receivedKeys) {
@@ -311,10 +334,20 @@ class SDK {
     }
 
     const tmp = await this.get(DatEncoding.encode(url), false)
+    if (!tmp) {
+      // Note(dk): check if we need to search the module on the hyperdrive?
+      throw new Error(`Module with url ${url} can not be found on localdb`)
+    }
+
+    // Check if keys values are valid (ie: non empty, etc)
+    const avroType = this._getAvroType(tmp.rawJSON.type)
+    const finalMetadata = { ...tmp.rawJSON, ...mod }
+    assertValid(avroType, finalMetadata)
+
     debug('set', { ...mod })
     return this.saveItem({
       ...tmp,
-      metadata: { ...tmp.rawJSON, ...mod }
+      metadata: finalMetadata
     })
   }
 

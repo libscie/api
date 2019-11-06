@@ -3,9 +3,21 @@
   "namespace": "P2PCommons",
   "type": "record",
   "fields": [
-    {"name": "title", "type": "string"},
+    {
+      "name": "title",
+      "type": {
+        "type": "string",
+        "logicalType": "required-string"
+      }
+    },
     {"name": "description", "type": "string"},
-    {"name": "url", "type": "string"},
+    {
+      "name": "url",
+      "type": {
+        "type": "string",
+        "logicalType": "dat-url"
+      }
+    },
     {
       "name": "type",
       "type": {
@@ -20,7 +32,10 @@
       "name": "follows",
       "type": {
         "type": "array",
-        "items": "string"
+        "items": {
+          "type": "string",
+          "logicalType": "dat-versioned-url"
+        }
       },
       "default": []
     },
@@ -28,7 +43,10 @@
       "name": "contents",
       "type": {
         "type": "array",
-        "items": "string"
+        "items": {
+          "type": "string",
+          "logicalType": "dat-versioned-url"
+        }
       },
       "default": []
     }
