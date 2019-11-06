@@ -143,6 +143,28 @@ test('set: should throw InvalidKeyError with invalid update', async t => {
   })
 })
 
+test('set: update should fail with bad data', async t => {
+  const p2p = createDb()
+  await p2p.ready()
+  const sampleData = {
+    type: 'content',
+    title: 'demo',
+    description: 'lorem ipsum'
+  }
+  const metadata = await p2p.init(sampleData)
+  const key = metadata.url.toString('hex')
+
+  try {
+    await p2p.set({ url: key, title: '' })
+  } catch (err) {
+    t.ok(
+      err instanceof SDK.errors.ValidationError,
+      'error should be instance of ValidationError'
+    )
+    t.end()
+  }
+})
+
 test('update: check version change', async t => {
   const p2p = createDb()
   await p2p.ready()
