@@ -135,7 +135,7 @@ class SDK {
             if (this.verbose) {
               console.error('failed to open database')
             }
-            reject(err)
+            return reject(err)
           }
           this.db = db
           // create partitions - required by level-auto-index
