@@ -1,13 +1,15 @@
-# Liberate Science API
+# @p2pcommons/sdk-js
 
 ![npm version](https://img.shields.io/npm/v/@p2pcommons/sdk-js?color=4F2D84)
 [![Build Status](https://travis-ci.com/p2pcommons/sdk-js.svg?branch=master)](https://travis-ci.com/p2pcommons/sdk-js)
 
-The base API for a p2p scholarly communication infrastructure. More
+The base Software Development Kit in JavaScript (`sdk-js`) for a p2p communication infrastructure. More
 information on this infrastructure is available in this [conceptual
 publication](https://doi.org/10.3390/publications6020021) and this
 [technical publication](https://chartgerink.github.io/2018dat-com/)
 (note these might have been extended by now).
+
+The specifications for `sdk-js` are available from [`@p2pcommons/specs`](https://github.com/p2pcommons/specs).
 
 :warning: **Work In Progress**
 
