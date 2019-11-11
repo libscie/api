@@ -37,7 +37,7 @@
     "hypercore-crypto": "^1.0.0",
     "hyperdiscovery": "^10.1.0",
     "level": "^5.0.1",
-    "level-auto-index": "geut/level-auto-index",
+    "level-auto-index": "^2.0.0",
     "mirror-folder": "^3.0.0",
     "nanocustomassert": "^1.0.0",
     "nanoerror": "^1.0.0",

@@ -450,6 +450,7 @@ class SDK {
 
   async destroy () {
     debug('destroying swarm')
+    await this.db.close()
     await this.localdb.close()
     if (this.disableSwarm) return
     return this.swarm.close()
