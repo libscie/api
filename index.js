@@ -488,35 +488,36 @@ class SDK {
     )
     // fetch source and dest
     // 1 - try to get source from localdb
-    const source = await this.get(DatEncoding.encode(sourceKey))
+    let source = await this.get(DatEncoding.encode(sourceKey))
     if (!source) {
       // 2 - if no module is found on localdb, then fetch from hyperdrive
       // something like:
-      // const sourceDat = dat.open(source) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
-      // await sourceDat.ready()
+      const sourceDat = dat.open(source) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
+      await sourceDat.ready()
       // 3 - after fetching module we still need to read the dat.json file
-      // try {
-      //   source = await sourceDat.readFile('dat.json')
-      // } catch (err) {
-      //   throw new Error('Module not found')
-      // }
-      // 4 - populate localdb with the new module ??? VALIDATE FIRST
+      try {
+        source = await sourceDat.readFile('dat.json')
+      } catch (err) {
+        throw new Error('Module not found')
+      }
+      // 4 - clone new module
+      // TBD
     }
     // 1 - try to get dest from localdb
-    const dest = await this.get(DatEncoding.encode(destKey))
+    let dest = await this.get(DatEncoding.encode(destKey))
     if (!dest) {
       // 2 - if no module is found on localdb, then fetch from hyperdrive
       // something like:
-      // const destDat = dat.open(dest) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
-      // await destDat.ready()
+      const destDat = dat.open(dest) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
+      await destDat.ready()
       // 3 - after fetching module we still need to read the dat.json file
-      // try {
-      //   dest  = await destDat.readFile('dat.json')
-      // } catch (err) {
-      //   throw new Error('Module not found')
-      // }
+      try {
+        dest = await destDat.readFile('dat.json')
+      } catch (err) {
+        throw new Error('Module not found')
+      }
       //
-      // 4 - populate localdb with the new module ??? VALIDATE FIRST
+      // 4 - clone the new module
     }
 
     // TODO(dk): add custom errors for register and validation maybe....
