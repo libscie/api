@@ -552,6 +552,7 @@ class SDK {
   }
 
   async verify (source) {
+    debug('verify', source)
     assert(source.type === 'content', ValidationError, 'content', source.type)
     // TODO(dk): check versions
     if (source.authors.length === 0) return false
