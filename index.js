@@ -28,26 +28,11 @@ const DEFAULT_SWARM_OPTS = {
   extensions: []
 }
 
-const createDatJSON = ({
-  type,
-  title,
-  subtype = '',
-  description = '',
-  main = '',
-  url = ''
-}) => {
-  assert(typeof type === 'string', ValidationError, 'string', type)
-  assert(typeof title === 'string', ValidationError, 'string', title)
-  const obj = {}
-  obj.type = type
-  obj.title = title
-  obj.description = description
-  obj.url = url
-  obj.main = main
+// helper dat.json object mould
+const createDatJSON = obj => {
   obj.license = 'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
-  obj.subtype = subtype
 
-  if (type === 'profile') {
+  if (obj.type === 'profile') {
     obj.follows = []
     obj.contents = []
   } else {
