@@ -45,7 +45,8 @@
         "type": "array",
         "items": {
           "type": "string",
-          "logicalType": "dat-versioned-url"
+          "logicalType": "dat-versioned-url",
+          "strict": true
         }
       },
       "default": []

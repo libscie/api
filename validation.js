@@ -64,7 +64,11 @@ class DatUrl extends LogicalType {
 class DatUrlVersion extends LogicalType {
   constructor (attrs, opts) {
     super(attrs, opts)
-    this._pattern = new RegExp(/^(dat:\/\/)?(\w{64})(\+\d+)$/)
+    let pattern = /^(dat:\/\/)?(\w{64})(\+\d+)?$/
+    if (attrs.strict) {
+      pattern = /^(dat:\/\/)?(\w{64})(\+\d+)$/
+    }
+    this._pattern = new RegExp(pattern)
   }
 
   _fromValue (val) {
