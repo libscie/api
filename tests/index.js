@@ -313,7 +313,40 @@ test('multiple writes with persistance', async t => {
   }
 })
 
->>>>>>> Update: verification - initial steps
+test('register', async t => {
+  const p2p = createDb()
+  await p2p.ready()
+  const sampleData = [
+    {
+      type: 'content',
+      title: 'demo',
+      description: 'lorem ipsum'
+    },
+    { type: 'profile', title: 'Professor X' }
+  ]
+  await Promise.all([].concat(sampleData).map(d => p2p.init(d)))
+
+  const profiles = await p2p.listProfiles()
+  const contents = await p2p.listContent()
+
+  const profile = profiles[0]
+  const content1 = contents[0]
+  const authors = [profile.url]
+
+  // update author on content module
+  await p2p.set({ url: content1.url, authors })
+
+  await p2p.register(content1.url, profile.url)
+  const updatedProfile = await p2p.get(profile.url)
+  t.same(
+    updatedProfile.contents,
+    [content1.url],
+    'registration results in the addition of a dat key to the contents property of the target profile'
+  )
+  t.end()
+  await p2p.destroy()
+})
+
 test('verify', async t => {
   const p2p = createDb()
   await p2p.ready()
