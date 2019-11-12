@@ -520,7 +520,7 @@ class SDK {
       // 4 - clone the new module
     }
 
-    // TODO(dk): add custom errors for register and validation maybe....
+    // TODO(dk): consider add custom errors for register and verification
     assert(source.type === 'content', ValidationError, 'content', source.type)
     assert(dest.type === 'profile', ValidationError, 'profile', dest.type)
 
@@ -537,7 +537,7 @@ class SDK {
 
     // Note(dk): at this point is safe to save the new modules if necessary
 
-    if (dest.authors.length === 0) {
+    if (source.authors.length === 0) {
       throw new Error('Authors is empty')
     }
     // verify content first
@@ -558,6 +558,7 @@ class SDK {
     if (source.authors.length === 0) return false
     return source.authors.reduce(async (prevProm, authorKey) => {
       const prev = await prevProm
+      // Note(dk): what if authorKey is not present on local db. fetch from swarm?
       const profile = await this.get(authorKey)
       return prev && profile.contents.includes(source.url)
     }, Promise.resolve(true))
