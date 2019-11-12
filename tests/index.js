@@ -22,7 +22,8 @@ test('init: create content module', async t => {
     type: 'content',
     subtype: 'Theory',
     title: 'demo',
-    description: 'lorem ipsum'
+    description: 'lorem ipsum',
+    main: 'file.txt'
   }
   const output = await p2p.init(metadata)
 
@@ -35,6 +36,7 @@ test('init: create content module', async t => {
     output.license,
     'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
   )
+  t.same(output.main, metadata.main)
   t.same(output.authors, [])
   t.same(output.parents, [])
   t.end()

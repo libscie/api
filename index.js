@@ -28,25 +28,11 @@ const DEFAULT_SWARM_OPTS = {
   extensions: []
 }
 
-const createDatJSON = ({
-  type,
-  title,
-  subtype = '',
-  description = '',
-  url = ''
-}) => {
-  assert(typeof type === 'string', ValidationError, 'string', type)
-  assert(typeof title === 'string', ValidationError, 'string', title)
-  const obj = {}
-  obj.type = type
-  obj.title = title
-  obj.description = description
-  obj.url = url
-  obj.main = ''
+// helper dat.json object mould
+const createDatJSON = obj => {
   obj.license = 'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
-  obj.subtype = subtype
 
-  if (type === 'profile') {
+  if (obj.type === 'profile') {
     obj.follows = []
     obj.contents = []
   } else {
@@ -185,6 +171,7 @@ class SDK {
     title,
     subtype = '',
     description = '',
+    main = '',
     datOpts = { datStorage: {} }
   }) {
     // follow module spec: https://github.com/p2pcommons/specs/pull/1/files?short_path=2d471ef#diff-2d471ef4e3a452b579a3367eb33ccfb9
@@ -243,6 +230,7 @@ class SDK {
       title,
       subtype,
       description,
+      main,
       url: hash
     })
     // Note(dk): validate earlier
