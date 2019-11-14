@@ -25,10 +25,10 @@ class Codec {
       obj.rawJSON
     )
     assert(
-      typeof obj.rawJSON.type === 'string',
+      typeof obj.rawJSON.p2pcommons.type === 'string',
       ValidationError,
       'string',
-      obj.rawJSON.type
+      obj.rawJSON.p2pcommons.type
     )
 
     const newVal = this.registry[obj.avroType].toBuffer(obj.rawJSON)

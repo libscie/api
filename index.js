@@ -29,26 +29,58 @@ const DEFAULT_SWARM_OPTS = {
 }
 
 // helper dat.json object mould
-const createDatJSON = obj => {
-  obj.license = 'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+const createDatJSON = ({
+  title,
+  description,
+  url,
+  license = [
+    {
+      href: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+    }
+  ],
+  spec = [{ href: 'https://p2pcommons.com/specs/module/0.2.0' }],
+  ...p2pcommons
+}) => {
+  const mould = {
+    title,
+    description,
+    url,
+    links: { license, spec },
+    p2pcommons
+  }
+  // TODO(dk): validate links (license, spec)
 
-  if (obj.type === 'profile') {
-    obj.follows = []
-    obj.contents = []
+  if (mould.p2pcommons.type === 'profile') {
+    mould.p2pcommons.follows = []
+    mould.p2pcommons.contents = []
   } else {
-    obj.authors = []
-    obj.parents = []
+    mould.p2pcommons.authors = []
+    mould.p2pcommons.parents = []
   }
 
-  return obj
+  return mould
 }
 
 // helper assert fn
 const assertValid = (type, val) => {
-  return type.isValid(val, { errorHook: hook })
+  return type.isValid(val, { errorHook })
 
-  function hook (path, any) {
-    throw new ValidationError(path.join(), any)
+  function errorHook (path, any, type) {
+    let msg = `[${path.join('.')}]\t`
+    if (type.typeName === 'record') {
+      if (any !== null && typeof any === 'object') {
+        const declared = new Set(type.fields.map(f => f.name))
+        const extra = Object.keys(any).filter(n => !declared.has(n))
+        msg += `extra fields (${extra.join(', ')})`
+      } else {
+        msg += `not an object: ${any}`
+      }
+    } else {
+      msg += `not a valid ${type}: ${JSON.stringify(any)}`
+    }
+    // Here, we just print the mismatches. It would be straightforward to return
+    // them instead too (for example using a custom error).
+    throw new ValidationError(type, msg)
   }
 }
 
@@ -233,8 +265,9 @@ class SDK {
       main,
       url: hash
     })
+
     // Note(dk): validate earlier
-    const avroType = this._getAvroType(datJSON.type)
+    const avroType = this._getAvroType(type)
 
     assertValid(avroType, datJSON)
 
@@ -245,7 +278,7 @@ class SDK {
 
     if (this.verbose) {
       // Note(dk): this kind of output can be part of the cli
-      console.log(`Initialized new ${datJSON.type}, dat://${hash}`)
+      console.log(`Initialized new ${datJSON.p2pcommons.type}, dat://${hash}`)
     }
 
     debug('init datJSON', datJSON)
@@ -259,7 +292,7 @@ class SDK {
     })
 
     if (this.verbose) {
-      console.log(`Saved new ${datJSON.type}, with key: ${hash}`)
+      console.log(`Saved new ${datJSON.p2pcommons.type}, with key: ${hash}`)
     }
     return datJSON
   }
@@ -296,7 +329,7 @@ class SDK {
       lastModified: stat ? stat.mtime : lastModified,
       version: archive.version,
       rawJSON: metadata,
-      avroType: this._getAvroType(metadata.type).name
+      avroType: this._getAvroType(metadata.p2pcommons.type).name
     })
   }
 
@@ -328,7 +361,7 @@ class SDK {
     }
 
     // Check if keys values are valid (ie: non empty, etc)
-    const avroType = this._getAvroType(tmp.rawJSON.type)
+    const avroType = this._getAvroType(tmp.rawJSON.p2pcommons.type)
     const finalMetadata = { ...tmp.rawJSON, ...mod }
     assertValid(avroType, finalMetadata)
 
@@ -396,7 +429,9 @@ class SDK {
       const out = []
       const s = this.localdb.createValueStream()
       s.on('data', val => {
-        if (val.isWritable && val.rawJSON.type === 'content') out.push(val)
+        if (val.isWritable && val.rawJSON.p2pcommons.type === 'content') {
+          out.push(val)
+        }
       })
       s.on('end', () => resolve(out))
       s.on('error', reject)
@@ -408,7 +443,9 @@ class SDK {
       const out = []
       const s = this.localdb.createValueStream()
       s.on('data', val => {
-        if (val.isWritable && val.rawJSON.type === 'profile') out.push(val)
+        if (val.isWritable && val.rawJSON.p2pcommons.type === 'profile') {
+          out.push(val)
+        }
       })
       s.on('end', () => resolve(out))
       s.on('error', reject)

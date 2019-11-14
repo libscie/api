@@ -19,36 +19,82 @@
       }
     },
     {
-      "name": "type",
+      "name": "links",
       "type": {
-        "type": "enum",
-        "symbols": ["content", "profile"]
+        "namespace": "P2PCommons",
+        "type": "record",
+        "fields": [
+          {
+            "name": "license",
+            "type": {
+              "type": "array",
+              "items" : {
+                "type": "record",
+                "fields": [
+                  {
+                    "type": "string",
+                    "name": "href"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "spec",
+            "type": {
+              "type": "array",
+              "items" : {
+                "type": "record",
+                "fields": [
+                  {
+                    "type": "string",
+                    "name": "href"
+                  }
+                ]
+              }
+            }
+          }
+        ]
       }
     },
-    {"name": "subtype", "type": "string"},
-    {"name": "main", "type": "string"},
-    {"name": "license", "type": "string"},
     {
-      "name": "follows",
+      "name": "p2pcommons",
       "type": {
-        "type": "array",
-        "items": {
-          "type": "string",
-          "logicalType": "dat-versioned-url"
-        }
-      },
-      "default": []
-    },
-    {
-      "name": "contents",
-      "type": {
-        "type": "array",
-        "items": {
-          "type": "string",
-          "logicalType": "dat-versioned-url"
-        }
-      },
-      "default": []
+        "type": "record",
+        "fields": [
+          {
+            "name": "type",
+            "type": {
+              "type": "enum",
+              "symbols": ["content", "profile"]
+            }
+          },
+          {"name": "subtype", "type": "string"},
+          {"name": "main", "type": "string"},
+          {
+            "name": "follows",
+            "type": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "logicalType": "dat-versioned-url"
+              }
+            },
+            "default": []
+          },
+          {
+            "name": "contents",
+            "type": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "logicalType": "dat-versioned-url"
+              }
+            },
+            "default": []
+          }
+        ]
+      }
     }
   ]
 }
