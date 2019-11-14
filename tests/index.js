@@ -27,18 +27,19 @@ test('init: create content module', async t => {
   }
   const output = await p2p.init(metadata)
 
-  t.same(output.type, metadata.type)
-  t.same(output.subtype, metadata.subtype)
+  t.same(output.p2pcommons.type, metadata.type)
+  t.same(output.p2pcommons.subtype, metadata.subtype)
   t.same(output.title, metadata.title)
   t.same(output.description, metadata.description)
   t.same(typeof output.url, 'string', 'url is a string')
   t.same(
-    output.license,
+    output.links.license[0].href,
     'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
   )
-  t.same(output.main, metadata.main)
-  t.same(output.authors, [])
-  t.same(output.parents, [])
+  t.same(output.links.spec[0].href, 'https://p2pcommons.com/specs/module/0.2.0')
+  t.same(output.p2pcommons.main, metadata.main)
+  t.same(output.p2pcommons.authors, [])
+  t.same(output.p2pcommons.parents, [])
   t.end()
   await p2p.destroy()
 })
@@ -71,16 +72,17 @@ test('init: create profile module', async t => {
     description: 'lorem ipsum'
   }
   const output = await p2p.init(metadata)
-  t.same(output.type, metadata.type)
+  t.same(output.p2pcommons.type, metadata.type)
   t.same(output.title, metadata.title)
   t.same(output.description, metadata.description)
   t.same(typeof output.url, 'string', 'url is a string')
   t.same(
-    output.license,
+    output.links.license[0].href,
     'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
   )
-  t.same(output.follows, [])
-  t.same(output.contents, [])
+  t.same(output.links.spec[0].href, 'https://p2pcommons.com/specs/module/0.2.0')
+  t.same(output.p2pcommons.follows, [])
+  t.same(output.p2pcommons.contents, [])
   t.end()
   await p2p.destroy()
 })
