@@ -473,82 +473,93 @@ class SDK {
     return open(main)
   }
 
-  async register (sourceKey, destKey) {
+  async register (contentKey, profileKey) {
     assert(
-      typeof sourceKey === 'string' || Buffer.isBuffer(sourceKey),
+      typeof contentKey === 'string' || Buffer.isBuffer(contentKey),
       ValidationError,
       "'string' or Buffer",
-      sourceKey
+      contentKey
     )
     assert(
-      typeof destKey === 'string' || Buffer.isBuffer(destKey),
+      typeof profileKey === 'string' || Buffer.isBuffer(profileKey),
       ValidationError,
       "'string' or Buffer",
-      destKey
+      profileKey
     )
     // fetch source and dest
     // 1 - try to get source from localdb
-    let source = await this.get(DatEncoding.encode(sourceKey))
-    if (!source) {
+    let content = await this.get(DatEncoding.encode(contentKey))
+    if (!content) {
       // 2 - if no module is found on localdb, then fetch from hyperdrive
       // something like:
-      const sourceDat = dat.open(source) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
-      await sourceDat.ready()
+      const contentDat = dat.open(contentKey) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
+      await contentDat.ready()
       // 3 - after fetching module we still need to read the dat.json file
       try {
-        source = await sourceDat.readFile('dat.json')
+        content = await contentDat.readFile('dat.json')
       } catch (err) {
         throw new Error('Module not found')
       }
-      // 4 - clone new module
-      // TBD
+      // 4 - clone new module (move into its own method)
+      // contentKey = datkey || datkey+version
+      const folderPath = join(this.baseDir, contentKey)
+      await ensureDir(folderPath)
+      await writeFile(join(folderPath, 'dat.json'), JSON.stringify(content))
     }
     // 1 - try to get dest from localdb
-    let dest = await this.get(DatEncoding.encode(destKey))
-    if (!dest) {
+    let profile = await this.get(DatEncoding.encode(profileKey))
+    if (!profile) {
       // 2 - if no module is found on localdb, then fetch from hyperdrive
       // something like:
-      const destDat = dat.open(dest) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
-      await destDat.ready()
+      const profileDat = dat.open(profileKey) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
+      await profileDat.ready()
       // 3 - after fetching module we still need to read the dat.json file
       try {
-        dest = await destDat.readFile('dat.json')
+        profile = await profileDat.readFile('dat.json')
       } catch (err) {
         throw new Error('Module not found')
       }
       //
       // 4 - clone the new module
+      const folderPath = join(this.baseDir, profileKey)
+      await ensureDir(folderPath)
+      await writeFile(join(folderPath, 'dat.json'), JSON.stringify(profile))
     }
 
     // TODO(dk): consider add custom errors for register and verification
-    assert(source.type === 'content', ValidationError, 'content', source.type)
-    assert(dest.type === 'profile', ValidationError, 'profile', dest.type)
+    assert(content.type === 'content', ValidationError, 'content', content.type)
+    assert(profile.type === 'profile', ValidationError, 'profile', profile.type)
 
-    const destType = this._getAvroType(dest.type)
-    const destValid = destType.isValid(dest)
-    if (!destValid) {
+    const profileType = this._getAvroType(profile.type)
+    const profileValid = profileType.isValid(profile)
+    if (!profileValid) {
       throw new Error('Invalid module')
     }
-    const sourceType = this._getAvroType(source.type)
-    const sourceValid = sourceType.isValid(source)
-    if (!sourceValid) {
+    const contentType = this._getAvroType(content.type)
+    const contentValid = contentType.isValid(content)
+    if (!contentValid) {
       throw new Error('Invalid module')
     }
 
     // Note(dk): at this point is safe to save the new modules if necessary
 
-    if (source.authors.length === 0) {
+    if (content.authors.length === 0) {
       throw new Error('Authors is empty')
     }
+    /*
+     * Note(dk): omiting verification for now - WIP
     // verify content first
-    const verified = await this.verify(source)
+    const verified = await this.verify(content)
 
     if (!verified) {
-      throw new Error('source module does not met the requirements')
+      throw new Error('content module does not met the requirements')
     }
+    */
 
     // register new content
-    dest.contents.push(source.url)
+    profile.contents.push(content.url)
+    // update profile
+    await this.set({ url: profile.url, contents: profile.contents })
   }
 
   async verify (source) {
