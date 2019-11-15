@@ -289,7 +289,7 @@ class SDK {
       isWritable: archive.writable,
       lastModified: stat.mtime,
       version: archive.version,
-      metadata: datJSON
+      datJSON
     })
 
     if (this.verbose) {
@@ -298,53 +298,53 @@ class SDK {
     return datJSON
   }
 
-  async saveItem ({ isWritable, lastModified, version, metadata }) {
-    debug('saveItem', metadata)
+  async saveItem ({ isWritable, lastModified, version, datJSON }) {
+    debug('saveItem', datJSON)
     assert(
       typeof isWritable === 'boolean',
       ValidationError,
       'boolean',
       isWritable
     )
-    assert(typeof metadata === 'object', ValidationError, 'object', metadata)
+    assert(typeof datJSON === 'object', ValidationError, 'object', datJSON)
 
-    const datJSONDir = join(this.baseDir, metadata.url.toString('hex'))
+    const datJSONDir = join(this.baseDir, datJSON.url.toString('hex'))
     const storageOpts = {
-      storageLocation: join(this.baseDir, metadata.url.toString('hex'))
+      storageLocation: join(this.baseDir, datJSON.url.toString('hex'))
     }
     const archive = dat.open(
-      metadata.url.toString('hex'),
+      datJSON.url.toString('hex'),
       undefined,
       storageOpts
     )
     await archive.ready()
     let stat
     if (isWritable) {
-      await writeFile(join(datJSONDir, 'dat.json'), JSON.stringify(metadata))
+      await writeFile(join(datJSONDir, 'dat.json'), JSON.stringify(datJSON))
       await dat.importFiles(archive, datJSONDir)
       stat = await archive.stat('/dat.json')
     }
 
-    await this.localdb.put(metadata.url.toString('hex'), {
+    await this.localdb.put(datJSON.url.toString('hex'), {
       isWritable,
       lastModified: stat ? stat.mtime : lastModified,
       version: archive.version,
-      rawJSON: metadata,
-      avroType: this._getAvroType(metadata.p2pcommons.type).name
+      rawJSON: datJSON,
+      avroType: this._getAvroType(datJSON.p2pcommons.type).name
     })
   }
 
-  async set (metadata) {
-    assert(typeof metadata === 'object', ValidationError, 'object', metadata)
+  async set (params) {
+    assert(typeof params === 'object', ValidationError, 'object', params)
     assert(
-      typeof metadata.url === 'string' || Buffer.isBuffer(metadata.url),
+      typeof params.url === 'string' || Buffer.isBuffer(params.url),
       ValidationError,
       "'string' or Buffer",
-      metadata.url
+      params.url
     )
 
     // NOTE(dk): some properties are read only (license, follows, ...)
-    const { url, ...mod } = metadata
+    const { url, ...mod } = params
 
     // Check if received keys are valid (editable)
     const receivedKeys = Object.keys(mod)
@@ -355,14 +355,14 @@ class SDK {
       }
     }
 
-    const tmp = await this.get(DatEncoding.encode(url), false)
-    if (!tmp) {
+    const { rawJSON, metadata } = await this.get(DatEncoding.encode(url), false)
+    if (!rawJSON) {
       // Note(dk): check if we need to search the module on the hyperdrive?
       throw new Error(`Module with url ${url} can not be found on localdb`)
     }
 
     // Check if keys values are valid (ie: non empty, etc)
-    const avroType = this._getAvroType(tmp.rawJSON.p2pcommons.type)
+    const avroType = this._getAvroType(rawJSON.p2pcommons.type)
     const prepareMergeData = ({
       title,
       description,
@@ -384,13 +384,13 @@ class SDK {
 
       return out
     }
-    const finalMetadata = deepMerge(tmp.rawJSON, prepareMergeData(mod))
-    assertValid(avroType, finalMetadata)
+    const finalJSON = deepMerge(rawJSON, prepareMergeData(mod))
+    assertValid(avroType, finalJSON)
 
     debug('set', { ...mod })
     return this.saveItem({
-      ...tmp,
-      metadata: finalMetadata
+      ...metadata,
+      datJSON: finalJSON
     })
   }
 
@@ -404,10 +404,8 @@ class SDK {
     key = DatEncoding.encode(key)
     const dbitem = await this.localdb.get(key)
     debug('get', dbitem)
-    if (onlyMetadata) {
-      return dbitem.rawJSON
-    }
-    return dbitem
+    const { rawJSON, ...metadata } = dbitem
+    return { rawJSON, metadata }
   }
 
   async filterExact (feature, criteria) {
@@ -446,13 +444,13 @@ class SDK {
     })
   }
 
-  async listContent (dbitem = false) {
+  async listContent () {
     return new Promise((resolve, reject) => {
       const out = []
       const s = this.localdb.createValueStream()
       s.on('data', val => {
         if (val.isWritable && val.rawJSON.p2pcommons.type === 'content') {
-          out.push(dbitem ? val : val.rawJSON)
+          out.push(val)
         }
       })
       s.on('end', () => resolve(out))
@@ -460,13 +458,13 @@ class SDK {
     })
   }
 
-  async listProfiles (dbitem = false) {
+  async listProfiles () {
     return new Promise((resolve, reject) => {
       const out = []
       const s = this.localdb.createValueStream()
       s.on('data', val => {
         if (val.isWritable && val.rawJSON.p2pcommons.type === 'profile') {
-          out.push(dbitem ? val : val.rawJSON)
+          out.push(val)
         }
       })
       s.on('end', () => resolve(out))
@@ -474,12 +472,12 @@ class SDK {
     })
   }
 
-  async list (dbitem = false) {
+  async list () {
     return new Promise((resolve, reject) => {
       const out = []
       const s = this.localdb.createValueStream()
       s.on('data', val => {
-        if (val.isWritable) out.push(dbitem ? val : val.rawJSON)
+        if (val.isWritable) out.push(val)
       })
       s.on('end', () => resolve(out))
       s.on('error', reject)
@@ -510,7 +508,7 @@ class SDK {
     )
     // fetch source and dest
     // 1 - try to get source from localdb
-    let content = await this.get(DatEncoding.encode(contentKey))
+    let { rawJSON: content } = await this.get(DatEncoding.encode(contentKey))
     if (!content) {
       // 2 - if no module is found on localdb, then fetch from hyperdrive
       // something like:
@@ -529,7 +527,7 @@ class SDK {
       await writeFile(join(folderPath, 'dat.json'), JSON.stringify(content))
     }
     // 1 - try to get dest from localdb
-    let profile = await this.get(DatEncoding.encode(profileKey))
+    let { rawJSON: profile } = await this.get(DatEncoding.encode(profileKey))
     if (!profile) {
       // 2 - if no module is found on localdb, then fetch from hyperdrive
       // something like:
@@ -607,7 +605,7 @@ class SDK {
     return source.p2pcommons.authors.reduce(async (prevProm, authorKey) => {
       const prev = await prevProm
       // Note(dk): what if authorKey is not present on local db. fetch from swarm?
-      const profile = await this.get(authorKey)
+      const { rawJSON: profile } = await this.get(authorKey)
       return prev && profile.p2pcommons.contents.includes(source.url)
     }, Promise.resolve(true))
   }
