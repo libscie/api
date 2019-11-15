@@ -313,7 +313,7 @@ test('multiple writes with persistance', async t => {
   }
 })
 
-test('register', async t => {
+test('register - local contents', async t => {
   const p2p = createDb()
   await p2p.ready()
   const sampleData = [
@@ -339,7 +339,7 @@ test('register', async t => {
   await p2p.register(content1.url, profile.url)
   const updatedProfile = await p2p.get(profile.url)
   t.same(
-    updatedProfile.contents,
+    updatedProfile.p2pcommons.contents,
     [content1.url],
     'registration results in the addition of a dat key to the contents property of the target profile'
   )
