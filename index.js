@@ -13,6 +13,7 @@ const discovery = require('hyperdiscovery')
 const crypto = require('hypercore-crypto')
 const DatEncoding = require('dat-encoding')
 const debug = require('debug')('p2pcommons')
+const deepMerge = require('deepmerge')
 const dat = require('./lib/dat-helper')
 const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
@@ -362,7 +363,28 @@ class SDK {
 
     // Check if keys values are valid (ie: non empty, etc)
     const avroType = this._getAvroType(tmp.rawJSON.p2pcommons.type)
-    const finalMetadata = { ...tmp.rawJSON, ...mod }
+    const prepareMergeData = ({
+      title,
+      description,
+      url,
+      links,
+      ...p2pcommons
+    }) => {
+      const out = {}
+      if (typeof title === 'string') out.title = title
+      if (typeof description === 'string') out.description = description
+      if (typeof url === 'string') out.url = url
+      if (links) out.links = links
+      if (
+        Object.keys(p2pcommons).length > 0 ||
+        p2pcommons.constructor !== Object
+      ) {
+        out.p2pcommons = p2pcommons
+      }
+
+      return out
+    }
+    const finalMetadata = deepMerge(tmp.rawJSON, prepareMergeData(mod))
     assertValid(avroType, finalMetadata)
 
     debug('set', { ...mod })
@@ -527,15 +549,25 @@ class SDK {
     }
 
     // TODO(dk): consider add custom errors for register and verification
-    assert(content.type === 'content', ValidationError, 'content', content.type)
-    assert(profile.type === 'profile', ValidationError, 'profile', profile.type)
+    assert(
+      content.p2pcommons.type === 'content',
+      ValidationError,
+      'content',
+      content.p2pcommons.type
+    )
+    assert(
+      profile.p2pcommons.type === 'profile',
+      ValidationError,
+      'profile',
+      profile.p2pcommons.type
+    )
 
-    const profileType = this._getAvroType(profile.type)
+    const profileType = this._getAvroType(profile.p2pcommons.type)
     const profileValid = profileType.isValid(profile)
     if (!profileValid) {
       throw new Error('Invalid module')
     }
-    const contentType = this._getAvroType(content.type)
+    const contentType = this._getAvroType(content.p2pcommons.type)
     const contentValid = contentType.isValid(content)
     if (!contentValid) {
       throw new Error('Invalid module')
@@ -543,7 +575,7 @@ class SDK {
 
     // Note(dk): at this point is safe to save the new modules if necessary
 
-    if (content.authors.length === 0) {
+    if (content.p2pcommons.authors.length === 0) {
       throw new Error('Authors is empty')
     }
     /*
@@ -557,21 +589,26 @@ class SDK {
     */
 
     // register new content
-    profile.contents.push(content.url)
+    profile.p2pcommons.contents.push(content.url)
     // update profile
-    await this.set({ url: profile.url, contents: profile.contents })
+    await this.set({ url: profile.url, contents: profile.p2pcommons.contents })
   }
 
   async verify (source) {
     debug('verify', source)
-    assert(source.type === 'content', ValidationError, 'content', source.type)
+    assert(
+      source.p2pcommons.type === 'content',
+      ValidationError,
+      'content',
+      source.p2pcommons.type
+    )
     // TODO(dk): check versions
-    if (source.authors.length === 0) return false
-    return source.authors.reduce(async (prevProm, authorKey) => {
+    if (source.p2pcommons.authors.length === 0) return false
+    return source.p2pcommons.authors.reduce(async (prevProm, authorKey) => {
       const prev = await prevProm
       // Note(dk): what if authorKey is not present on local db. fetch from swarm?
       const profile = await this.get(authorKey)
-      return prev && profile.contents.includes(source.url)
+      return prev && profile.p2pcommons.contents.includes(source.url)
     }, Promise.resolve(true))
   }
 
