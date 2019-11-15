@@ -85,9 +85,13 @@ Returns an object containing the metadata for the newly created module.
 
 > _async_ `get(hash: string)`
 
-Retrieves metadata item from the local db.
+Retrieves raw datJSON item and metadata from the local db.
 
 - hash: represents the key (`url`) to be looked for. It is the buffer archive key `.toString('hex')`
+
+Returns an object with:
+- **rawJSON**: datJSON data
+- **metadata**: Extra information like last modified time, latest archive version, etc
 
 ### set
 
@@ -103,7 +107,7 @@ Used to update a previously retrieved value.
 
 Handy method for querying **content** values from the local db.
 
-Returns a promise which can resolve to an array of 0 or more values.
+Returns a promise which can resolve to an array of 0 or more values together with their metadata.
 
 - feature: indicates the filter property, e.g.: filter by `title` or `description` (currently supported filter types)
 - criteria: it is the filter value.
@@ -112,19 +116,19 @@ Returns a promise which can resolve to an array of 0 or more values.
 
 > _async_ `listContent()`
 
-Returns an array containing all the `content` modules saved in the local db.
+Returns an array containing all the `content` modules together with metadata saved in the local db.
 
 ### listProfiles
 
 > _async_ `listProfiles()`
 
-Returns an array containing all the `profile` modules saved in the local db.
+Returns an array containing all the `profile` modules together with metadata saved in the local db.
 
 ### list
 
 > _async_ `list()`
 
-Returns an array containing all the modules saved in the local db.
+Returns an array containing all the modules and metadata saved in the local db.
 
 ### openFile
 
@@ -134,6 +138,13 @@ Used to obtain a file descriptor from the `main` file of a module.
 
 - type: indicates the module type to retrieve. Allowed values: `profile`, `content`.
 - key: represents the module key (`url`) to be looked for. It is the buffer archive key `.toString('hex')`
+
+### register
+
+> _async_ `register(contentKey: string or buffer, profileKey: string or buffer)`
+
+Register new content into a profile. The new content is added inside the profile's `p2pcommons.contents`.
+
 
 ### destroy
 
