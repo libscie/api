@@ -98,9 +98,9 @@ test('get: retrieve a value from the sdk', async t => {
   const metadata = await p2p.init(sampleData)
   const key = metadata.url.toString('hex')
 
-  const result = await p2p.get(key)
+  const { rawJSON } = await p2p.get(key)
 
-  t.same(result, metadata)
+  t.same(rawJSON, metadata)
   t.end()
   await p2p.destroy()
 })
@@ -118,9 +118,9 @@ test('set: update a value', async t => {
 
   const description = 'A more accurate description'
   await p2p.set({ url: key, description })
-  const result = await p2p.get(key)
+  const { rawJSON } = await p2p.get(key)
 
-  t.same(result.description, description)
+  t.same(rawJSON.description, description)
   t.end()
   await p2p.destroy()
 })
@@ -180,19 +180,19 @@ test('update: check version change', async t => {
   const metadata = await p2p.init(sampleData)
   const key = metadata.url.toString('hex')
 
-  const result1 = await p2p.get(key, false)
+  const { metadata: metadata1 } = await p2p.get(key, false)
 
   const description = 'A more accurate description'
   await p2p.set({ url: key, description })
-  const result2 = await p2p.get(key, false)
+  const { rawJSON: rawJSON2, metadata: metadata2 } = await p2p.get(key, false)
 
-  t.same(result2.rawJSON.description, description)
+  t.same(rawJSON2.description, description)
   t.ok(
-    result2.version > result1.version,
+    metadata2.version > metadata1.version,
     'latest version should be bigger than previous version after update'
   )
   t.ok(
-    result2.lastModified > result1.lastModified,
+    metadata2.lastModified > metadata1.lastModified,
     'lastModified should be bigger than previous lastModified'
   )
   t.end()
@@ -303,9 +303,9 @@ test('multiple writes with persistance', async t => {
     const metadata = { url, title: 'beep' }
     await p2p2.set(metadata)
     await p2p2.set({ url, description: 'boop' })
-    const out = await p2p2.get(url)
-    t.same(out.title, metadata.title)
-    t.same(out.description, 'boop')
+    const { rawJSON } = await p2p2.get(url)
+    t.same(rawJSON.title, metadata.title)
+    t.same(rawJSON.description, 'boop')
     await p2p2.destroy()
     t.end()
   } catch (err) {
@@ -329,17 +329,17 @@ test('register - local contents', async t => {
   const profiles = await p2p.listProfiles()
   const contents = await p2p.listContent()
 
-  const profile = profiles[0]
-  const content1 = contents[0]
+  const { rawJSON: profile } = profiles[0]
+  const { rawJSON: content1 } = contents[0]
   const authors = [profile.url]
 
   // update author on content module
   await p2p.set({ url: content1.url, authors })
 
   await p2p.register(content1.url, profile.url)
-  const updatedProfile = await p2p.get(profile.url)
+  const { rawJSON } = await p2p.get(profile.url)
   t.same(
-    updatedProfile.p2pcommons.contents,
+    rawJSON.p2pcommons.contents,
     [content1.url],
     'registration results in the addition of a dat key to the contents property of the target profile'
   )
@@ -368,9 +368,9 @@ test('verify', async t => {
   const profiles = await p2p.listProfiles()
   const contents = await p2p.listContent()
 
-  const profile = profiles[0]
-  const content1 = contents[0]
-  const content2 = contents[1]
+  const { rawJSON: profile } = profiles[0]
+  const { rawJSON: content1 } = contents[0]
+  const { rawJSON: content2 } = contents[1]
   const authors = [profile.url]
 
   // ATOMIC OP?
@@ -380,13 +380,13 @@ test('verify', async t => {
   await p2p.set({ url: profile.url, contents: [content1.url] })
   // END ATOMIC OP
 
-  const updated = await p2p.get(content1.url)
+  const { rawJSON: content1Updated } = await p2p.get(content1.url)
 
-  const result = await p2p.verify(updated, profile)
+  const result = await p2p.verify(content1Updated)
 
   t.ok(result, 'content1 meets the verification requirements')
 
-  const result2 = await p2p.verify(content2, profile)
+  const result2 = await p2p.verify(content2)
   t.notOk(result2, 'content2 does not has authors registered')
 
   t.end()
