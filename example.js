@@ -1,5 +1,5 @@
 const P2PCommons = require('.') // liberate science constructor function
-const commons = new P2PCommons({ disableSwarm: true, verbose: true })
+const commons = new P2PCommons({ verbose: true })
 
 process.once('SIGINT', () => commons.destroy())
 ;(async () => {
@@ -25,7 +25,7 @@ process.once('SIGINT', () => commons.destroy())
   // create a profile
   await commons.init({ type: 'profile', title: 'Professor X' }) // ~/.p2pcommons/hash/dat.json --> type: profile
   const key = contentMetadata1.url.toString('hex')
-  const out = await commons.get(key)
+  const { rawJSON: out } = await commons.get(key)
   console.log(`Retrieved type: ${out.type}`)
 
   const title = 'Sample Content'
@@ -35,7 +35,7 @@ process.once('SIGINT', () => commons.destroy())
   await commons.set({ url: key, title, description })
 
   // check out updated value from local db
-  const result = await commons.get(key)
+  const { rawJSON: result } = await commons.get(key)
   console.log('Content updated:', result)
 
   // filter content
@@ -43,10 +43,21 @@ process.once('SIGINT', () => commons.destroy())
   const criteria = 'about nothing'
   const filter = await commons.filter(feature, criteria)
 
-  console.log(`Results with ${feature}: ${criteria}`, filter.length)
+  console.log(`Results with ${feature}: "${criteria}"`, filter.length)
 
   const allContent = await commons.listContent()
   const allProfiles = await commons.listProfiles()
   console.log('Content length', allContent.length)
   console.log('Profiles length', allProfiles.length)
+
+  const prof = allProfiles[0].rawJSON
+  // register external dat to a local profile
+  const externalContentUrl = process.argv[2]
+  if (externalContentUrl) {
+    console.log('Registering content...')
+    await commons.register(externalContentUrl, prof.url)
+    console.log('content registered successfully')
+  }
+  console.log('FIN')
+  await commons.destroy()
 })()
