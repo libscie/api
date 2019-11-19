@@ -79,7 +79,7 @@ Creates a new folder for 'content' or 'profile' according to the received `data.
 
 - `data` object following the [p2pcommons module spec](https://github.com/p2pcommons/specs/blob/master/module.md). The only required field is `type`.
 
-Returns an object containing the metadata for the newly created module.
+Returns an object containing the **flattened** metadata for the newly created module.
 
 ### get
 
@@ -90,7 +90,7 @@ Retrieves raw datJSON item and metadata from the local db.
 - hash: represents the key (`url`) to be looked for. It is the buffer archive key `.toString('hex')`
 
 Returns an object with:
-- **rawJSON**: datJSON data
+- **rawJSON**: flattened datJSON data
 - **metadata**: Extra information like last modified time, latest archive version, etc
 
 ### set
@@ -107,7 +107,7 @@ Used to update a previously retrieved value.
 
 Handy method for querying **content** values from the local db.
 
-Returns a promise which can resolve to an array of 0 or more values together with their metadata.
+Returns a promise which can resolve to an array of 0 or more values (flattened rawJSON data) together with their metadata.
 
 - feature: indicates the filter property, e.g.: filter by `title` or `description` (currently supported filter types)
 - criteria: it is the filter value.
@@ -116,19 +116,19 @@ Returns a promise which can resolve to an array of 0 or more values together wit
 
 > _async_ `listContent()`
 
-Returns an array containing all the `content` modules together with metadata saved in the local db.
+Returns an array containing all the `content` modules (flattened rawJSON data) together with metadata saved in the local db.
 
 ### listProfiles
 
 > _async_ `listProfiles()`
 
-Returns an array containing all the `profile` modules together with metadata saved in the local db.
+Returns an array containing all the `profile` modules (flattened rawJSON data) together with metadata saved in the local db.
 
 ### list
 
 > _async_ `list()`
 
-Returns an array containing all the modules and metadata saved in the local db.
+Returns an array containing all the modules (flattened rawJSON data) and metadata saved in the local db.
 
 ### openFile
 
@@ -143,8 +143,7 @@ Used to obtain a file descriptor from the `main` file of a module.
 
 > _async_ `register(contentKey: string or buffer, profileKey: string or buffer)`
 
-Register new content into a profile. The new content is added inside the profile's `p2pcommons.contents`.
-
+Register new content into a profile. The new content is added to the profile's `p2pcommons.contents`.
 
 ### destroy
 
