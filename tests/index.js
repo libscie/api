@@ -27,8 +27,8 @@ test('init: create content module', async t => {
   }
   const output = await p2p.init(metadata)
 
-  t.same(output.p2pcommons.type, metadata.type)
-  t.same(output.p2pcommons.subtype, metadata.subtype)
+  t.same(output.type, metadata.type)
+  t.same(output.subtype, metadata.subtype)
   t.same(output.title, metadata.title)
   t.same(output.description, metadata.description)
   t.same(typeof output.url, 'string', 'url is a string')
@@ -37,9 +37,9 @@ test('init: create content module', async t => {
     'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
   )
   t.same(output.links.spec[0].href, 'https://p2pcommons.com/specs/module/0.2.0')
-  t.same(output.p2pcommons.main, metadata.main)
-  t.same(output.p2pcommons.authors, [])
-  t.same(output.p2pcommons.parents, [])
+  t.same(output.main, metadata.main)
+  t.same(output.authors, [])
+  t.same(output.parents, [])
   t.end()
   await p2p.destroy()
 })
@@ -72,7 +72,7 @@ test('init: create profile module', async t => {
     description: 'lorem ipsum'
   }
   const output = await p2p.init(metadata)
-  t.same(output.p2pcommons.type, metadata.type)
+  t.same(output.type, metadata.type)
   t.same(output.title, metadata.title)
   t.same(output.description, metadata.description)
   t.same(typeof output.url, 'string', 'url is a string')
@@ -81,8 +81,8 @@ test('init: create profile module', async t => {
     'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
   )
   t.same(output.links.spec[0].href, 'https://p2pcommons.com/specs/module/0.2.0')
-  t.same(output.p2pcommons.follows, [])
-  t.same(output.p2pcommons.contents, [])
+  t.same(output.follows, [])
+  t.same(output.contents, [])
   t.end()
   await p2p.destroy()
 })
@@ -339,12 +339,12 @@ test('register - local contents', async t => {
   await p2p.register(content1.url, profile.url)
   const { rawJSON } = await p2p.get(profile.url)
   t.same(
-    rawJSON.p2pcommons.contents,
+    rawJSON.contents,
     [content1.url],
     'registration results in the addition of a dat key to the contents property of the target profile'
   )
-  t.end()
   await p2p.destroy()
+  t.end()
 })
 
 test('verify', async t => {
@@ -389,6 +389,6 @@ test('verify', async t => {
   const result2 = await p2p.verify(content2)
   t.notOk(result2, 'content2 does not has authors registered')
 
-  t.end()
   await p2p.destroy()
+  t.end()
 })
