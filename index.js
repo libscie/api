@@ -9,7 +9,7 @@ const level = require('level')
 const sub = require('subleveldown')
 const AutoIndex = require('level-auto-index')
 const { Type } = require('@avro/types')
-const discovery = require('hyperdiscovery')
+const SwarmNetworker = require('corestore-swarm-networking')
 const crypto = require('hypercore-crypto')
 const DatEncoding = require('dat-encoding')
 const debug = require('debug')('p2pcommons')
@@ -105,11 +105,8 @@ class SDK {
     this.verbose = opts.verbose || false
     this.dbPath = opts.dbPath || this.baseDir
     // start hyperswarm
+    this.networkers = []
     this.disableSwarm = !!opts.disableSwarm
-    if (!this.disableSwarm) {
-      debug('constructor starting swarm')
-      this.swarm = discovery(Object.assign({}, DEFAULT_SWARM_OPTS, opts.swarm))
-    }
   }
 
   allowedProperties () {
@@ -123,6 +120,18 @@ class SDK {
     if (appType === 'profile') {
       return this.profileType
     }
+  }
+
+  _unflatten (data) {
+    if (typeof data.p2pcommons === 'object') return data
+    const { title, description, url, links, ...p2pcommons } = data
+    return { title, description, url, links, p2pcommons }
+  }
+
+  _flatten (data) {
+    if (typeof data.type === 'string') return data
+    const { p2pcommons, ...rest } = data
+    return { ...rest, ...p2pcommons }
   }
 
   async ready () {
@@ -234,26 +243,43 @@ class SDK {
     debug(`init storageLocation ${datOpts.datStorage.storageLocation}`)
 
     await ensureDir(datOpts.datStorage.storageLocation)
-    const archive = dat.create(datOpts.datStorage.storageLocation, publicKey, {
-      persist: this.persist,
-      storageFn: this.storage,
-      hyperdrive: {
-        secretKey
-      },
-      storageOpts: { ...datOpts.datStorage }
-    })
+    const { drive: archive, driveStorage } = dat.create(
+      datOpts.datStorage.storageLocation,
+      publicKey,
+      {
+        persist: this.persist,
+        storageFn: this.storage,
+        hyperdrive: {
+          secretKey
+        },
+        storageOpts: { ...datOpts.datStorage }
+      }
+    )
     await archive.ready()
 
     const hash = archive.key.toString('hex')
 
     if (!this.disableSwarm) {
-      this.swarm.add(archive)
+      const networker = new SwarmNetworker(driveStorage, {
+        announceLocalAddress: true
+      })
+      this.networkers.push(networker)
+      debug('swarm listening...')
+      networker.listen()
+      debug(`swarm seeding ${archive.discoveryKey.toString('hex')}`)
+      networker.seed(archive.discoveryKey)
 
+      dat.replicateFeed(driveStorage, archive.metadata)
       archive.once('close', () => {
-        debug(`closing archive ${archive.publicKey}...`)
         const discoveryKey = DatEncoding.encode(archive.discoveryKey)
-        this.swarm.leave(discoveryKey)
-        this.swarm._replicatingFeeds.delete(discoveryKey)
+        if (this.verbose) {
+          console.log(
+            `closing archive ${DatEncoding.decode(archive.discoveryKey)}...`
+          )
+        }
+        networker.unseed(discoveryKey)
+        // this.swarm.leave(discoveryKey)
+        // this.swarm._replicatingFeeds.delete(discoveryKey)
       })
     }
 
@@ -295,7 +321,8 @@ class SDK {
     if (this.verbose) {
       console.log(`Saved new ${datJSON.p2pcommons.type}, with key: ${hash}`)
     }
-    return datJSON
+    // Note(dk): flatten p2pcommons obj in order to have a more symmetrical API
+    return this._flatten(datJSON)
   }
 
   async saveItem ({ isWritable, lastModified, version, datJSON }) {
@@ -312,12 +339,14 @@ class SDK {
     const storageOpts = {
       storageLocation: join(this.baseDir, datJSON.url.toString('hex'))
     }
-    const archive = dat.open(
+    const { drive: archive, driveStorage } = dat.open(
       datJSON.url.toString('hex'),
       undefined,
       storageOpts
     )
     await archive.ready()
+    dat.replicateFeed(driveStorage, archive.metadata)
+
     let stat
     if (isWritable) {
       await writeFile(join(datJSONDir, 'dat.json'), JSON.stringify(datJSON))
@@ -355,20 +384,23 @@ class SDK {
       }
     }
 
-    const { rawJSON, metadata } = await this.get(DatEncoding.encode(url), false)
-    if (!rawJSON) {
+    const { rawJSON: rawJSONFlatten, metadata } = await this.get(
+      DatEncoding.encode(url)
+    )
+
+    if (!rawJSONFlatten) {
       // Note(dk): check if we need to search the module on the hyperdrive?
       throw new Error(`Module with url ${url} can not be found on localdb`)
     }
 
     // Check if keys values are valid (ie: non empty, etc)
-    const avroType = this._getAvroType(rawJSON.p2pcommons.type)
+    const avroType = this._getAvroType(rawJSONFlatten.type)
     const prepareMergeData = ({
       title,
       description,
       url,
       links,
-      ...p2pcommons
+      p2pcommons
     }) => {
       const out = {}
       if (typeof title === 'string') out.title = title
@@ -384,7 +416,12 @@ class SDK {
 
       return out
     }
-    const finalJSON = deepMerge(rawJSON, prepareMergeData(mod))
+
+    const finalJSON = deepMerge(
+      this._unflatten(rawJSONFlatten),
+      prepareMergeData(this._unflatten(mod))
+    )
+    debug({ finalJSON })
     assertValid(avroType, finalJSON)
 
     debug('set', { ...mod })
@@ -394,7 +431,7 @@ class SDK {
     })
   }
 
-  async get (key, onlyMetadata = true) {
+  async get (key) {
     assert(
       typeof key === 'string' || Buffer.isBuffer(key),
       ValidationError,
@@ -405,7 +442,7 @@ class SDK {
     const dbitem = await this.localdb.get(key)
     debug('get', dbitem)
     const { rawJSON, ...metadata } = dbitem
-    return { rawJSON, metadata }
+    return { rawJSON: this._flatten(rawJSON), metadata }
   }
 
   async filterExact (feature, criteria) {
@@ -416,12 +453,13 @@ class SDK {
         if (err) return reject(err)
 
         if (!Array.isArray(data)) return resolve([data])
-        return resolve(data)
+        const { rawJSON, metadata } = data
+        return resolve({ rawJSON: this._flatten(rawJSON), metadata })
       })
     })
   }
 
-  async filter (feature, criteria, dbitem = false) {
+  async filter (feature, criteria) {
     assert(typeof feature === 'string', ValidationError, 'string', feature)
     assert(typeof criteria === 'string', ValidationError, 'string', criteria)
     return new Promise((resolve, reject) => {
@@ -436,7 +474,12 @@ class SDK {
           v.rawJSON[feature] &&
           v.rawJSON[feature].toLowerCase().includes(criteriaLower)
         ) {
-          out.push(dbitem ? v : v.rawJSON)
+          const { rawJSON, ...metadata } = v
+          const flattened = {
+            rawJSON: this._flatten(rawJSON),
+            metadata
+          }
+          out.push(flattened)
         }
       })
       s.on('end', () => resolve(out))
@@ -449,8 +492,13 @@ class SDK {
       const out = []
       const s = this.localdb.createValueStream()
       s.on('data', val => {
-        if (val.isWritable && val.rawJSON.p2pcommons.type === 'content') {
-          out.push(val)
+        const { rawJSON, ...metadata } = val
+        if (metadata.isWritable && rawJSON.p2pcommons.type === 'content') {
+          const flattened = {
+            rawJSON: this._flatten(rawJSON),
+            metadata
+          }
+          out.push(flattened)
         }
       })
       s.on('end', () => resolve(out))
@@ -463,8 +511,13 @@ class SDK {
       const out = []
       const s = this.localdb.createValueStream()
       s.on('data', val => {
-        if (val.isWritable && val.rawJSON.p2pcommons.type === 'profile') {
-          out.push(val)
+        const { rawJSON, ...metadata } = val
+        if (metadata.isWritable && rawJSON.p2pcommons.type === 'profile') {
+          const flattened = {
+            rawJSON: this._flatten(rawJSON),
+            metadata
+          }
+          out.push(flattened)
         }
       })
       s.on('end', () => resolve(out))
@@ -477,7 +530,14 @@ class SDK {
       const out = []
       const s = this.localdb.createValueStream()
       s.on('data', val => {
-        if (val.isWritable) out.push(val)
+        const { rawJSON, ...metadata } = val
+        if (metadata.isWritable) {
+          const flattened = {
+            rawJSON: this._flatten(rawJSON),
+            metadata
+          }
+          out.push(flattened)
+        }
       })
       s.on('end', () => resolve(out))
       s.on('error', reject)
@@ -494,6 +554,8 @@ class SDK {
   }
 
   async register (contentKey, profileKey) {
+    debug(`register contentKey: ${contentKey}`)
+    debug(`register profileKey: ${profileKey}`)
     assert(
       typeof contentKey === 'string' || Buffer.isBuffer(contentKey),
       ValidationError,
@@ -508,16 +570,28 @@ class SDK {
     )
     // fetch source and dest
     // 1 - try to get source from localdb
-    let { rawJSON: content } = await this.get(DatEncoding.encode(contentKey))
-    if (!content) {
+    let content
+    try {
+      debug('register: fetching content module from localdb')
+      const { rawJSON } = await this.get(DatEncoding.encode(contentKey))
+      content = rawJSON
+    } catch (_) {
       // 2 - if no module is found on localdb, then fetch from hyperdrive
       // something like:
-      const contentDat = dat.open(contentKey) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
+      debug(
+        'register: content module was not found on localdb.\nFetching from swarm...'
+      )
+      const { drive: contentDat } = dat.open(contentKey) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
+      debug(`register: Found archive ${contentDat}`)
+      debug('register: waiting for archive ready')
       await contentDat.ready()
       // 3 - after fetching module we still need to read the dat.json file
       try {
         content = await contentDat.readFile('dat.json')
       } catch (err) {
+        if (this.verbose) {
+          console.error(err)
+        }
         throw new Error('Module not found')
       }
       // 4 - clone new module (move into its own method)
@@ -526,12 +600,17 @@ class SDK {
       await ensureDir(folderPath)
       await writeFile(join(folderPath, 'dat.json'), JSON.stringify(content))
     }
+    const contentUnflatten = this._unflatten(content)
+
     // 1 - try to get dest from localdb
-    let { rawJSON: profile } = await this.get(DatEncoding.encode(profileKey))
-    if (!profile) {
+    let profile
+    try {
+      const { rawJSON } = await this.get(DatEncoding.encode(profileKey))
+      profile = rawJSON
+    } catch (_) {
       // 2 - if no module is found on localdb, then fetch from hyperdrive
       // something like:
-      const profileDat = dat.open(profileKey) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
+      const { drive: profileDat } = dat.open(profileKey) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
       await profileDat.ready()
       // 3 - after fetching module we still need to read the dat.json file
       try {
@@ -546,36 +625,36 @@ class SDK {
       await writeFile(join(folderPath, 'dat.json'), JSON.stringify(profile))
     }
 
+    const profileUnflatten = this._unflatten(profile)
     // TODO(dk): consider add custom errors for register and verification
     assert(
-      content.p2pcommons.type === 'content',
+      contentUnflatten.p2pcommons.type === 'content',
       ValidationError,
       'content',
-      content.p2pcommons.type
+      contentUnflatten.p2pcommons.type
     )
     assert(
-      profile.p2pcommons.type === 'profile',
+      profileUnflatten.p2pcommons.type === 'profile',
       ValidationError,
       'profile',
-      profile.p2pcommons.type
+      profileUnflatten.p2pcommons.type
     )
-
-    const profileType = this._getAvroType(profile.p2pcommons.type)
-    const profileValid = profileType.isValid(profile)
+    const profileType = this._getAvroType(profileUnflatten.p2pcommons.type)
+    const profileValid = profileType.isValid(profileUnflatten)
     if (!profileValid) {
-      throw new Error('Invalid module')
+      throw new Error('Invalid profile module')
     }
-    const contentType = this._getAvroType(content.p2pcommons.type)
-    const contentValid = contentType.isValid(content)
+    const contentType = this._getAvroType(contentUnflatten.p2pcommons.type)
+    const contentValid = contentType.isValid(contentUnflatten)
     if (!contentValid) {
-      throw new Error('Invalid module')
+      throw new Error('Invalid content module')
     }
 
     // Note(dk): at this point is safe to save the new modules if necessary
 
-    if (content.p2pcommons.authors.length === 0) {
-      throw new Error('Authors is empty')
-    }
+    // if (contentUnflatten.p2pcommons.authors.length === 0) {
+    //  throw new Error('Authors is empty')
+    // }
     /*
      * Note(dk): omiting verification for now - WIP
     // verify content first
@@ -587,13 +666,17 @@ class SDK {
     */
 
     // register new content
-    profile.p2pcommons.contents.push(content.url)
+    profileUnflatten.p2pcommons.contents.push(content.url)
     // update profile
-    await this.set({ url: profile.url, contents: profile.p2pcommons.contents })
+    await this.set({
+      url: profileUnflatten.url,
+      contents: profileUnflatten.p2pcommons.contents
+    })
   }
 
   async verify (source) {
     debug('verify', source)
+    source = this._unflatten(source)
     assert(
       source.p2pcommons.type === 'content',
       ValidationError,
@@ -606,16 +689,23 @@ class SDK {
       const prev = await prevProm
       // Note(dk): what if authorKey is not present on local db. fetch from swarm?
       const { rawJSON: profile } = await this.get(authorKey)
-      return prev && profile.p2pcommons.contents.includes(source.url)
+      return prev && profile.contents.includes(source.url)
     }, Promise.resolve(true))
   }
 
-  async destroy () {
-    debug('destroying swarm')
-    await this.db.close()
-    await this.localdb.close()
+  async destroy (db = true, swarm = true) {
+    if (db) {
+      debug('closing db')
+      await this.db.close()
+      await this.localdb.close()
+    }
     if (this.disableSwarm) return
-    return this.swarm.close()
+    if (swarm) {
+      debug('Closing networkers: ', this.networkers.length)
+      for (const networker of this.networkers) {
+        await networker.close()
+      }
+    }
   }
 }
 
