@@ -105,22 +105,37 @@ test('get: retrieve a value from the sdk', async t => {
   await p2p.destroy()
 })
 
-test('set: update a value', async t => {
+test('set: update modules', async t => {
   const p2p = createDb()
   await p2p.ready()
-  const sampleData = {
+  const sampleContent = {
     type: 'content',
     title: 'demo',
     description: 'lorem ipsum'
   }
-  const metadata = await p2p.init(sampleData)
-  const key = metadata.url.toString('hex')
 
-  const description = 'A more accurate description'
-  await p2p.set({ url: key, description })
-  const { rawJSON } = await p2p.get(key)
+  const sampleProfile = {
+    type: 'profile',
+    title: 'professor',
+    description: 'lorem ipsum 2'
+  }
+  const contentMeta = await p2p.init(sampleContent)
+  const profileMeta = await p2p.init(sampleProfile)
+  const contentKey = contentMeta.url.toString('hex')
+  const profileKey = profileMeta.url.toString('hex')
 
-  t.same(rawJSON.description, description)
+  const contentUpdate = { description: 'A more accurate description' }
+  const profileUpdate = {
+    title: 'name',
+    description: 'desc'
+  }
+  await p2p.set({ url: contentKey, ...contentUpdate })
+  await p2p.set({ url: profileKey, ...profileUpdate })
+  const { rawJSON: contentUpdated } = await p2p.get(contentKey)
+  const { rawJSON: profileUpdated } = await p2p.get(profileKey)
+  t.same(contentUpdated.description, contentUpdate.description)
+  t.same(profileUpdated.title, profileUpdate.title)
+  t.same(profileUpdated.description, profileUpdate.description)
   t.end()
   await p2p.destroy()
 })
