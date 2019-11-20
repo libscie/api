@@ -18,28 +18,32 @@ test('ready', async t => {
 test('init: create content module', async t => {
   const p2p = createDb()
   await p2p.ready()
-  const metadata = {
+  const init = {
     type: 'content',
     subtype: 'Theory',
     title: 'demo',
     description: 'lorem ipsum',
     main: 'file.txt'
   }
-  const output = await p2p.init(metadata)
+  const { rawJSON: output, metadata } = await p2p.init(init)
 
-  t.same(output.type, metadata.type)
-  t.same(output.subtype, metadata.subtype)
-  t.same(output.title, metadata.title)
-  t.same(output.description, metadata.description)
+  t.same(output.type, init.type)
+  t.same(output.subtype, init.subtype)
+  t.same(output.title, init.title)
+  t.same(output.description, init.description)
   t.same(typeof output.url, 'string', 'url is a string')
   t.same(
     output.links.license[0].href,
     'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
   )
   t.same(output.links.spec[0].href, 'https://p2pcommons.com/specs/module/0.2.0')
-  t.same(output.main, metadata.main)
+  t.same(output.main, init.main)
   t.same(output.authors, [])
   t.same(output.parents, [])
+  t.same(typeof metadata, 'object')
+  t.ok(metadata.version)
+  t.ok(metadata.isWritable)
+  t.ok(metadata.lastModified)
   t.end()
   await p2p.destroy()
 })
@@ -71,7 +75,7 @@ test('init: create profile module', async t => {
     title: 'demo',
     description: 'lorem ipsum'
   }
-  const output = await p2p.init(metadata)
+  const { rawJSON: output } = await p2p.init(metadata)
   t.same(output.type, metadata.type)
   t.same(output.title, metadata.title)
   t.same(output.description, metadata.description)
@@ -95,7 +99,7 @@ test('get: retrieve a value from the sdk', async t => {
     title: 'demo',
     description: 'lorem ipsum'
   }
-  const metadata = await p2p.init(sampleData)
+  const { rawJSON: metadata } = await p2p.init(sampleData)
   const key = metadata.url.toString('hex')
 
   const { rawJSON } = await p2p.get(key)
@@ -119,8 +123,8 @@ test('set: update modules', async t => {
     title: 'professor',
     description: 'lorem ipsum 2'
   }
-  const contentMeta = await p2p.init(sampleContent)
-  const profileMeta = await p2p.init(sampleProfile)
+  const { rawJSON: contentMeta } = await p2p.init(sampleContent)
+  const { rawJSON: profileMeta } = await p2p.init(sampleProfile)
   const contentKey = contentMeta.url.toString('hex')
   const profileKey = profileMeta.url.toString('hex')
 
@@ -148,7 +152,7 @@ test('set: should throw InvalidKeyError with invalid update', async t => {
     title: 'demo',
     description: 'lorem ipsum'
   }
-  const metadata = await p2p.init(sampleData)
+  const { rawJSON: metadata } = await p2p.init(sampleData)
   const key = metadata.url.toString('hex')
 
   const license = 'anewkey123456'
@@ -170,7 +174,7 @@ test('set: update should fail with bad data', async t => {
     title: 'demo',
     description: 'lorem ipsum'
   }
-  const metadata = await p2p.init(sampleData)
+  const { rawJSON: metadata } = await p2p.init(sampleData)
   const key = metadata.url.toString('hex')
 
   try {
@@ -192,7 +196,7 @@ test('update: check version change', async t => {
     title: 'demo',
     description: 'lorem ipsum'
   }
-  const metadata = await p2p.init(sampleData)
+  const { rawJSON: metadata } = await p2p.init(sampleData)
   const key = metadata.url.toString('hex')
 
   const { metadata: metadata1 } = await p2p.get(key, false)
@@ -306,8 +310,8 @@ test('multiple writes with persistance', async t => {
     })
 
     await p2p1.ready()
-    const { url } = await p2p1.init({ type: 'content', title: 'title' })
-    t.same(typeof url, 'string')
+    const { rawJSON } = await p2p1.init({ type: 'content', title: 'title' })
+    t.same(typeof rawJSON.url, 'string')
     await p2p1.destroy()
 
     // create a new instance with same basedir
@@ -315,12 +319,12 @@ test('multiple writes with persistance', async t => {
       baseDir: dir
     })
     await p2p2.ready()
-    const metadata = { url, title: 'beep' }
+    const metadata = { url: rawJSON.url, title: 'beep' }
     await p2p2.set(metadata)
-    await p2p2.set({ url, description: 'boop' })
-    const { rawJSON } = await p2p2.get(url)
-    t.same(rawJSON.title, metadata.title)
-    t.same(rawJSON.description, 'boop')
+    await p2p2.set({ url: rawJSON.url, description: 'boop' })
+    const { rawJSON: updated } = await p2p2.get(rawJSON.url)
+    t.same(updated.title, metadata.title)
+    t.same(updated.description, 'boop')
     await p2p2.destroy()
     t.end()
   } catch (err) {

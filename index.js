@@ -311,10 +311,13 @@ class SDK {
     debug('init datJSON', datJSON)
 
     const stat = await archive.stat('dat.json')
-    await this.saveItem({
+    const metadata = {
       isWritable: archive.writable,
       lastModified: stat.mtime,
-      version: archive.version,
+      version: archive.version
+    }
+    await this.saveItem({
+      ...metadata,
       datJSON
     })
 
@@ -322,7 +325,7 @@ class SDK {
       console.log(`Saved new ${datJSON.p2pcommons.type}, with key: ${hash}`)
     }
     // Note(dk): flatten p2pcommons obj in order to have a more symmetrical API
-    return this._flatten(datJSON)
+    return { rawJSON: this._flatten(datJSON), metadata }
   }
 
   async saveItem ({ isWritable, lastModified, version, datJSON }) {

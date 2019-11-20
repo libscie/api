@@ -79,7 +79,7 @@ Creates a new folder for 'content' or 'profile' according to the received `data.
 
 - `data` object following the [p2pcommons module spec](https://github.com/p2pcommons/specs/blob/master/module.md). The only required field is `type`.
 
-Returns an object containing the **flattened** metadata for the newly created module.
+Returns an object containing the **flattened** rawJSON and metadata (**version, lastModified, isWritable**) for the newly created module.
 
 ### get
 
@@ -161,7 +161,7 @@ Indicates there is a difference between what is expected and what was received
 
 ### InvalidKeyError
 
-Some keys are _read only_. This error indicates the user is trying to modificate a read only property.
+Some keys are _read only_. This error indicates the user is trying to modify a read only property.
 
 ### MissingParam
 
