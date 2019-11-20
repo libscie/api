@@ -374,7 +374,7 @@ class SDK {
 
     // NOTE(dk): some properties are read only (license, follows, ...)
     const { url, ...mod } = params
-
+    debug('set params', params)
     // Check if received keys are valid (editable)
     const receivedKeys = Object.keys(mod)
     const allowedProperties = this.allowedProperties()
@@ -421,10 +421,9 @@ class SDK {
       this._unflatten(rawJSONFlatten),
       prepareMergeData(this._unflatten(mod))
     )
-    debug({ finalJSON })
+    debug('set', { finalJSON })
     assertValid(avroType, finalJSON)
 
-    debug('set', { ...mod })
     return this.saveItem({
       ...metadata,
       datJSON: finalJSON
