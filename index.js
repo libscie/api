@@ -67,21 +67,23 @@ const assertValid = (type, val) => {
   return type.isValid(val, { errorHook })
 
   function errorHook (path, any, type) {
-    let msg = `[${path.join('.')}]\t`
+    let msg = `${path.join('.')}`
     if (type.typeName === 'record') {
       if (any !== null && typeof any === 'object') {
         const declared = new Set(type.fields.map(f => f.name))
         const extra = Object.keys(any).filter(n => !declared.has(n))
         msg += `extra fields (${extra.join(', ')})`
+        throw new Error(msg)
       } else {
         msg += `not an object: ${any}`
+        throw new Error(msg)
       }
-    } else {
-      msg += `not a valid ${type}: ${JSON.stringify(any)}`
     }
-    // Here, we just print the mismatches. It would be straightforward to return
-    // them instead too (for example using a custom error).
-    throw new ValidationError(type, msg)
+    throw new ValidationError(
+      type.name ? type.name : type._logicalTypeName,
+      any,
+      msg
+    )
   }
 }
 
@@ -221,15 +223,22 @@ class SDK {
     // 2. initialize an hyperdrive inside
     // 3. createDatJSON with the correct metadata and save it there
     //
-    assert(typeof type === 'string', ValidationError, 'string', type)
+    assert(typeof type === 'string', ValidationError, 'string', type, 'type')
     assert(
       type === 'profile' || type === 'content',
       ValidationError,
       "'content' or 'profile'",
-      type
+      type,
+      'type'
     )
-    assert(typeof title === 'string', ValidationError, 'string', title)
-    assert(typeof subtype === 'string', ValidationError, 'string', subtype)
+    assert(typeof title === 'string', ValidationError, 'string', title, 'title')
+    assert(
+      typeof subtype === 'string',
+      ValidationError,
+      'string',
+      subtype,
+      'subtype'
+    )
 
     debug(`init ${type}`)
 
@@ -334,9 +343,16 @@ class SDK {
       typeof isWritable === 'boolean',
       ValidationError,
       'boolean',
-      isWritable
+      isWritable,
+      'isWritable'
     )
-    assert(typeof datJSON === 'object', ValidationError, 'object', datJSON)
+    assert(
+      typeof datJSON === 'object',
+      ValidationError,
+      'object',
+      datJSON,
+      'datJSON'
+    )
 
     const datJSONDir = join(this.baseDir, datJSON.url.toString('hex'))
     const storageOpts = {
@@ -367,12 +383,19 @@ class SDK {
   }
 
   async set (params) {
-    assert(typeof params === 'object', ValidationError, 'object', params)
+    assert(
+      typeof params === 'object',
+      ValidationError,
+      'object',
+      params,
+      'params'
+    )
     assert(
       typeof params.url === 'string' || Buffer.isBuffer(params.url),
       ValidationError,
       "'string' or Buffer",
-      params.url
+      params.url,
+      'params.url'
     )
 
     // NOTE(dk): some properties are read only (license, follows, ...)
@@ -438,7 +461,8 @@ class SDK {
       typeof key === 'string' || Buffer.isBuffer(key),
       ValidationError,
       "'string' or Buffer",
-      key
+      key,
+      'key'
     )
     key = DatEncoding.encode(key)
     const dbitem = await this.localdb.get(key)
@@ -448,8 +472,20 @@ class SDK {
   }
 
   async filterExact (feature, criteria) {
-    assert(typeof feature === 'string', ValidationError, 'string', feature)
-    assert(typeof criteria === 'string', ValidationError, 'string', criteria)
+    assert(
+      typeof feature === 'string',
+      ValidationError,
+      'string',
+      feature,
+      'feature'
+    )
+    assert(
+      typeof criteria === 'string',
+      ValidationError,
+      'string',
+      criteria,
+      'criteria'
+    )
     return new Promise((resolve, reject) => {
       this.by[feature].get(criteria, (err, data) => {
         if (err) return reject(err)
@@ -462,8 +498,20 @@ class SDK {
   }
 
   async filter (feature, criteria) {
-    assert(typeof feature === 'string', ValidationError, 'string', feature)
-    assert(typeof criteria === 'string', ValidationError, 'string', criteria)
+    assert(
+      typeof feature === 'string',
+      ValidationError,
+      'string',
+      feature,
+      'feature'
+    )
+    assert(
+      typeof criteria === 'string',
+      ValidationError,
+      'string',
+      criteria,
+      'criteria'
+    )
     return new Promise((resolve, reject) => {
       const out = []
       const criteriaLower = criteria.toLowerCase()
@@ -547,7 +595,7 @@ class SDK {
   }
 
   async openFile (key) {
-    assert(typeof key === 'string', ValidationError, 'string', key)
+    assert(typeof key === 'string', ValidationError, 'string', key, 'key')
     const { main } = await this.get(key)
     if (!main) {
       throw new Error('Empty main file')
@@ -562,13 +610,15 @@ class SDK {
       typeof contentKey === 'string' || Buffer.isBuffer(contentKey),
       ValidationError,
       "'string' or Buffer",
-      contentKey
+      contentKey,
+      'contentKey'
     )
     assert(
       typeof profileKey === 'string' || Buffer.isBuffer(profileKey),
       ValidationError,
       "'string' or Buffer",
-      profileKey
+      profileKey,
+      'profileKey'
     )
     // fetch source and dest
     // 1 - try to get source from localdb
@@ -633,13 +683,15 @@ class SDK {
       contentUnflatten.p2pcommons.type === 'content',
       ValidationError,
       'content',
-      contentUnflatten.p2pcommons.type
+      contentUnflatten.p2pcommons.type,
+      'type'
     )
     assert(
       profileUnflatten.p2pcommons.type === 'profile',
       ValidationError,
       'profile',
-      profileUnflatten.p2pcommons.type
+      profileUnflatten.p2pcommons.type,
+      'type'
     )
     const profileType = this._getAvroType(profileUnflatten.p2pcommons.type)
     const profileValid = profileType.isValid(profileUnflatten)
@@ -683,7 +735,8 @@ class SDK {
       source.p2pcommons.type === 'content',
       ValidationError,
       'content',
-      source.p2pcommons.type
+      source.p2pcommons.type,
+      'type'
     )
     // TODO(dk): check versions
     if (source.p2pcommons.authors.length === 0) return false
