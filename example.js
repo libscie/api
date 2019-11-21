@@ -7,7 +7,7 @@ process.once('SIGINT', () => commons.destroy())
   await commons.ready()
 
   // create some content
-  const contentMetadata1 = await commons.init({
+  const { rawJSON: contentMetadata1 } = await commons.init({
     type: 'content',
     title: 'intro to lorem ipsum'
   }) // ~/.p2pcommons/hash/dat.json --> type: content

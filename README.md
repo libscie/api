@@ -157,12 +157,23 @@ The SDK exports some custom errors: `SDK.errors`
 
 ### ValidationError
 
-Indicates there is a difference between what is expected and what was received
+Indicates there is a difference between what is expected and what was received.
+
+Error object contains some useful properties:
+- `expected`: Expected value
+- `received`: Received value
+- `key`: A string indicating the property in question
 
 ### InvalidKeyError
 
 Some keys are _read only_. This error indicates the user is trying to modify a read only property.
 
+Error object contains some useful properties:
+- `invalid`: A string indicating the invalid property
+
 ### MissingParam
 
 A more general error, used to indicate if something is missing.
+
+Error object contains some useful properties:
+- `key`: A string indicating the missing param

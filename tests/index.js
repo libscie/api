@@ -62,6 +62,9 @@ test('init: creation should throw a ValidationError', async t => {
       err instanceof SDK.errors.ValidationError,
       'It should be a custom SDK error'
     )
+    t.ok(Object.prototype.hasOwnProperty.call(err, 'expected'))
+    t.ok(Object.prototype.hasOwnProperty.call(err, 'received'))
+    t.ok(Object.prototype.hasOwnProperty.call(err, 'key'))
     t.end()
     await p2p.destroy()
   }
@@ -162,6 +165,8 @@ test('set: should throw InvalidKeyError with invalid update', async t => {
       err instanceof SDK.errors.InvalidKeyError,
       'error should be instance of InvalidKeyError'
     )
+    t.ok(Object.prototype.hasOwnProperty.call(err, 'invalid'))
+    t.same(err.invalid, 'license')
     t.end()
   })
 })
@@ -184,6 +189,9 @@ test('set: update should fail with bad data', async t => {
       err instanceof SDK.errors.ValidationError,
       'error should be instance of ValidationError'
     )
+    t.same(err.expected, 'required-string')
+    t.same(err.received, '')
+    t.same(err.key, 'title')
     t.end()
   }
 })
