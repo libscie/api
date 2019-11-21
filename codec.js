@@ -17,18 +17,20 @@ class Codec {
 
   encode (obj) {
     debug('p2pcommons:Codec:encode', obj)
-    assert(typeof obj === 'object', ValidationError, 'object', obj)
+    assert(typeof obj === 'object', ValidationError, 'object', obj, 'obj')
     assert(
       typeof obj.rawJSON === 'object',
       ValidationError,
       'object',
-      obj.rawJSON
+      obj.rawJSON,
+      'rawJSON'
     )
     assert(
       typeof obj.rawJSON.p2pcommons.type === 'string',
       ValidationError,
       'string',
-      obj.rawJSON.p2pcommons.type
+      obj.rawJSON.p2pcommons.type,
+      'type'
     )
 
     const newVal = this.registry[obj.avroType].toBuffer(obj.rawJSON)
