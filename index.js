@@ -832,7 +832,8 @@ class SDK {
       await this.db.close()
       await this.localdb.close()
     }
-    if (swarm) {
+    if (swarm && this.networker) {
+      debug('closing swarm')
       this.networker.destroy(err => {
         if (err) throw new Error(err)
         this.swarm = null
