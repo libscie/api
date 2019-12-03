@@ -54,10 +54,12 @@ process.once('SIGINT', () => commons.destroy())
   // register external dat to a local profile
   const externalContentUrl = process.argv[2]
   if (externalContentUrl) {
-    console.log('Registering content...')
+    console.log('Registering content...', externalContentUrl)
     await commons.register(externalContentUrl, prof.url)
     console.log('content registered successfully')
   }
-  console.log('FIN')
+
+  const { rawJSON: profileUpdated } = await commons.get(prof.url)
+  console.log('Profile Updated', profileUpdated)
   await commons.destroy()
 })()

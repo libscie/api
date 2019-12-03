@@ -9,12 +9,15 @@ const level = require('level')
 const sub = require('subleveldown')
 const AutoIndex = require('level-auto-index')
 const { Type } = require('@avro/types')
-const SwarmNetworker = require('corestore-swarm-networking')
 const crypto = require('hypercore-crypto')
+const parse = require('parse-dat-url')
 const DatEncoding = require('dat-encoding')
 const debug = require('debug')('p2pcommons')
 const deepMerge = require('deepmerge')
 const dat = require('./lib/dat-helper')
+const Swarm = require('hyperswarm')
+const pump = require('pump')
+const protocol = require('hypercore-protocol')
 const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
@@ -24,10 +27,6 @@ const {
   ValidationError,
   MissingParam
 } = require('./lib/errors')
-
-const DEFAULT_SWARM_OPTS = {
-  extensions: []
-}
 
 // helper dat.json object mould
 const createDatJSON = ({
@@ -107,8 +106,48 @@ class SDK {
     this.verbose = opts.verbose || false
     this.dbPath = opts.dbPath || this.baseDir
     // start hyperswarm
-    this.networkers = []
+    this.drives = new Map()
+
     this.disableSwarm = !!opts.disableSwarm
+
+    if (!this.disableSwarm) {
+      this.networker = Swarm()
+      this.networker.on('error', console.error)
+      debug('swarm listening...')
+      this.networker.on('connection', (socket, info) => {
+        this._replicate(socket, info, (stream, discoveryKey) => {
+          const drive = this.drives.get(DatEncoding.encode(discoveryKey))
+          if (!drive) {
+            if (this.verbose) {
+              console.error(
+                `No drive found for key ${DatEncoding.encode(discoveryKey)}`
+              )
+            }
+
+            return
+          }
+          drive.replicate({ live: true, stream })
+        })
+      })
+    }
+  }
+
+  _replicate (socket, info, handle) {
+    const isInitiator = !!info.client
+    const protocolStream = protocol({ live: true })
+    if (isInitiator) {
+      handle(protocolStream, info.peer.topic)
+    } else {
+      protocolStream.on('feed', discoveryKey => {
+        handle(protocolStream, discoveryKey)
+      })
+    }
+    pump(socket, protocolStream, socket, err => {
+      debug(err.message)
+      if (this.verbose) {
+        console.warn(err.message)
+      }
+    })
   }
 
   allowedProperties () {
@@ -134,6 +173,26 @@ class SDK {
     if (typeof data.type === 'string') return data
     const { p2pcommons, ...rest } = data
     return { ...rest, ...p2pcommons }
+  }
+
+  _seed (archive) {
+    if (!this.disableSwarm) {
+      const dkey = DatEncoding.encode(archive.discoveryKey)
+      this.drives.set(dkey, archive)
+
+      debug(`swarm seeding ${dkey}`)
+      this.networker.join(archive.discoveryKey, {
+        announce: true,
+        lookup: true
+      })
+
+      archive.once('close', () => {
+        if (this.verbose) {
+          console.log(`closing archive ${dkey}...`)
+        }
+        this.networker.leave(archive.discoveryKey)
+      })
+    }
   }
 
   async ready () {
@@ -252,7 +311,7 @@ class SDK {
     debug(`init storageLocation ${datOpts.datStorage.storageLocation}`)
 
     await ensureDir(datOpts.datStorage.storageLocation)
-    const { drive: archive, driveStorage } = dat.create(
+    const { drive: archive } = dat.create(
       datOpts.datStorage.storageLocation,
       publicKey,
       {
@@ -269,27 +328,7 @@ class SDK {
     const hash = archive.key.toString('hex')
 
     if (!this.disableSwarm) {
-      const networker = new SwarmNetworker(driveStorage, {
-        announceLocalAddress: true
-      })
-      this.networkers.push(networker)
-      debug('swarm listening...')
-      networker.listen()
-      debug(`swarm seeding ${archive.discoveryKey.toString('hex')}`)
-      networker.seed(archive.discoveryKey)
-
-      dat.replicateFeed(driveStorage, archive.metadata)
-      archive.once('close', () => {
-        const discoveryKey = DatEncoding.encode(archive.discoveryKey)
-        if (this.verbose) {
-          console.log(
-            `closing archive ${DatEncoding.decode(archive.discoveryKey)}...`
-          )
-        }
-        networker.unseed(discoveryKey)
-        // this.swarm.leave(discoveryKey)
-        // this.swarm._replicatingFeeds.delete(discoveryKey)
-      })
+      this._seed(archive)
     }
 
     // create dat.json metadata
@@ -358,13 +397,12 @@ class SDK {
     const storageOpts = {
       storageLocation: join(this.baseDir, datJSON.url.toString('hex'))
     }
-    const { drive: archive, driveStorage } = dat.open(
+    const { drive: archive } = dat.open(
       datJSON.url.toString('hex'),
       undefined,
       storageOpts
     )
     await archive.ready()
-    dat.replicateFeed(driveStorage, archive.metadata)
 
     let stat
     if (isWritable) {
@@ -620,12 +658,14 @@ class SDK {
       profileKey,
       'profileKey'
     )
+    const { host: cKey, version: contentVersion } = parse(contentKey)
+    const { host: pKey, version: profileVersion } = parse(profileKey)
     // fetch source and dest
     // 1 - try to get source from localdb
     let content
     try {
       debug('register: fetching content module from localdb')
-      const { rawJSON } = await this.get(DatEncoding.encode(contentKey))
+      const { rawJSON } = await this.get(DatEncoding.encode(cKey))
       content = rawJSON
     } catch (_) {
       // 2 - if no module is found on localdb, then fetch from hyperdrive
@@ -633,22 +673,41 @@ class SDK {
       debug(
         'register: content module was not found on localdb.\nFetching from swarm...'
       )
-      const { drive: contentDat } = dat.open(contentKey) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
-      debug(`register: Found archive ${contentDat}`)
+
+      const { drive: contentDat } = dat.open(cKey) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
+      debug('register: Found archive')
       debug('register: waiting for archive ready')
+
       await contentDat.ready()
+
+      this._seed(contentDat)
+      await dat.reallyReady(contentDat)
+
+      const cVersion = contentVersion || contentDat.version
+      debug('content version', cVersion)
       // 3 - after fetching module we still need to read the dat.json file
       try {
-        content = await contentDat.readFile('dat.json')
+        const contentVersion = await contentDat.checkout(cVersion)
+
+        await contentVersion.ready()
+
+        // Note(dk): revisit this delay
+        // readfile delay, taken from  https://github.com/datproject/sdk/blob/master/promise.js#L285
+        await setTimeout(() => {
+          return Promise.resolve()
+        }, 1000)
+
+        content = JSON.parse(await contentVersion.readFile('dat.json'))
       } catch (err) {
         if (this.verbose) {
           console.error(err)
         }
-        throw new Error('Module not found')
+        throw new Error('Problems fetching external module')
       }
       // 4 - clone new module (move into its own method)
-      // contentKey = datkey || datkey+version
-      const folderPath = join(this.baseDir, contentKey)
+      // contentPath = datkey || datkey+version
+      const contentPath = `${cKey}+${cVersion}`
+      const folderPath = join(this.baseDir, contentPath)
       await ensureDir(folderPath)
       await writeFile(join(folderPath, 'dat.json'), JSON.stringify(content))
     }
@@ -657,22 +716,40 @@ class SDK {
     // 1 - try to get dest from localdb
     let profile
     try {
-      const { rawJSON } = await this.get(DatEncoding.encode(profileKey))
+      const { rawJSON } = await this.get(DatEncoding.encode(pKey))
       profile = rawJSON
     } catch (_) {
       // 2 - if no module is found on localdb, then fetch from hyperdrive
       // something like:
-      const { drive: profileDat } = dat.open(profileKey) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
+      const { drive: profileDat } = dat.open(pKey) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
       await profileDat.ready()
+      this._seed(profileDat)
+
+      const pVersion = profileVersion
+        ? `${profileVersion}`
+        : `${profileDat.version}`
+
+      debug('profile version', pVersion)
       // 3 - after fetching module we still need to read the dat.json file
       try {
-        profile = await profileDat.readFile('dat.json')
+        const profileVersion = await profileDat.checkout(pVersion)
+
+        // Note(dk): revisit this delay
+        // readfile delay, taken from  https://github.com/datproject/sdk/blob/master/promise.js#L285
+        await setTimeout(() => {
+          return Promise.resolve()
+        }, 1000)
+
+        profile = JSON.parse(await profileVersion.readFile('dat.json'))
       } catch (err) {
-        throw new Error('Module not found')
+        if (this.verbose) {
+          console.error(err)
+        }
+        throw new Error('Problems fetching external module')
       }
-      //
       // 4 - clone the new module
-      const folderPath = join(this.baseDir, profileKey)
+      const profilePath = `${pKey}+${pVersion}`
+      const folderPath = join(this.baseDir, profilePath)
       await ensureDir(folderPath)
       await writeFile(join(folderPath, 'dat.json'), JSON.stringify(profile))
     }
@@ -726,6 +803,7 @@ class SDK {
       url: profileUnflatten.url,
       contents: profileUnflatten.p2pcommons.contents
     })
+    debug('register: successful')
   }
 
   async verify (source) {
@@ -754,12 +832,12 @@ class SDK {
       await this.db.close()
       await this.localdb.close()
     }
-    if (this.disableSwarm) return
-    if (swarm) {
-      debug('Closing networkers: ', this.networkers.length)
-      for (const networker of this.networkers) {
-        await networker.close()
-      }
+    if (swarm && this.networker) {
+      debug('closing swarm')
+      this.networker.destroy(err => {
+        if (err) throw new Error(err)
+        this.swarm = null
+      })
     }
   }
 }
