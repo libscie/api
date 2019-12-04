@@ -111,7 +111,8 @@ class SDK {
     this.disableSwarm = !!opts.disableSwarm
 
     if (!this.disableSwarm) {
-      this.networker = Swarm()
+      const swarm = opts.swarm ? opts.swarm : Swarm
+      this.networker = swarm({ announceLocalAddress: true })
       this.networker.on('error', console.error)
       debug('swarm listening...')
       this.networker.on('connection', (socket, info) => {
@@ -696,9 +697,11 @@ class SDK {
 
         // Note(dk): revisit this delay
         // readfile delay, taken from  https://github.com/datproject/sdk/blob/master/promise.js#L285
-        await setTimeout(() => {
-          return Promise.resolve()
-        }, 1000)
+        await new Promise(resolve => {
+          setTimeout(() => {
+            return resolve()
+          }, 1000)
+        })
 
         content = JSON.parse(await contentVersion.readFile('dat.json'))
       } catch (err) {
@@ -739,10 +742,11 @@ class SDK {
 
         // Note(dk): revisit this delay
         // readfile delay, taken from  https://github.com/datproject/sdk/blob/master/promise.js#L285
-        await setTimeout(() => {
-          return Promise.resolve()
-        }, 1000)
-
+        await new Promise(resolve => {
+          setTimeout(() => {
+            return resolve()
+          }, 1000)
+        })
         profile = JSON.parse(await profileVersion.readFile('dat.json'))
       } catch (err) {
         if (this.verbose) {
@@ -836,10 +840,13 @@ class SDK {
       await this.localdb.close()
     }
     if (swarm && this.networker) {
-      debug('closing swarm')
-      this.networker.destroy(err => {
-        if (err) throw new Error(err)
-        this.swarm = null
+      return new Promise((resolve, reject) => {
+        debug('closing swarm')
+        this.networker.destroy(err => {
+          if (err) return reject(err)
+          this.swarm = null
+          return resolve()
+        })
       })
     }
   }
