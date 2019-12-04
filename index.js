@@ -660,6 +660,9 @@ class SDK {
     )
     const { host: cKey, version: contentVersion } = parse(contentKey)
     const { host: pKey, version: profileVersion } = parse(profileKey)
+    if (!contentVersion && this.verbose) {
+      console.log('Content version is not found. Using latest version.')
+    }
     // fetch source and dest
     // 1 - try to get source from localdb
     let content
