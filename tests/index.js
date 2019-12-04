@@ -357,13 +357,13 @@ test('register - local contents', async t => {
   const contents = await p2p.listContent()
 
   const { rawJSON: profile } = profiles[0]
-  const { rawJSON: content1 } = contents[0]
+  const { rawJSON: content1, metadata: metadata1 } = contents[0]
   const authors = [profile.url]
 
   // update author on content module
   await p2p.set({ url: content1.url, authors })
 
-  await p2p.register(content1.url, profile.url)
+  await p2p.register(`${content1.url}+${metadata1.version}`, profile.url)
   const { rawJSON } = await p2p.get(profile.url)
   t.same(
     rawJSON.contents,
