@@ -17,6 +17,12 @@
     "dat",
     "communication"
   ],
+  files: [
+    "lib/*",
+    "schemas/*",
+    "codec.js",
+    "validation.js"
+  ],
   "publishConfig": {
     "access": "public"
   },
