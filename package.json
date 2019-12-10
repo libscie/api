@@ -17,7 +17,7 @@
     "dat",
     "communication"
   ],
-  files: [
+  "files": [
     "lib/*",
     "schemas/*",
     "codec.js",
