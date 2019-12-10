@@ -29,6 +29,7 @@
   "dependencies": {
     "@avro/types": "^1.0.5",
     "@geut/hyperdrive-promise": "^1.0.0",
+    "@wirelineio/hyperswarm-network-memory": "^0.2.17",
     "corestore": "^2.0.0",
     "dat-encoding": "^5.0.1",
     "dat-ignore": "^2.1.2",
