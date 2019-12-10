@@ -1,13 +1,25 @@
+const {
+  promises: { readdir }
+} = require('fs')
 const test = require('tape')
 const tempy = require('tempy')
 const SDK = require('../')
+const networkSwarm = require('@wirelineio/hyperswarm-network-memory')
 
-const createDb = () =>
-  new SDK({
-    disableSwarm: true,
-    persist: false,
+const defaultOpts = () => ({
+  swarm: false,
+  persist: false
+})
+
+const createDb = opts => {
+  const finalOpts = { ...defaultOpts(), ...opts }
+  return new SDK({
+    disableSwarm: !finalOpts.swarm,
+    persist: finalOpts.persist,
+    swarm: finalOpts.swarmFn,
     baseDir: tempy.directory()
   })
+}
 
 test('ready', async t => {
   const p2p = createDb()
@@ -371,6 +383,64 @@ test('register - local contents', async t => {
     'registration results in the addition of a dat key to the contents property of the target profile'
   )
   await p2p.destroy()
+  t.end()
+})
+
+test('seed and register', async t => {
+  const p2p = createDb({
+    swarm: true,
+    verbose: true,
+    persist: true,
+    swarmFn: networkSwarm
+  })
+  const p2p2 = createDb({
+    swarm: true,
+    verbose: true,
+    persist: true,
+    swarmFn: networkSwarm
+  })
+
+  await p2p.ready()
+  await p2p2.ready()
+
+  const sampleData = {
+    type: 'content',
+    title: 'demo',
+    description: 'lorem ipsum'
+  }
+
+  const sampleProfile = { type: 'profile', title: 'Professor X' }
+  await p2p2.init(sampleData)
+  await p2p.init(sampleProfile)
+
+  const profiles = await p2p.listProfiles()
+  const contents = await p2p2.listContent()
+
+  const { rawJSON: profile } = profiles[0]
+  const { rawJSON: content1 } = contents[0]
+  const authors = [profile.url]
+
+  // update author on content module
+  await p2p2.set({ url: content1.url, authors })
+  const { metadata: contentMetadata } = await p2p2.get(content1.url)
+  const versionedContent = `${content1.url}+${contentMetadata.version}`
+
+  await p2p2.destroy(true, false)
+  await p2p.register(versionedContent, profile.url)
+
+  const { rawJSON } = await p2p.get(profile.url)
+  t.same(
+    rawJSON.contents,
+    [content1.url],
+    'registration results in the addition of a dat key to the contents property of the target profile'
+  )
+  const dirs = await readdir(p2p.baseDir)
+  t.ok(
+    dirs.includes(versionedContent),
+    'versioned content dir created successfully'
+  )
+
+  await p2p.destroy(true, false)
   t.end()
 })
 
