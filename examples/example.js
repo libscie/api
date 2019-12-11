@@ -1,4 +1,4 @@
-const P2PCommons = require('.') // liberate science constructor function
+const P2PCommons = require('..') // liberate science constructor function
 const commons = new P2PCommons({ verbose: true })
 
 process.once('SIGINT', () => commons.destroy())

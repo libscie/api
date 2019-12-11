@@ -111,7 +111,8 @@ class SDK {
     this.disableSwarm = !!opts.disableSwarm
 
     if (!this.disableSwarm) {
-      this.networker = Swarm()
+      const swarm = opts.swarm ? opts.swarm : Swarm
+      this.networker = swarm({ announceLocalAddress: true })
       this.networker.on('error', console.error)
       debug('swarm listening...')
       this.networker.on('connection', (socket, info) => {
@@ -349,7 +350,7 @@ class SDK {
     // write dat.json
     const folderPath = join(this.baseDir, hash)
     await writeFile(join(folderPath, 'dat.json'), JSON.stringify(datJSON))
-    await dat.importFiles(archive, folderPath)
+    const { version } = await dat.importFiles(archive, folderPath)
 
     if (this.verbose) {
       // Note(dk): this kind of output can be part of the cli
@@ -362,7 +363,7 @@ class SDK {
     const metadata = {
       isWritable: archive.writable,
       lastModified: stat.mtime,
-      version: archive.version
+      version: version
     }
     await this.saveItem({
       ...metadata,
@@ -407,14 +408,19 @@ class SDK {
     let stat
     if (isWritable) {
       await writeFile(join(datJSONDir, 'dat.json'), JSON.stringify(datJSON))
-      await dat.importFiles(archive, datJSONDir)
+      const { version: lastVersion } = await dat.importFiles(
+        archive,
+        datJSONDir
+      )
+      version = lastVersion
       stat = await archive.stat('/dat.json')
+      this._seed(archive) // Note (dk): revisit this
     }
 
     await this.localdb.put(datJSON.url.toString('hex'), {
       isWritable,
       lastModified: stat ? stat.mtime : lastModified,
-      version: archive.version,
+      version: version,
       rawJSON: datJSON,
       avroType: this._getAvroType(datJSON.p2pcommons.type).name
     })
@@ -660,6 +666,9 @@ class SDK {
     )
     const { host: cKey, version: contentVersion } = parse(contentKey)
     const { host: pKey, version: profileVersion } = parse(profileKey)
+    if (!contentVersion && this.verbose) {
+      console.log('Content version is not found. Using latest version.')
+    }
     // fetch source and dest
     // 1 - try to get source from localdb
     let content
@@ -687,16 +696,8 @@ class SDK {
       debug('content version', cVersion)
       // 3 - after fetching module we still need to read the dat.json file
       try {
-        const contentVersion = await contentDat.checkout(cVersion)
-
+        const contentVersion = contentDat.checkout(cVersion)
         await contentVersion.ready()
-
-        // Note(dk): revisit this delay
-        // readfile delay, taken from  https://github.com/datproject/sdk/blob/master/promise.js#L285
-        await setTimeout(() => {
-          return Promise.resolve()
-        }, 1000)
-
         content = JSON.parse(await contentVersion.readFile('dat.json'))
       } catch (err) {
         if (this.verbose) {
@@ -725,6 +726,7 @@ class SDK {
       await profileDat.ready()
       this._seed(profileDat)
 
+      await dat.reallyReady(profileDat)
       const pVersion = profileVersion
         ? `${profileVersion}`
         : `${profileDat.version}`
@@ -733,13 +735,9 @@ class SDK {
       // 3 - after fetching module we still need to read the dat.json file
       try {
         const profileVersion = await profileDat.checkout(pVersion)
-
+        await profileVersion.ready()
         // Note(dk): revisit this delay
         // readfile delay, taken from  https://github.com/datproject/sdk/blob/master/promise.js#L285
-        await setTimeout(() => {
-          return Promise.resolve()
-        }, 1000)
-
         profile = JSON.parse(await profileVersion.readFile('dat.json'))
       } catch (err) {
         if (this.verbose) {
@@ -833,10 +831,13 @@ class SDK {
       await this.localdb.close()
     }
     if (swarm && this.networker) {
-      debug('closing swarm')
-      this.networker.destroy(err => {
-        if (err) throw new Error(err)
-        this.swarm = null
+      return new Promise((resolve, reject) => {
+        debug('closing swarm')
+        this.networker.destroy(err => {
+          if (err) return reject(err)
+          this.swarm = null
+          return resolve()
+        })
       })
     }
   }
