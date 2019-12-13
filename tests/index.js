@@ -375,11 +375,11 @@ test('register - local contents', async t => {
   // update author on content module
   await p2p.set({ url: content1.url, authors })
 
-  await p2p.register(`${content1.url}+${metadata1.version}`, profile.url)
+  await p2p.register(`${content1.url}+${metadata1.version + 1}`, profile.url)
   const { rawJSON } = await p2p.get(profile.url)
   t.same(
     rawJSON.contents,
-    [content1.url],
+    [`${content1.url}+${metadata1.version + 1}`],
     'registration results in the addition of a dat key to the contents property of the target profile'
   )
   await p2p.destroy()
@@ -426,12 +426,14 @@ test('seed and register', async t => {
   const versionedContent = `${content1.url}+${contentMetadata.version}`
 
   await p2p2.destroy(true, false)
+
+  // call register
   await p2p.register(versionedContent, profile.url)
 
   const { rawJSON } = await p2p.get(profile.url)
   t.same(
     rawJSON.contents,
-    [content1.url],
+    [versionedContent],
     'registration results in the addition of a dat key to the contents property of the target profile'
   )
   const dirs = await readdir(p2p.baseDir)
@@ -440,6 +442,16 @@ test('seed and register', async t => {
     'versioned content dir created successfully'
   )
 
+  // call register again
+  await p2p.register(versionedContent, profile.url)
+  t.same(rawJSON.contents, [versionedContent], 'register is idempotent')
+
+  const dirs2 = await readdir(p2p.baseDir)
+  t.same(
+    dirs,
+    dirs2,
+    'register is idempotent (created directories remains the same)'
+  )
   await p2p.destroy(true, false)
   t.end()
 })
