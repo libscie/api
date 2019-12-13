@@ -711,7 +711,7 @@ class SDK {
     return {
       module: this._unflatten(module),
       version,
-      versionedKey: `${mKey}+${version}`
+      versionedKey: `dat://${mKey}+${version}`
     }
   }
 

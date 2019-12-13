@@ -374,12 +374,12 @@ test('register - local contents', async t => {
 
   // update author on content module
   await p2p.set({ url: content1.url, authors })
-
-  await p2p.register(`${content1.url}+${metadata1.version + 1}`, profile.url)
+  const contentKeyVersion = `dat://${content1.url}+${metadata1.version + 1}`
+  await p2p.register(contentKeyVersion, profile.url)
   const { rawJSON } = await p2p.get(profile.url)
   t.same(
     rawJSON.contents,
-    [`${content1.url}+${metadata1.version + 1}`],
+    [contentKeyVersion],
     'registration results in the addition of a dat key to the contents property of the target profile'
   )
   await p2p.destroy()
@@ -423,28 +423,30 @@ test('seed and register', async t => {
   // update author on content module
   await p2p2.set({ url: content1.url, authors })
   const { metadata: contentMetadata } = await p2p2.get(content1.url)
-  const versionedContent = `${content1.url}+${contentMetadata.version}`
+  const contentKeyVersion = `${content1.url}+${contentMetadata.version}`
+  const contentKeyVersionPrefix = `dat://${contentKeyVersion}`
 
   await p2p2.destroy(true, false)
 
   // call register
-  await p2p.register(versionedContent, profile.url)
+  await p2p.register(contentKeyVersion, profile.url)
 
   const { rawJSON } = await p2p.get(profile.url)
   t.same(
     rawJSON.contents,
-    [versionedContent],
+    [contentKeyVersionPrefix],
     'registration results in the addition of a dat key to the contents property of the target profile'
   )
   const dirs = await readdir(p2p.baseDir)
   t.ok(
-    dirs.includes(versionedContent),
+    dirs.includes(contentKeyVersion),
     'versioned content dir created successfully'
   )
 
   // call register again
-  await p2p.register(versionedContent, profile.url)
-  t.same(rawJSON.contents, [versionedContent], 'register is idempotent')
+  await p2p.register(contentKeyVersion, profile.url)
+  const { rawJSON: rawJSON2 } = await p2p.get(profile.url)
+  t.same(rawJSON.contents, rawJSON2.contents, 'register is idempotent')
 
   const dirs2 = await readdir(p2p.baseDir)
   t.same(
