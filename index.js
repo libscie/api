@@ -105,14 +105,15 @@ class SDK {
     this.storage = opts.storage || undefined
     this.verbose = opts.verbose || false
     this.dbPath = opts.dbPath || this.baseDir
-    // start hyperswarm
+
     this.drives = new Map()
 
+    // start hyperswarm
     this.disableSwarm = !!opts.disableSwarm
-
+    this.swarmFn =
+      opts.swarm && typeof opts.swarm === 'function' ? opts.swarm : Swarm
     if (!this.disableSwarm) {
-      const swarm = opts.swarm ? opts.swarm : Swarm
-      this.networker = swarm({ announceLocalAddress: true })
+      this.networker = this.swarmFn()
       this.networker.on('error', console.error)
       debug('swarm listening...')
       this.networker.on('connection', (socket, info) => {
@@ -124,10 +125,9 @@ class SDK {
                 `No drive found for key ${DatEncoding.encode(discoveryKey)}`
               )
             }
-
-            return
+          } else {
+            drive.replicate({ live: true, stream })
           }
-          drive.replicate({ live: true, stream })
         })
       })
     }
@@ -176,15 +176,20 @@ class SDK {
     return { ...rest, ...p2pcommons }
   }
 
-  _seed (archive) {
+  _seed (archive, joinOpts = {}) {
     if (!this.disableSwarm) {
       const dkey = DatEncoding.encode(archive.discoveryKey)
       this.drives.set(dkey, archive)
 
       debug(`swarm seeding ${dkey}`)
-      this.networker.join(archive.discoveryKey, {
+      const defaultJoinOpts = {
         announce: true,
         lookup: true
+      }
+
+      this.networker.join(archive.discoveryKey, {
+        ...defaultJoinOpts,
+        ...joinOpts
       })
 
       archive.once('close', () => {
@@ -328,10 +333,6 @@ class SDK {
 
     const hash = archive.key.toString('hex')
 
-    if (!this.disableSwarm) {
-      this._seed(archive)
-    }
-
     // create dat.json metadata
     const datJSON = createDatJSON({
       type,
@@ -351,7 +352,9 @@ class SDK {
     const folderPath = join(this.baseDir, hash)
     await writeFile(join(folderPath, 'dat.json'), JSON.stringify(datJSON))
     const { version } = await dat.importFiles(archive, folderPath)
-
+    if (!this.disableSwarm) {
+      this._seed(archive)
+    }
     if (this.verbose) {
       // Note(dk): this kind of output can be part of the cli
       console.log(`Initialized new ${datJSON.p2pcommons.type}, dat://${hash}`)
@@ -361,6 +364,7 @@ class SDK {
 
     const stat = await archive.stat('dat.json')
     const metadata = {
+      // start hyperswarm
       isWritable: archive.writable,
       lastModified: stat.mtime,
       version: version
@@ -647,6 +651,70 @@ class SDK {
     return open(main)
   }
 
+  async _getModule (mKey, mVersion) {
+    // get module from localdb, if absent will query it from the swarm
+    // this fn will also call _seed() after retrieving the module from the swarm
+    let module
+    let version
+    try {
+      // 1 - try to get content from localdb
+      debug('register: Fetching module from localdb')
+      const { rawJSON, metadata } = await this.get(DatEncoding.encode(mKey))
+      module = rawJSON
+      version = metadata.version
+    } catch (_) {
+      // 2 - if no module is found on localdb, then fetch from hyperdrive
+      // something like:
+      debug(
+        'register: Module was not found on localdb.\nFetching from swarm...'
+      )
+
+      const _getDat = key => {
+        const archive = this.drives.get(crypto.discoveryKey(key))
+        if (!archive) {
+          const { drive } = dat.open(key) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
+          return drive
+        }
+        return archive
+      }
+      const moduleDat = _getDat(mKey)
+
+      debug('register: Found archive')
+      debug('register: Waiting for archive ready')
+
+      await moduleDat.ready()
+
+      this._seed(moduleDat)
+
+      version = mVersion || moduleDat.version
+      debug('register: Module version', version)
+      // 3 - after fetching module we still need to read the dat.json file
+      try {
+        const moduleVersion = moduleDat.checkout(version)
+        await moduleVersion.ready()
+        debug('register: Reading modules dat.json...')
+        module = JSON.parse(await moduleVersion.readFile('dat.json'))
+      } catch (err) {
+        if (this.verbose) {
+          console.error(err)
+        }
+        throw new Error('register: Problems fetching external module')
+      }
+      // 4 - clone new module (move into its own method)
+      // modulePath = datkey || datkey+version
+      const modulePath = `${mKey}+${version}`
+      const folderPath = join(this.baseDir, modulePath)
+      await ensureDir(folderPath)
+      await writeFile(join(folderPath, 'dat.json'), JSON.stringify(module))
+    }
+
+    return {
+      module: this._unflatten(module),
+      version,
+      versionedKey: `${mKey}+${version}`
+    }
+  }
+
   async register (contentKey, profileKey) {
     debug(`register contentKey: ${contentKey}`)
     debug(`register profileKey: ${profileKey}`)
@@ -669,112 +737,36 @@ class SDK {
     if (!contentVersion && this.verbose) {
       console.log('Content version is not found. Using latest version.')
     }
-    // fetch source and dest
-    // 1 - try to get source from localdb
-    let content
-    try {
-      debug('register: fetching content module from localdb')
-      const { rawJSON } = await this.get(DatEncoding.encode(cKey))
-      content = rawJSON
-    } catch (_) {
-      // 2 - if no module is found on localdb, then fetch from hyperdrive
-      // something like:
-      debug(
-        'register: content module was not found on localdb.\nFetching from swarm...'
-      )
+    // fetch content and profile
+    const {
+      module: content,
+      versionedKey: cKeyVersion
+    } = await this._getModule(cKey, contentVersion)
 
-      const { drive: contentDat } = dat.open(cKey) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
-      debug('register: Found archive')
-      debug('register: waiting for archive ready')
+    const { module: profile } = await this._getModule(pKey, profileVersion)
 
-      await contentDat.ready()
-
-      this._seed(contentDat)
-      await dat.reallyReady(contentDat)
-
-      const cVersion = contentVersion || contentDat.version
-      debug('content version', cVersion)
-      // 3 - after fetching module we still need to read the dat.json file
-      try {
-        const contentVersion = contentDat.checkout(cVersion)
-        await contentVersion.ready()
-        content = JSON.parse(await contentVersion.readFile('dat.json'))
-      } catch (err) {
-        if (this.verbose) {
-          console.error(err)
-        }
-        throw new Error('Problems fetching external module')
-      }
-      // 4 - clone new module (move into its own method)
-      // contentPath = datkey || datkey+version
-      const contentPath = `${cKey}+${cVersion}`
-      const folderPath = join(this.baseDir, contentPath)
-      await ensureDir(folderPath)
-      await writeFile(join(folderPath, 'dat.json'), JSON.stringify(content))
-    }
-    const contentUnflatten = this._unflatten(content)
-
-    // 1 - try to get dest from localdb
-    let profile
-    try {
-      const { rawJSON } = await this.get(DatEncoding.encode(pKey))
-      profile = rawJSON
-    } catch (_) {
-      // 2 - if no module is found on localdb, then fetch from hyperdrive
-      // something like:
-      const { drive: profileDat } = dat.open(pKey) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
-      await profileDat.ready()
-      this._seed(profileDat)
-
-      await dat.reallyReady(profileDat)
-      const pVersion = profileVersion
-        ? `${profileVersion}`
-        : `${profileDat.version}`
-
-      debug('profile version', pVersion)
-      // 3 - after fetching module we still need to read the dat.json file
-      try {
-        const profileVersion = await profileDat.checkout(pVersion)
-        await profileVersion.ready()
-        // Note(dk): revisit this delay
-        // readfile delay, taken from  https://github.com/datproject/sdk/blob/master/promise.js#L285
-        profile = JSON.parse(await profileVersion.readFile('dat.json'))
-      } catch (err) {
-        if (this.verbose) {
-          console.error(err)
-        }
-        throw new Error('Problems fetching external module')
-      }
-      // 4 - clone the new module
-      const profilePath = `${pKey}+${pVersion}`
-      const folderPath = join(this.baseDir, profilePath)
-      await ensureDir(folderPath)
-      await writeFile(join(folderPath, 'dat.json'), JSON.stringify(profile))
-    }
-
-    const profileUnflatten = this._unflatten(profile)
     // TODO(dk): consider add custom errors for register and verification
     assert(
-      contentUnflatten.p2pcommons.type === 'content',
+      content.p2pcommons.type === 'content',
       ValidationError,
       'content',
-      contentUnflatten.p2pcommons.type,
+      content.p2pcommons.type,
       'type'
     )
     assert(
-      profileUnflatten.p2pcommons.type === 'profile',
+      profile.p2pcommons.type === 'profile',
       ValidationError,
       'profile',
-      profileUnflatten.p2pcommons.type,
+      profile.p2pcommons.type,
       'type'
     )
-    const profileType = this._getAvroType(profileUnflatten.p2pcommons.type)
-    const profileValid = profileType.isValid(profileUnflatten)
+    const profileType = this._getAvroType(profile.p2pcommons.type)
+    const profileValid = profileType.isValid(profile)
     if (!profileValid) {
       throw new Error('Invalid profile module')
     }
-    const contentType = this._getAvroType(contentUnflatten.p2pcommons.type)
-    const contentValid = contentType.isValid(contentUnflatten)
+    const contentType = this._getAvroType(content.p2pcommons.type)
+    const contentValid = contentType.isValid(content)
     if (!contentValid) {
       throw new Error('Invalid content module')
     }
@@ -795,13 +787,20 @@ class SDK {
     */
 
     // register new content
-    profileUnflatten.p2pcommons.contents.push(content.url)
+    if (profile.p2pcommons.contents.includes(cKeyVersion)) {
+      if (this.verbose) {
+        console.log('register: Content was already registered')
+      }
+      return
+    }
+
+    profile.p2pcommons.contents.push(cKeyVersion)
     // update profile
     await this.set({
-      url: profileUnflatten.url,
-      contents: profileUnflatten.p2pcommons.contents
+      url: profile.url,
+      contents: profile.p2pcommons.contents
     })
-    debug('register: successful')
+    debug('register: profile updated successfully')
   }
 
   async verify (source) {
