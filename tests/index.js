@@ -35,7 +35,10 @@ test('init: create content module', async t => {
     subtype: 'Theory',
     title: 'demo',
     description: 'lorem ipsum',
-    main: 'file.txt'
+    main: 'file.txt',
+    authors: [
+      'dat://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860e9d'
+    ]
   }
   const { rawJSON: output, metadata } = await p2p.init(init)
 
@@ -50,7 +53,7 @@ test('init: create content module', async t => {
   )
   t.same(output.links.spec[0].href, 'https://p2pcommons.com/specs/module/0.2.0')
   t.same(output.main, init.main)
-  t.same(output.authors, [])
+  t.same(output.authors, init.authors)
   t.same(output.parents, [])
   t.same(typeof metadata, 'object')
   t.ok(metadata.version)
