@@ -14,10 +14,10 @@ const parse = require('parse-dat-url')
 const DatEncoding = require('dat-encoding')
 const debug = require('debug')('p2pcommons')
 const deepMerge = require('deepmerge')
-const dat = require('./lib/dat-helper')
 const Swarm = require('hyperswarm')
 const pump = require('pump')
 const protocol = require('hypercore-protocol')
+const dat = require('./lib/dat-helper')
 const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
@@ -27,39 +27,7 @@ const {
   ValidationError,
   MissingParam
 } = require('./lib/errors')
-
-// helper dat.json object mould
-const createDatJSON = ({
-  title,
-  description,
-  url,
-  license = [
-    {
-      href: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
-    }
-  ],
-  spec = [{ href: 'https://p2pcommons.com/specs/module/0.2.0' }],
-  ...p2pcommons
-}) => {
-  const mould = {
-    title,
-    description,
-    url,
-    links: { license, spec },
-    p2pcommons
-  }
-  // TODO(dk): validate links (license, spec)
-
-  if (mould.p2pcommons.type === 'profile') {
-    mould.p2pcommons.follows = []
-    mould.p2pcommons.contents = []
-  } else {
-    mould.p2pcommons.authors = []
-    mould.p2pcommons.parents = []
-  }
-
-  return mould
-}
+const { createDatJSON } = require('./lib/utils')
 
 // helper assert fn
 const assertValid = (type, val) => {
@@ -281,6 +249,10 @@ class SDK {
     subtype = '',
     description = '',
     main = '',
+    authors = [],
+    contents = [],
+    follows = [],
+    parents = [],
     datOpts = { datStorage: {} }
   }) {
     // follow module spec: https://github.com/p2pcommons/specs/pull/1/files?short_path=2d471ef#diff-2d471ef4e3a452b579a3367eb33ccfb9
@@ -340,6 +312,10 @@ class SDK {
       subtype,
       description,
       main,
+      authors,
+      parents,
+      follows,
+      contents,
       url: hash
     })
 
