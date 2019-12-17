@@ -14,7 +14,8 @@ const parse = require('parse-dat-url')
 const DatEncoding = require('dat-encoding')
 const debug = require('debug')('p2pcommons')
 const deepMerge = require('deepmerge')
-const Swarm = require('hyperswarm')
+// const Swarm = require('hyperswarm')
+const Swarm = require('./lib/swarm')
 const pump = require('pump')
 const protocol = require('hypercore-protocol')
 const dat = require('./lib/dat-helper')
@@ -75,29 +76,36 @@ class SDK {
     this.dbPath = opts.dbPath || this.baseDir
 
     this.drives = new Map()
+    this.stores = new Map()
 
     // start hyperswarm
     this.disableSwarm = !!opts.disableSwarm
     this.swarmFn =
       opts.swarm && typeof opts.swarm === 'function' ? opts.swarm : Swarm
+
     if (!this.disableSwarm) {
       this.networker = this.swarmFn()
       this.networker.on('error', console.error)
-      debug('swarm listening...')
-      this.networker.on('connection', (socket, info) => {
-        this._replicate(socket, info, (stream, discoveryKey) => {
-          const drive = this.drives.get(DatEncoding.encode(discoveryKey))
-          if (!drive) {
-            if (this.verbose) {
-              console.error(
-                `No drive found for key ${DatEncoding.encode(discoveryKey)}`
-              )
+      if (opts.swarm) {
+        this.networker.on('connection', (socket, info) => {
+          this._replicate(socket, info, (stream, discoveryKey) => {
+            const drive = this.drives.get(DatEncoding.encode(discoveryKey))
+            if (!drive) {
+              if (this.verbose) {
+                console.error(
+                  `No drive found for key ${DatEncoding.encode(discoveryKey)}`
+                )
+              }
+            } else {
+              drive.replicate({ live: true, stream })
             }
-          } else {
-            drive.replicate({ live: true, stream })
-          }
+          })
         })
-      })
+      } else {
+        this.networker.listen()
+      }
+
+      debug('swarm listening...')
     }
   }
 
@@ -155,16 +163,24 @@ class SDK {
         lookup: true
       }
 
-      this.networker.join(archive.discoveryKey, {
-        ...defaultJoinOpts,
-        ...joinOpts
-      })
+      if (typeof this.networker.join === 'function') {
+        this.networker.join(archive.discoveryKey, {
+          ...defaultJoinOpts,
+          ...joinOpts
+        })
+      } else {
+        this.networker.seed(archive.discoveryKey)
+      }
 
       archive.once('close', () => {
         if (this.verbose) {
           console.log(`closing archive ${dkey}...`)
         }
-        this.networker.leave(archive.discoveryKey)
+        if (typeof this.networker.leave === 'function') {
+          this.networker.leave(archive.discoveryKey)
+        } else {
+          this.networker.unseed(archive.discoveryKey)
+        }
       })
     }
   }
@@ -290,7 +306,7 @@ class SDK {
     debug(`init storageLocation ${datOpts.datStorage.storageLocation}`)
 
     await ensureDir(datOpts.datStorage.storageLocation)
-    const { drive: archive } = dat.create(
+    const { drive: archive, driveStorage } = dat.create(
       datOpts.datStorage.storageLocation,
       publicKey,
       {
@@ -303,6 +319,10 @@ class SDK {
       }
     )
     await archive.ready()
+    this.networker.addStore(
+      crypto.discoveryKey(archive.key).toString('hex'),
+      driveStorage
+    )
 
     // create dat.json metadata
     const datJSON = createDatJSON({
@@ -382,12 +402,16 @@ class SDK {
     const storageOpts = {
       storageLocation: datJSONDir
     }
-    const { drive: archive } = dat.open(
+    const { drive: archive, driveStorage } = dat.open(
       DatEncoding.decode(datJSON.url),
       undefined,
       storageOpts
     )
     await archive.ready()
+    this.networker.addStore(
+      crypto.discoveryKey(archive.key).toString('hex'),
+      driveStorage
+    )
 
     let stat
     if (isWritable) {
@@ -398,7 +422,7 @@ class SDK {
       )
       version = lastVersion
       stat = await archive.stat('/dat.json')
-      this._seed(archive) // Note (dk): revisit this
+      this._seed(archive)
     }
 
     await this.localdb.put(DatEncoding.encode(datJSON.url), {
@@ -654,7 +678,11 @@ class SDK {
         const keyBuffer = DatEncoding.decode(key)
         const archive = this.drives.get(crypto.discoveryKey(keyBuffer))
         if (!archive) {
-          const { drive } = dat.open(keyBuffer) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
+          const { drive, driveStorage } = dat.open(keyBuffer) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
+          this.networker.addStore(
+            crypto.discoveryKey(key).toString('hex'),
+            driveStorage
+          )
           return drive
         }
         return archive
@@ -813,6 +841,7 @@ class SDK {
       await this.localdb.close()
     }
     if (swarm && this.networker) {
+      /*
       return new Promise((resolve, reject) => {
         debug('closing swarm')
         this.networker.destroy(err => {
@@ -821,6 +850,8 @@ class SDK {
           return resolve()
         })
       })
+      */
+      await this.networker.close()
     }
   }
 }
