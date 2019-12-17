@@ -118,7 +118,7 @@ test('get: retrieve a value from the sdk', async t => {
     description: 'lorem ipsum'
   }
   const { rawJSON: metadata } = await p2p.init(sampleData)
-  const key = metadata.url.toString('hex')
+  const key = metadata.url
 
   const { rawJSON } = await p2p.get(key)
 
@@ -143,8 +143,8 @@ test('set: update modules', async t => {
   }
   const { rawJSON: contentMeta } = await p2p.init(sampleContent)
   const { rawJSON: profileMeta } = await p2p.init(sampleProfile)
-  const contentKey = contentMeta.url.toString('hex')
-  const profileKey = profileMeta.url.toString('hex')
+  const contentKey = contentMeta.url
+  const profileKey = profileMeta.url
 
   const contentUpdate = { description: 'A more accurate description' }
   const profileUpdate = {
@@ -171,7 +171,7 @@ test('set: should throw InvalidKeyError with invalid update', async t => {
     description: 'lorem ipsum'
   }
   const { rawJSON: metadata } = await p2p.init(sampleData)
-  const key = metadata.url.toString('hex')
+  const key = metadata.url
 
   const license = 'anewkey123456'
 
@@ -195,7 +195,7 @@ test('set: update should fail with bad data', async t => {
     description: 'lorem ipsum'
   }
   const { rawJSON: metadata } = await p2p.init(sampleData)
-  const key = metadata.url.toString('hex')
+  const key = metadata.url
 
   try {
     await p2p.set({ url: key, title: '' })
@@ -220,7 +220,7 @@ test('update: check version change', async t => {
     description: 'lorem ipsum'
   }
   const { rawJSON: metadata } = await p2p.init(sampleData)
-  const key = metadata.url.toString('hex')
+  const key = metadata.url
 
   const { metadata: metadata1 } = await p2p.get(key, false)
 
@@ -377,7 +377,7 @@ test('register - local contents', async t => {
 
   // update author on content module
   await p2p.set({ url: content1.url, authors })
-  const contentKeyVersion = `dat://${content1.url}+${metadata1.version + 1}`
+  const contentKeyVersion = `${content1.url}+${metadata1.version + 1}`
   await p2p.register(contentKeyVersion, profile.url)
   const { rawJSON } = await p2p.get(profile.url)
   t.same(
@@ -426,7 +426,9 @@ test('seed and register', async t => {
   // update author on content module
   await p2p2.set({ url: content1.url, authors })
   const { metadata: contentMetadata } = await p2p2.get(content1.url)
-  const contentKeyVersion = `${content1.url}+${contentMetadata.version}`
+  const contentKeyVersion = `${content1.url.replace(/dat:\/\//, '')}+${
+    contentMetadata.version
+  }`
   const contentKeyVersionPrefix = `dat://${contentKeyVersion}`
 
   await p2p2.destroy(true, false)
