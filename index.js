@@ -280,12 +280,13 @@ class SDK {
     debug(`init ${type}`)
 
     const { publicKey, secretKey } = crypto.keyPair()
-    debug(`init pk ${publicKey.toString('hex')}`)
+    const publicKeyString = DatEncoding.encode(publicKey)
+    debug(`init pk ${publicKeyString}`)
 
     // NOTE(dk): check out datStorage options: https://github.com/RangerMauve/universal-dat-storage#api
     datOpts.datStorage.storageLocation = datOpts.datStorage.storageLocation
       ? datOpts.datStorage.storageLocation
-      : join(this.baseDir, publicKey.toString('hex'))
+      : join(this.baseDir, publicKeyString)
     debug(`init storageLocation ${datOpts.datStorage.storageLocation}`)
 
     await ensureDir(datOpts.datStorage.storageLocation)
@@ -303,8 +304,6 @@ class SDK {
     )
     await archive.ready()
 
-    const hash = archive.key.toString('hex')
-
     // create dat.json metadata
     const datJSON = createDatJSON({
       type,
@@ -316,7 +315,7 @@ class SDK {
       parents,
       follows,
       contents,
-      url: hash
+      url: `dat://${publicKeyString}`
     })
 
     // Note(dk): validate earlier
@@ -325,7 +324,7 @@ class SDK {
     assertValid(avroType, datJSON)
 
     // write dat.json
-    const folderPath = join(this.baseDir, hash)
+    const folderPath = join(this.baseDir, publicKeyString)
     await writeFile(join(folderPath, 'dat.json'), JSON.stringify(datJSON))
     const { version } = await dat.importFiles(archive, folderPath)
     if (!this.disableSwarm) {
@@ -333,7 +332,9 @@ class SDK {
     }
     if (this.verbose) {
       // Note(dk): this kind of output can be part of the cli
-      console.log(`Initialized new ${datJSON.p2pcommons.type}, dat://${hash}`)
+      console.log(
+        `Initialized new ${datJSON.p2pcommons.type}, dat://${publicKeyString}`
+      )
     }
 
     debug('init datJSON', datJSON)
@@ -351,7 +352,9 @@ class SDK {
     })
 
     if (this.verbose) {
-      console.log(`Saved new ${datJSON.p2pcommons.type}, with key: ${hash}`)
+      console.log(
+        `Saved new ${datJSON.p2pcommons.type}, with key: ${publicKeyString}`
+      )
     }
     // Note(dk): flatten p2pcommons obj in order to have a more symmetrical API
     return { rawJSON: this._flatten(datJSON), metadata }
@@ -374,12 +377,13 @@ class SDK {
       'datJSON'
     )
 
-    const datJSONDir = join(this.baseDir, datJSON.url.toString('hex'))
+    const keyString = DatEncoding.encode(datJSON.url)
+    const datJSONDir = join(this.baseDir, keyString)
     const storageOpts = {
-      storageLocation: join(this.baseDir, datJSON.url.toString('hex'))
+      storageLocation: datJSONDir
     }
     const { drive: archive } = dat.open(
-      datJSON.url.toString('hex'),
+      DatEncoding.decode(datJSON.url),
       undefined,
       storageOpts
     )
@@ -397,7 +401,7 @@ class SDK {
       this._seed(archive) // Note (dk): revisit this
     }
 
-    await this.localdb.put(datJSON.url.toString('hex'), {
+    await this.localdb.put(DatEncoding.encode(datJSON.url), {
       isWritable,
       lastModified: stat ? stat.mtime : lastModified,
       version: version,
@@ -646,13 +650,16 @@ class SDK {
       )
 
       const _getDat = key => {
-        const archive = this.drives.get(crypto.discoveryKey(key))
+        debugger
+        const keyBuffer = DatEncoding.decode(key)
+        const archive = this.drives.get(crypto.discoveryKey(keyBuffer))
         if (!archive) {
-          const { drive } = dat.open(key) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
+          const { drive } = dat.open(keyBuffer) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
           return drive
         }
         return archive
       }
+
       const moduleDat = _getDat(mKey)
 
       debug('register: Found archive')
