@@ -84,26 +84,27 @@ class SDK {
       opts.swarm && typeof opts.swarm === 'function' ? opts.swarm : Swarm
 
     if (!this.disableSwarm) {
-      this.networker = this.swarmFn()
+      const getCorestore = dkeyString => this.stores.get(dkeyString)
+
+      this.networker = this.swarmFn(getCorestore)
       this.networker.on('error', console.error)
-      if (opts.swarm) {
-        this.networker.on('connection', (socket, info) => {
-          this._replicate(socket, info, (stream, discoveryKey) => {
-            const drive = this.drives.get(DatEncoding.encode(discoveryKey))
-            if (!drive) {
-              if (this.verbose) {
-                console.error(
-                  `No drive found for key ${DatEncoding.encode(discoveryKey)}`
-                )
-              }
-            } else {
-              drive.replicate({ live: true, stream })
+      /*
+      this.networker.on('connection', (socket, info) => {
+        this._replicate(socket, info, (stream, discoveryKey) => {
+          const drive = this.drives.get(DatEncoding.encode(discoveryKey))
+          if (!drive) {
+            if (this.verbose) {
+              console.error(
+                `No drive found for key ${DatEncoding.encode(discoveryKey)}`
+              )
             }
-          })
+          } else {
+            drive.replicate({ live: true, stream })
+          }
         })
-      } else {
-        this.networker.listen()
-      }
+      })
+      */
+      this.networker.listen()
 
       debug('swarm listening...')
     }
@@ -158,19 +159,18 @@ class SDK {
       this.drives.set(dkey, archive)
 
       debug(`swarm seeding ${dkey}`)
+      /*
       const defaultJoinOpts = {
         announce: true,
         lookup: true
       }
 
-      if (typeof this.networker.join === 'function') {
-        this.networker.join(archive.discoveryKey, {
-          ...defaultJoinOpts,
-          ...joinOpts
-        })
-      } else {
-        this.networker.seed(archive.discoveryKey)
-      }
+      this.networker.join(archive.discoveryKey, {
+        ...defaultJoinOpts,
+        ...joinOpts
+      })
+      */
+      this.networker.seed(archive.discoveryKey)
 
       archive.once('close', () => {
         if (this.verbose) {
@@ -306,23 +306,26 @@ class SDK {
     debug(`init storageLocation ${datOpts.datStorage.storageLocation}`)
 
     await ensureDir(datOpts.datStorage.storageLocation)
-    const { drive: archive, driveStorage } = dat.create(
-      datOpts.datStorage.storageLocation,
-      publicKey,
-      {
-        persist: this.persist,
-        storageFn: this.storage,
-        hyperdrive: {
-          secretKey
-        },
-        storageOpts: { ...datOpts.datStorage }
-      }
-    )
+
+    console.log('calling dat create')
+    const { drive: archive, driveStorage } = await dat.create(publicKey, {
+      persist: this.persist,
+      storageFn: this.storage,
+      hyperdrive: {},
+      corestoreOpts: {
+        keyPair: { publicKey, secretKey }
+      },
+      storageOpts: { ...datOpts.datStorage }
+    })
+
     await archive.ready()
-    this.networker.addStore(
-      crypto.discoveryKey(archive.key).toString('hex'),
-      driveStorage
-    )
+
+    if (!this.disableSwarm) {
+      this.stores.set(
+        crypto.discoveryKey(archive.key).toString('hex'),
+        driveStorage
+      )
+    }
 
     // create dat.json metadata
     const datJSON = createDatJSON({
@@ -346,10 +349,13 @@ class SDK {
     // write dat.json
     const folderPath = join(this.baseDir, publicKeyString)
     await writeFile(join(folderPath, 'dat.json'), JSON.stringify(datJSON))
-    const { version } = await dat.importFiles(archive, folderPath)
+
+    await dat.importFiles(archive, folderPath)
+
     if (!this.disableSwarm) {
       this._seed(archive)
     }
+
     if (this.verbose) {
       // Note(dk): this kind of output can be part of the cli
       console.log(
@@ -364,7 +370,7 @@ class SDK {
       // start hyperswarm
       isWritable: archive.writable,
       lastModified: stat.mtime,
-      version: version
+      version: archive.version
     }
     await this.saveItem({
       ...metadata,
@@ -402,24 +408,33 @@ class SDK {
     const storageOpts = {
       storageLocation: datJSONDir
     }
-    const { drive: archive, driveStorage } = dat.open(
+    const { drive: archive, driveStorage } = await dat.open(
       DatEncoding.decode(datJSON.url),
       undefined,
       storageOpts
     )
+
     await archive.ready()
-    this.networker.addStore(
-      crypto.discoveryKey(archive.key).toString('hex'),
-      driveStorage
-    )
+
+    if (!this.disableSwarm) {
+      this.stores.set(DatEncoding.encode(archive.discoveryKey), driveStorage)
+    }
 
     let stat
     if (isWritable) {
       await writeFile(join(datJSONDir, 'dat.json'), JSON.stringify(datJSON))
+      /*
       const { version: lastVersion } = await dat.importFiles(
         archive,
         datJSONDir
       )
+      */
+      const out = await archive.readFile('dat.json', 'utf-8')
+      console.log({ out })
+
+      await archive.writeFile('dat.json', JSON.stringify(datJSON))
+
+      console.log('HELL YEAH BABY')
       version = lastVersion
       stat = await archive.stat('/dat.json')
       this._seed(archive)
@@ -673,22 +688,24 @@ class SDK {
         'register: Module was not found on localdb.\nFetching from swarm...'
       )
 
-      const _getDat = key => {
-        debugger
+      const _getDat = async key => {
         const keyBuffer = DatEncoding.decode(key)
         const archive = this.drives.get(crypto.discoveryKey(keyBuffer))
         if (!archive) {
-          const { drive, driveStorage } = dat.open(keyBuffer) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
-          this.networker.addStore(
-            crypto.discoveryKey(key).toString('hex'),
-            driveStorage
-          )
+          const { drive, driveStorage } = await dat.open(keyBuffer) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
+          if (!this.disableSwarm) {
+            this.stores.set(
+              crypto.discoveryKey(key).toString('hex'),
+              driveStorage
+            )
+          }
+
           return drive
         }
         return archive
       }
 
-      const moduleDat = _getDat(mKey)
+      const moduleDat = await _getDat(mKey)
 
       debug('register: Found archive')
       debug('register: Waiting for archive ready')
