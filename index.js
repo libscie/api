@@ -14,7 +14,6 @@ const parse = require('parse-dat-url')
 const DatEncoding = require('dat-encoding')
 const debug = require('debug')('p2pcommons')
 const deepMerge = require('deepmerge')
-// const Swarm = require('hyperswarm')
 const Swarm = require('./lib/swarm')
 const pump = require('pump')
 const protocol = require('hypercore-protocol')
@@ -55,9 +54,16 @@ const assertValid = (type, val) => {
   }
 }
 
+const DEFAULT_SDK_OPTS = {
+  persist: true,
+  storage: undefined,
+  versose: false
+}
+
 class SDK {
   constructor (opts = {}) {
     debug('constructor')
+    const finalOpts = { ...DEFAULT_SDK_OPTS, ...opts }
     this.platform = platform()
     // NOTE(dk): consider switch to envPaths usage
     this.home =
@@ -66,48 +72,32 @@ class SDK {
       homedir() ||
       tmpdir()
     this.windows = this.platform === 'win32'
-    opts.baseDir = opts.baseDir || '.p2pcommons'
-    this.baseDir = isAbsolute(opts.baseDir)
-      ? opts.baseDir
-      : join(this.home, opts.baseDir)
-    this.persist = opts.persist || true
-    this.storage = opts.storage || undefined
-    this.verbose = opts.verbose || false
-    this.dbPath = opts.dbPath || this.baseDir
+    finalOpts.baseDir = finalOpts.baseDir || '.p2pcommons'
+    this.baseDir = isAbsolute(finalOpts.baseDir)
+      ? finalOpts.baseDir
+      : join(this.home, finalOpts.baseDir)
+    this.persist = finalOpts.persist
+    this.storage = finalOpts.storage
+    this.verbose = finalOpts.verbose
+    this.dbPath = finalOpts.dbPath || this.baseDir
 
     this.drives = new Map()
-    this.stores = new Map()
+    this.stores = new Map() // deprecated
 
     // start hyperswarm
-    this.disableSwarm = !!opts.disableSwarm
+    this.disableSwarm = !!finalOpts.disableSwarm
     this.swarmFn =
-      opts.swarm && typeof opts.swarm === 'function' ? opts.swarm : Swarm
-
-    if (!this.disableSwarm) {
-      const getCorestore = dkeyString => this.stores.get(dkeyString)
-
-      this.networker = this.swarmFn(getCorestore)
-      this.networker.on('error', console.error)
-      /*
-      this.networker.on('connection', (socket, info) => {
-        this._replicate(socket, info, (stream, discoveryKey) => {
-          const drive = this.drives.get(DatEncoding.encode(discoveryKey))
-          if (!drive) {
-            if (this.verbose) {
-              console.error(
-                `No drive found for key ${DatEncoding.encode(discoveryKey)}`
-              )
-            }
-          } else {
-            drive.replicate({ live: true, stream })
-          }
-        })
-      })
-      */
-      this.networker.listen()
-
-      debug('swarm listening...')
-    }
+      finalOpts.swarm && typeof finalOpts.swarm === 'function'
+        ? finalOpts.swarm
+        : Swarm
+    // debug constructor
+    debug(`platform: ${this.platform}`)
+    debug(`Is windows? ${!!this.windows}`)
+    debug(`home: ${this.home}`)
+    debug(`baseDir: ${this.baseDir}`)
+    debug(`dbPath: ${this.dbPath}`)
+    debug(`persist drives? ${!!this.persist}`)
+    debug(`swarm enabled? ${!this.disableSwarm}`)
   }
 
   _replicate (socket, info, handle) {
@@ -159,83 +149,71 @@ class SDK {
       this.drives.set(dkey, archive)
 
       debug(`swarm seeding ${dkey}`)
-      /*
       const defaultJoinOpts = {
         announce: true,
         lookup: true
       }
 
-      this.networker.join(archive.discoveryKey, {
+      this.networker.seed(archive.discoveryKey, {
         ...defaultJoinOpts,
         ...joinOpts
       })
-      */
-      this.networker.seed(archive.discoveryKey)
 
       archive.once('close', () => {
-        if (this.verbose) {
-          console.log(`closing archive ${dkey}...`)
-        }
-        if (typeof this.networker.leave === 'function') {
-          this.networker.leave(archive.discoveryKey)
-        } else {
-          this.networker.unseed(archive.discoveryKey)
-        }
+        debug(`closing archive ${dkey}...`)
+        this.networker.unseed(archive.discoveryKey)
       })
     }
   }
 
-  async ready () {
-    return Promise.all([
-      ensureDir(this.dbPath),
-      new Promise((resolve, reject) => {
-        // start local db
-        const registry = {}
-        this.contentType = Type.forSchema(ContentSchema, {
-          registry,
-          logicalTypes: {
-            'required-string': ValidationTypes.RequiredString,
-            'dat-url': ValidationTypes.DatUrl,
-            'dat-versioned-url': ValidationTypes.DatUrlVersion
+  async startdb () {
+    return new Promise((resolve, reject) => {
+      // start local db
+      const registry = {}
+      this.contentType = Type.forSchema(ContentSchema, {
+        registry,
+        logicalTypes: {
+          'required-string': ValidationTypes.RequiredString,
+          'dat-url': ValidationTypes.DatUrl,
+          'dat-versioned-url': ValidationTypes.DatUrlVersion
+        }
+      })
+      this.profileType = Type.forSchema(ProfileSchema, {
+        registry,
+        logicalTypes: {
+          'required-string': ValidationTypes.RequiredString,
+          'dat-url': ValidationTypes.DatUrl,
+          'dat-versioned-url': ValidationTypes.DatUrlVersion
+        }
+      })
+      const codec = new Codec(registry)
+      level(join(this.dbPath, 'db'), { valueEncoding: codec }, (err, db) => {
+        if (err instanceof level.errors.OpenError) {
+          if (this.verbose) {
+            console.error('failed to open database')
           }
-        })
-        this.profileType = Type.forSchema(ProfileSchema, {
-          registry,
-          logicalTypes: {
-            'required-string': ValidationTypes.RequiredString,
-            'dat-url': ValidationTypes.DatUrl,
-            'dat-versioned-url': ValidationTypes.DatUrlVersion
-          }
-        })
-        const codec = new Codec(registry)
-        debug('ready dbpath', this.dbPath)
-        level(join(this.dbPath, 'db'), { valueEncoding: codec }, (err, db) => {
-          if (err instanceof level.errors.OpenError) {
-            if (this.verbose) {
-              console.error('failed to open database')
-            }
-            return reject(err)
-          }
-          this.db = db
-          // create partitions - required by level-auto-index
-          this.localdb = sub(this.db, 'localdb', { valueEncoding: codec })
-          // create index
-          this.idx = {
-            title: sub(this.db, 'title'),
-            description: sub(this.db, 'description')
-          }
-          // create filters
-          this.by = {}
-          this.by.title = AutoIndex(this.localdb, this.idx.title, container =>
-            container.rawJSON.title.toLowerCase()
-          )
-          this.by.description = AutoIndex(
-            this.localdb,
-            this.idx.description,
-            container => container.rawJSON.description.toLowerCase()
-          )
+          return reject(err)
+        }
+        this.db = db
+        // create partitions - required by level-auto-index
+        this.localdb = sub(this.db, 'localdb', { valueEncoding: codec })
+        // create index
+        this.idx = {
+          title: sub(this.db, 'title'),
+          description: sub(this.db, 'description')
+        }
+        // create filters
+        this.by = {}
+        this.by.title = AutoIndex(this.localdb, this.idx.title, container =>
+          container.rawJSON.title.toLowerCase()
+        )
+        this.by.description = AutoIndex(
+          this.localdb,
+          this.idx.description,
+          container => container.rawJSON.description.toLowerCase()
+        )
 
-          /*
+        /*
           this.profileByFollows = AutoIndex(
             this.profiledb,
             this.idx.follows,
@@ -253,10 +231,44 @@ class SDK {
             }
           )
           */
-          resolve()
-        })
+        resolve()
       })
-    ])
+    })
+  }
+
+  async createStore () {
+    this.store = await dat.getDriveStorage({
+      persist: this.persist,
+      storageFn: this.storage,
+      storageOpts: { storageLocation: this.baseDir },
+      corestoreOpts: { sparse: true, stats: true }
+    })
+  }
+
+  async startSwarm () {
+    if (!this.disableSwarm) {
+      this.networker = this.swarmFn(this.store)
+      this.networker.on('error', console.error)
+      this.networker.listen()
+      debug('swarm listening...')
+    }
+  }
+
+  async ready () {
+    try {
+      // create db dir
+      await ensureDir(this.dbPath)
+      await ensureDir(this.baseDir)
+
+      // start db
+      await this.startdb()
+      // create hyperdrive storage
+      await this.createStore()
+      // start swarm
+      await this.startSwarm()
+    } catch (err) {
+      console.error(err)
+    }
   }
 
   async init ({
@@ -299,33 +311,18 @@ class SDK {
     const publicKeyString = DatEncoding.encode(publicKey)
     debug(`init pk ${publicKeyString}`)
 
-    // NOTE(dk): check out datStorage options: https://github.com/RangerMauve/universal-dat-storage#api
-    datOpts.datStorage.storageLocation = datOpts.datStorage.storageLocation
-      ? datOpts.datStorage.storageLocation
-      : join(this.baseDir, publicKeyString)
-    debug(`init storageLocation ${datOpts.datStorage.storageLocation}`)
+    const moduleDir = join(this.baseDir, publicKeyString)
 
-    await ensureDir(datOpts.datStorage.storageLocation)
+    await ensureDir(moduleDir)
+    debug(`ensure module dir: ${moduleDir}`)
 
-    console.log('calling dat create')
-    const { drive: archive, driveStorage } = await dat.create(publicKey, {
-      persist: this.persist,
-      storageFn: this.storage,
-      hyperdrive: {},
-      corestoreOpts: {
+    const { drive: archive } = await dat.create(publicKey, {
+      hyperdrive: {
         keyPair: { publicKey, secretKey }
-      },
-      storageOpts: { ...datOpts.datStorage }
+      }
     })
 
     await archive.ready()
-
-    if (!this.disableSwarm) {
-      this.stores.set(
-        crypto.discoveryKey(archive.key).toString('hex'),
-        driveStorage
-      )
-    }
 
     // create dat.json metadata
     const datJSON = createDatJSON({
@@ -347,15 +344,14 @@ class SDK {
     assertValid(avroType, datJSON)
 
     // write dat.json
-    const folderPath = join(this.baseDir, publicKeyString)
-    await writeFile(join(folderPath, 'dat.json'), JSON.stringify(datJSON))
+    await writeFile(join(moduleDir, 'dat.json'), JSON.stringify(datJSON))
 
-    await dat.importFiles(archive, folderPath)
-
+    await dat.importFiles(archive, moduleDir)
+    /*
     if (!this.disableSwarm) {
       this._seed(archive)
     }
-
+    */
     if (this.verbose) {
       // Note(dk): this kind of output can be part of the cli
       console.log(
@@ -405,41 +401,32 @@ class SDK {
 
     const keyString = DatEncoding.encode(datJSON.url)
     const datJSONDir = join(this.baseDir, keyString)
-    const storageOpts = {
-      storageLocation: datJSONDir
-    }
-    const { drive: archive, driveStorage } = await dat.open(
-      DatEncoding.decode(datJSON.url),
-      undefined,
-      storageOpts
+
+    let archive
+    debug(`saveItem: looking drive ${keyString} in local structure...`)
+    archive = this.drives.get(
+      DatEncoding.encode(crypto.discoveryKey(DatEncoding.decode(datJSON.url)))
     )
-
-    await archive.ready()
-
-    if (!this.disableSwarm) {
-      this.stores.set(DatEncoding.encode(archive.discoveryKey), driveStorage)
+    if (!archive) {
+      debug(
+        `saveItem: drive not found in local structure. Calling dat open ${keyString}`
+      )
+      const { drive } = await dat.open(datJSON.url)
+      await drive.ready()
+      archive = drive
     }
 
     let stat
     if (isWritable) {
       await writeFile(join(datJSONDir, 'dat.json'), JSON.stringify(datJSON))
-      /*
-      const { version: lastVersion } = await dat.importFiles(
-        archive,
-        datJSONDir
-      )
-      */
-      const out = await archive.readFile('dat.json', 'utf-8')
-      console.log({ out })
+      await dat.importFiles(archive, datJSONDir)
 
-      await archive.writeFile('dat.json', JSON.stringify(datJSON))
-
-      console.log('HELL YEAH BABY')
-      version = lastVersion
+      version = archive.version
       stat = await archive.stat('/dat.json')
       this._seed(archive)
     }
 
+    debug('saving item on local db')
     await this.localdb.put(DatEncoding.encode(datJSON.url), {
       isWritable,
       lastModified: stat ? stat.mtime : lastModified,
@@ -690,15 +677,11 @@ class SDK {
 
       const _getDat = async key => {
         const keyBuffer = DatEncoding.decode(key)
-        const archive = this.drives.get(crypto.discoveryKey(keyBuffer))
+        const archive = this.drives.get(
+          DatEncoding.encode(crypto.discoveryKey(keyBuffer))
+        )
         if (!archive) {
-          const { drive, driveStorage } = await dat.open(keyBuffer) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
-          if (!this.disableSwarm) {
-            this.stores.set(
-              crypto.discoveryKey(key).toString('hex'),
-              driveStorage
-            )
-          }
+          const { drive } = await dat.open(keyBuffer) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
 
           return drive
         }
@@ -707,7 +690,7 @@ class SDK {
 
       const moduleDat = await _getDat(mKey)
 
-      debug('register: Found archive')
+      debug(`register: Found archive key ${DatEncoding.encode(mKey)}`)
       debug('register: Waiting for archive ready')
 
       await moduleDat.ready()
@@ -853,21 +836,12 @@ class SDK {
 
   async destroy (db = true, swarm = true) {
     if (db) {
-      debug('closing db')
+      debug('closing db...')
       await this.db.close()
       await this.localdb.close()
     }
     if (swarm && this.networker) {
-      /*
-      return new Promise((resolve, reject) => {
-        debug('closing swarm')
-        this.networker.destroy(err => {
-          if (err) return reject(err)
-          this.swarm = null
-          return resolve()
-        })
-      })
-      */
+      debug('closing swarm...')
       await this.networker.close()
     }
   }
