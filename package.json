@@ -35,6 +35,7 @@
   "dependencies": {
     "@avro/types": "^1.0.5",
     "@wirelineio/hyperswarm-network-memory": "^0.2.17",
+    "@geut/hyperdrive-promise": "github:geut/hyperdrive-promise#update-hyperdrive",
     "corestore": "^5.0.4",
     "corestore-swarm-networking": "^4.0.0",
     "dat-encoding": "^5.0.1",
