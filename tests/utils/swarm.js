@@ -1,17 +1,16 @@
-const Swarm = require('../../lib/swarm').SwarmNetworker
+const Swarm = require('corestore-swarm-networking')
+const memorySwarm = require('@wirelineio/hyperswarm-network-memory')
 const HypercoreProtocol = require('hypercore-protocol')
 const pump = require('pump')
-const datEncoding = require('dat-encoding')
 
 class TestSwarm extends Swarm {
   listen () {
-    this._swarm = this.swarmFn({
+    const self = this
+    this._swarm = memorySwarm({
       ...this.opts,
       queue: { multiplex: true }
     })
-    this._swarm.on('error', err => {
-      this.emit('error', err)
-    })
+    this._swarm.on('error', err => this.emit('error', err))
     this._swarm.on('connection', (socket, info) => {
       const isInitiator = !!info.client
       if (
@@ -22,24 +21,19 @@ class TestSwarm extends Swarm {
       }
 
       const protocolStream = new HypercoreProtocol(isInitiator, {
-        onchannelclose: discoveryKey => {
-          const dkeyString = datEncoding.encode(discoveryKey)
-          const streams = this._streamsByDiscoveryKey.get(dkeyString)
-          if (!streams || !streams.length) return
-          streams.splice(streams.indexOf(protocolStream), 1)
-          if (!streams.length) this._streamsByDiscoveryKey.delete(dkeyString)
-        },
-        ondiscoverykey: discoveryKey => {
-          this._handleTopic(protocolStream, discoveryKey)
-        }
+        ...this._replicationOpts
       })
-      this._replicationStreams.push(protocolStream)
+      protocolStream.on('handshake', () => {
+        onhandshake()
+      })
+
+      function onhandshake () {
+        self._replicate(protocolStream)
+        self._replicationStreams.push(protocolStream)
+      }
 
       return pump(socket, protocolStream, socket, err => {
-        if (err) {
-          this.emit('replication-error', err)
-        }
-
+        if (err) this.emit('replication-error', err)
         const idx = this._replicationStreams.indexOf(protocolStream)
         if (idx === -1) return
         this._replicationStreams.splice(idx, 1)

@@ -4,11 +4,9 @@ const {
 const test = require('tape')
 const tempy = require('tempy')
 const SDK = require('../')
-const memorySwarm = require('@wirelineio/hyperswarm-network-memory')
 const testSwarm = require('./utils/swarm')
 
-const testSwarmCreator = (store, opts) =>
-  testSwarm(store, { ...opts, swarmFn: memorySwarm })
+const testSwarmCreator = (store, opts) => testSwarm(store, opts)
 
 const defaultOpts = () => ({
   swarm: false,
