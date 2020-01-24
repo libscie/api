@@ -24,6 +24,8 @@ process.once('SIGINT', () => commons.destroy())
 
   // create a profile
   await commons.init({ type: 'profile', title: 'Professor X' }) // ~/.p2pcommons/hash/dat.json --> type: profile
+
+  // get and update a content module
   const key = contentMetadata1.url.toString('hex')
   const { rawJSON: out } = await commons.get(key)
   console.log(`Retrieved type: ${out.type}`)

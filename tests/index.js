@@ -4,7 +4,9 @@ const {
 const test = require('tape')
 const tempy = require('tempy')
 const SDK = require('../')
-const networkSwarm = require('@wirelineio/hyperswarm-network-memory')
+const testSwarm = require('./utils/swarm')
+
+const testSwarmCreator = (store, opts) => testSwarm(store, opts)
 
 const defaultOpts = () => ({
   swarm: false,
@@ -394,13 +396,13 @@ test('seed and register', async t => {
     swarm: true,
     verbose: true,
     persist: true,
-    swarmFn: networkSwarm
+    swarmFn: testSwarmCreator
   })
   const p2p2 = createDb({
     swarm: true,
     verbose: true,
     persist: true,
-    swarmFn: networkSwarm
+    swarmFn: testSwarmCreator
   })
 
   await p2p.ready()
