@@ -14,7 +14,7 @@ const parse = require('parse-dat-url')
 const DatEncoding = require('dat-encoding')
 const debug = require('debug')('p2pcommons')
 const deepMerge = require('deepmerge')
-const Swarm = require('./lib/swarm')
+const Swarm = require('corestore-swarm-networking')
 const pump = require('pump')
 const protocol = require('hypercore-protocol')
 const dat = require('./lib/dat-helper')
@@ -89,7 +89,7 @@ class SDK {
     this.swarmFn =
       finalOpts.swarm && typeof finalOpts.swarm === 'function'
         ? finalOpts.swarm
-        : Swarm
+        : (...args) => new Swarm(...args)
     // debug constructor
     debug(`platform: ${this.platform}`)
     debug(`Is windows? ${!!this.windows}`)
