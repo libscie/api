@@ -1,7 +1,7 @@
 const { join, isAbsolute } = require('path')
 const { homedir, tmpdir, platform } = require('os')
 const {
-  promises: { open, writeFile }
+  promises: { open, writeFile, readFile }
 } = require('fs')
 const { ensureDir } = require('fs-extra')
 const assert = require('nanocustomassert')
@@ -58,6 +58,14 @@ const DEFAULT_SDK_OPTS = {
   persist: true,
   storage: undefined,
   versose: false
+}
+
+const DEFAULT_GLOBAL_SETTINGS = {
+  networkDepth: 2,
+  defaultProfile: '',
+  keys: '~/.p2pcommons/.dat',
+  sparse: true,
+  sparseMetadata: true
 }
 
 class SDK {
@@ -166,6 +174,28 @@ class SDK {
     }
   }
 
+  async getOptionsOrCreate () {
+    // read global settings or create with default values according to:
+    // https://github.com/p2pcommons/specs/blob/master/interoperability.md#global-settings
+    let options = { ...DEFAULT_GLOBAL_SETTINGS }
+    try {
+      const optionsFile = await readFile(
+        join(this.baseDir, 'settings.json'),
+        'utf-8'
+      )
+      options = JSON.parse(optionsFile)
+      return options
+    } catch (_) {
+      // create missing settings.json file
+      await writeFile(
+        join(this.baseDir, 'settings.json'),
+        JSON.stringify(options)
+      )
+      // default options
+      return options
+    }
+  }
+
   async startdb () {
     return new Promise((resolve, reject) => {
       // start local db
@@ -260,6 +290,9 @@ class SDK {
       await ensureDir(this.dbPath)
       await ensureDir(this.baseDir)
 
+      // read global options
+      this.globalOptions = await this.getOptionsOrCreate()
+
       // start db
       await this.startdb()
       // create hyperdrive storage
@@ -318,7 +351,9 @@ class SDK {
 
     const { drive: archive } = await dat.create(publicKey, {
       hyperdrive: {
-        keyPair: { publicKey, secretKey }
+        keyPair: { publicKey, secretKey },
+        sparse: this.globalOptions.sparse,
+        sparseMetadata: this.globalOptions.sparseMetadata
       }
     })
 
@@ -411,7 +446,10 @@ class SDK {
       debug(
         `saveItem: drive not found in local structure. Calling dat open ${keyString}`
       )
-      const { drive } = await dat.open(datJSON.url)
+      const { drive } = await dat.open(datJSON.url, {
+        sparse: this.globalOptions.sparse,
+        sparseMetadata: this.globalOptions.sparseMetadata
+      })
       await drive.ready()
       archive = drive
     }
@@ -681,7 +719,10 @@ class SDK {
           DatEncoding.encode(crypto.discoveryKey(keyBuffer))
         )
         if (!archive) {
-          const { drive } = await dat.open(keyBuffer) // NOTE(dk): be sure to check sparse options so we only dwld dat.json
+          const { drive } = await dat.open(keyBuffer, {
+            sparse: this.globalOptions.sparse,
+            sparseMetadata: this.globalOptions.sparseMetadata
+          })
 
           return drive
         }
