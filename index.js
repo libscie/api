@@ -27,7 +27,7 @@ const {
   ValidationError,
   MissingParam
 } = require('./lib/errors')
-const { createDatJSON } = require('./lib/utils')
+const { createDatJSON, collect } = require('./lib/utils')
 
 // helper assert fn
 const assertValid = (type, val) => {
@@ -153,14 +153,19 @@ class SDK {
 
   _seed (archive, joinOpts = {}) {
     if (!this.disableSwarm) {
-      const dkey = DatEncoding.encode(archive.discoveryKey)
-      this.drives.set(dkey, archive)
-
-      debug(`swarm seeding ${dkey}`)
       const defaultJoinOpts = {
         announce: true,
         lookup: true
       }
+      const dkey = DatEncoding.encode(archive.discoveryKey)
+      this.drives.set(dkey, archive)
+
+      this.seeddb.put(dkey, {
+        key: dkey,
+        opts: { ...defaultJoinOpts, ...joinOpts }
+      })
+
+      debug(`swarm seeding ${dkey}`)
 
       this.networker.seed(archive.discoveryKey, {
         ...defaultJoinOpts,
@@ -170,7 +175,16 @@ class SDK {
       archive.once('close', () => {
         debug(`closing archive ${dkey}...`)
         this.networker.unseed(archive.discoveryKey)
+        this.drives.delete(dkey)
       })
+    }
+  }
+
+  async _reseed () {
+    debug('re-seeding modules...')
+    const driveList = await collect(this.seeddb)
+    for (const { key: discoveryKey, opts } of driveList) {
+      this.networker.seed(discoveryKey, opts)
     }
   }
 
@@ -227,11 +241,15 @@ class SDK {
         this.db = db
         // create partitions - required by level-auto-index
         this.localdb = sub(this.db, 'localdb', { valueEncoding: codec })
+        // create seeded modules partitions
+        this.seeddb = sub(this.db, 'seeddb', { valueEncoding: 'json' })
+
         // create index
         this.idx = {
           title: sub(this.db, 'title'),
           description: sub(this.db, 'description')
         }
+
         // create filters
         this.by = {}
         this.by.title = AutoIndex(this.localdb, this.idx.title, container =>
@@ -281,6 +299,8 @@ class SDK {
       this.networker.on('error', console.error)
       this.networker.listen()
       debug('swarm listening...')
+
+      await this._reseed()
     }
   }
 
@@ -340,24 +360,23 @@ class SDK {
 
     debug(`init ${type}`)
 
-    const { publicKey, secretKey } = crypto.keyPair()
-    const publicKeyString = DatEncoding.encode(publicKey)
-    debug(`init pk ${publicKeyString}`)
-
-    const moduleDir = join(this.baseDir, publicKeyString)
-
-    await ensureDir(moduleDir)
-    debug(`ensure module dir: ${moduleDir}`)
+    // Note(dk): the pk will be used as a seed, it can be any string
+    const { publicKey } = crypto.keyPair()
 
     const { drive: archive } = await dat.create(publicKey, {
       hyperdrive: {
-        keyPair: { publicKey, secretKey },
         sparse: this.globalOptions.sparse,
         sparseMetadata: this.globalOptions.sparseMetadata
       }
     })
 
     await archive.ready()
+
+    const publicKeyString = DatEncoding.encode(archive.key)
+    debug(`init pk ${publicKeyString}`)
+    const moduleDir = join(this.baseDir, publicKeyString)
+    await ensureDir(moduleDir)
+    debug(`ensure module dir: ${moduleDir}`)
 
     // create dat.json metadata
     const datJSON = createDatJSON({
@@ -382,11 +401,7 @@ class SDK {
     await writeFile(join(moduleDir, 'dat.json'), JSON.stringify(datJSON))
 
     await dat.importFiles(archive, moduleDir)
-    /*
-    if (!this.disableSwarm) {
-      this._seed(archive)
-    }
-    */
+
     if (this.verbose) {
       // Note(dk): this kind of output can be part of the cli
       console.log(
@@ -403,6 +418,7 @@ class SDK {
       lastModified: stat.mtime,
       version: archive.version
     }
+
     await this.saveItem({
       ...metadata,
       datJSON
