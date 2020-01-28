@@ -340,24 +340,23 @@ class SDK {
 
     debug(`init ${type}`)
 
-    const { publicKey, secretKey } = crypto.keyPair()
-    const publicKeyString = DatEncoding.encode(publicKey)
-    debug(`init pk ${publicKeyString}`)
-
-    const moduleDir = join(this.baseDir, publicKeyString)
-
-    await ensureDir(moduleDir)
-    debug(`ensure module dir: ${moduleDir}`)
+    // Note(dk): the pk will be used as a seed, it can be any string
+    const { publicKey } = crypto.keyPair()
 
     const { drive: archive } = await dat.create(publicKey, {
       hyperdrive: {
-        keyPair: { publicKey, secretKey },
         sparse: this.globalOptions.sparse,
         sparseMetadata: this.globalOptions.sparseMetadata
       }
     })
 
     await archive.ready()
+
+    const publicKeyString = DatEncoding.encode(archive.key)
+    debug(`init pk ${publicKeyString}`)
+    const moduleDir = join(this.baseDir, publicKeyString)
+    await ensureDir(moduleDir)
+    debug(`ensure module dir: ${moduleDir}`)
 
     // create dat.json metadata
     const datJSON = createDatJSON({
@@ -382,11 +381,7 @@ class SDK {
     await writeFile(join(moduleDir, 'dat.json'), JSON.stringify(datJSON))
 
     await dat.importFiles(archive, moduleDir)
-    /*
-    if (!this.disableSwarm) {
-      this._seed(archive)
-    }
-    */
+
     if (this.verbose) {
       // Note(dk): this kind of output can be part of the cli
       console.log(
