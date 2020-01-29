@@ -896,6 +896,7 @@ class SDK {
       debug('closing db...')
       await this.db.close()
       await this.localdb.close()
+      await this.seeddb.close()
     }
     if (swarm && this.networker) {
       debug('closing swarm...')
