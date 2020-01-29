@@ -151,7 +151,7 @@ class SDK {
     return { ...rest, ...p2pcommons }
   }
 
-  _seed (archive, joinOpts = {}) {
+  async _seed (archive, joinOpts = {}) {
     if (!this.disableSwarm) {
       const defaultJoinOpts = {
         announce: true,
@@ -160,7 +160,7 @@ class SDK {
       const dkey = DatEncoding.encode(archive.discoveryKey)
       this.drives.set(dkey, archive)
 
-      this.seeddb.put(dkey, {
+      await this.seeddb.put(dkey, {
         key: dkey,
         opts: { ...defaultJoinOpts, ...joinOpts }
       })
@@ -279,7 +279,7 @@ class SDK {
             }
           )
           */
-        resolve()
+        return resolve()
       })
     })
   }
@@ -477,7 +477,7 @@ class SDK {
 
       version = archive.version
       stat = await archive.stat('/dat.json')
-      this._seed(archive)
+      await this._seed(archive)
     }
 
     debug('saving item on local db')
@@ -752,7 +752,7 @@ class SDK {
 
       await moduleDat.ready()
 
-      this._seed(moduleDat)
+      await this._seed(moduleDat)
 
       version = mVersion || moduleDat.version
       debug('register: Module version', version)
