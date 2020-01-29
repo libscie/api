@@ -1,6 +1,9 @@
 const {
   promises: { readdir }
 } = require('fs')
+const { join } = require('path')
+const { promisify } = require('util')
+const exec = promisify(require('child_process').exec)
 const test = require('tape')
 const tempy = require('tempy')
 const SDK = require('../')
@@ -22,7 +25,6 @@ const createDb = opts => {
     baseDir: tempy.directory()
   })
 }
-
 test('ready', async t => {
   const p2p = createDb()
   t.doesNotThrow(async () => p2p.ready(), 'ready method should not throw')
@@ -508,5 +510,48 @@ test('verify', async t => {
   t.notOk(result2, 'content2 does not has authors registered')
 
   await p2p.destroy()
+  t.end()
+})
+
+test('re-open SDK (child process)', async t => {
+  const dir = tempy.directory()
+
+  const commons = new SDK({
+    disableSwarm: true,
+    persist: true,
+    baseDir: dir
+  })
+
+  await commons.ready()
+
+  const { rawJSON: contentDat } = await commons.init({
+    type: 'content',
+    title: 'demo',
+    description: 'lorem ipsum'
+  })
+
+  await commons.destroy()
+
+  // another sdk instance will update the content
+  const code = join(__dirname, 'childProcess.js')
+  const { stdout, stderr } = await exec(`${code} ${contentDat.url} ${dir}`, {
+    CI: true
+  })
+
+  t.equal(stdout, '')
+  t.equal(stderr, '')
+
+  const commons2 = new SDK({
+    disableSwarm: true,
+    persist: true,
+    baseDir: dir
+  })
+
+  await commons2.ready()
+
+  const { rawJSON: updated } = await commons2.get(contentDat.url)
+
+  t.equal(updated.title, 'UPDATED')
+  await commons2.destroy()
   t.end()
 })
