@@ -15,7 +15,5 @@ const P2PCommons = require('../')
 
   await commons.ready()
   await commons.set({ url: contentDat, title: 'UPDATED' })
-
-  const { rawJSON: updated } = await commons.get(contentDat)
   await commons.destroy()
 })()
