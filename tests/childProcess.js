@@ -9,15 +9,13 @@ const P2PCommons = require('../')
 
   const commons = new P2PCommons({
     disableSwarm: true,
-    verbose: false,
     persist: true,
     baseDir: dir
   })
 
   await commons.ready()
-
   await commons.set({ url: contentDat, title: 'UPDATED' })
+
   const { rawJSON: updated } = await commons.get(contentDat)
-  console.log({ updated })
   await commons.destroy()
 })()
