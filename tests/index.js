@@ -31,7 +31,6 @@ test('ready', async t => {
   t.end()
 })
 
-/*
 test('init: create content module', async t => {
   const p2p = createDb()
   await p2p.ready()
@@ -513,7 +512,7 @@ test('verify', async t => {
   await p2p.destroy()
   t.end()
 })
-*/
+
 test('re-open SDK (child process)', async t => {
   const dir = tempy.directory()
 
