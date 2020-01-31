@@ -22,11 +22,9 @@ process.once('SIGINT', () => commons.destroy())
     description: 'All the cool content you want to know and more!!!'
   })
 
-  const { rawJSON: updatedContent, metadata: last } = await commons.get(
-    rawJSON.url
-  )
+  const { rawJSON: updatedContent, metadata } = await commons.get(rawJSON.url)
 
-  console.log({ metadata: last })
+  console.log({ metadata })
   console.log({ rawJSON: updatedContent })
   console.log('P2PCommons swarming listening...')
 
