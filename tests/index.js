@@ -397,13 +397,13 @@ test('seed and register', async t => {
   const p2p = createDb({
     swarm: true,
     verbose: true,
-    persist: true,
+    persist: false,
     swarmFn: testSwarmCreator
   })
   const p2p2 = createDb({
     swarm: true,
     verbose: true,
-    persist: true,
+    persist: false,
     swarmFn: testSwarmCreator
   })
 
@@ -463,7 +463,8 @@ test('seed and register', async t => {
     dirs2,
     'register is idempotent (created directories remains the same)'
   )
-  await p2p.destroy(true, false)
+  await p2p2.destroy(false, true)
+  await p2p.destroy()
   t.end()
 })
 
@@ -535,9 +536,7 @@ test('re-open SDK (child process)', async t => {
 
   // another sdk instance will update the content
   const code = join(__dirname, 'childProcess.js')
-  await exec(`${code} ${contentDat.url} ${dir}`, {
-    CI: true
-  })
+  await exec(`${code} ${contentDat.url} "${dir}"`)
 
   const commons2 = new SDK({
     disableSwarm: true,
@@ -547,6 +546,7 @@ test('re-open SDK (child process)', async t => {
 
   await commons2.ready()
 
+  // finally we check everything is updated correctly
   const { rawJSON: updated } = await commons2.get(contentDat.url)
 
   t.equal(updated.title, 'UPDATED')
