@@ -40,6 +40,12 @@ class TestSwarm extends Swarm {
       })
     })
   }
+
+  async close () {
+    if (!this._swarm) return null
+
+    this._swarm = null
+  }
 }
 
 module.exports = (...args) => new TestSwarm(...args)
