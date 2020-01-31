@@ -3,7 +3,7 @@
 
 const P2PCommons = require('../')
 
-;(async () => {
+const main = async () => {
   const contentDat = process.argv[2]
   const dir = process.argv[3]
 
@@ -16,4 +16,9 @@ const P2PCommons = require('../')
   await commons.ready()
   await commons.set({ url: contentDat, title: 'UPDATED' })
   await commons.destroy()
-})()
+}
+
+main().catch(err => {
+  console.error(err)
+  process.exit(1)
+})
