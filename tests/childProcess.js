@@ -16,6 +16,7 @@ const main = async () => {
   await commons.ready()
   await commons.set({ url: contentDat, title: 'UPDATED' })
   await commons.destroy()
+  process.exit(0)
 }
 
 main().catch(err => {
