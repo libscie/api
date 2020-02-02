@@ -536,7 +536,11 @@ test('re-open SDK (child process)', async t => {
 
   // another sdk instance will update the content
   const code = join(__dirname, 'childProcess.js')
-  await exec(`${code} ${contentDat.url} "${dir}"`)
+  const { stdout, stderr } = await exec(`${code} ${contentDat.url} "${dir}"`)
+
+  console.log({ stdout })
+
+  console.log({ stderr })
 
   const commons2 = new SDK({
     disableSwarm: true,
