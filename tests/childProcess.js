@@ -7,10 +7,6 @@ const main = async () => {
   const contentDat = process.argv[2]
   const dir = process.argv[3]
 
-  console.log('child_process arguments')
-  console.log({ contentDat })
-  console.log({ dir })
-
   const commons = new P2PCommons({
     disableSwarm: true,
     persist: true,

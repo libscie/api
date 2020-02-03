@@ -2,8 +2,7 @@ const {
   promises: { readdir }
 } = require('fs')
 const { join } = require('path')
-const { promisify } = require('util')
-const exec = promisify(require('child_process').exec)
+const execa = require('execa')
 const test = require('tape')
 const tempy = require('tempy')
 const SDK = require('../')
@@ -534,15 +533,9 @@ test('re-open SDK (child process)', async t => {
 
   await commons.destroy()
 
-  console.log('Starting child process...')
   // another sdk instance will update the content
   const code = join(__dirname, 'childProcess.js')
-  const { stdout, stderr } = await exec(`${code} ${contentDat.url} "${dir}"`)
-
-  console.log('Finishing child process')
-  console.log({ stdout })
-
-  console.log({ stderr })
+  await execa(code, [contentDat.url, dir])
 
   const commons2 = new SDK({
     disableSwarm: true,
