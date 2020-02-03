@@ -1,6 +1,8 @@
 const {
   promises: { readdir }
 } = require('fs')
+const { join } = require('path')
+const execa = require('execa')
 const test = require('tape')
 const tempy = require('tempy')
 const SDK = require('../')
@@ -22,7 +24,6 @@ const createDb = opts => {
     baseDir: tempy.directory()
   })
 }
-
 test('ready', async t => {
   const p2p = createDb()
   t.doesNotThrow(async () => p2p.ready(), 'ready method should not throw')
@@ -395,13 +396,13 @@ test('seed and register', async t => {
   const p2p = createDb({
     swarm: true,
     verbose: true,
-    persist: true,
+    persist: false,
     swarmFn: testSwarmCreator
   })
   const p2p2 = createDb({
     swarm: true,
     verbose: true,
-    persist: true,
+    persist: false,
     swarmFn: testSwarmCreator
   })
 
@@ -461,7 +462,8 @@ test('seed and register', async t => {
     dirs2,
     'register is idempotent (created directories remains the same)'
   )
-  await p2p.destroy(true, false)
+  await p2p2.destroy(false, true)
+  await p2p.destroy()
   t.end()
 })
 
@@ -508,5 +510,45 @@ test('verify', async t => {
   t.notOk(result2, 'content2 does not has authors registered')
 
   await p2p.destroy()
+  t.end()
+})
+
+test('re-open SDK (child process)', async t => {
+  const dir = tempy.directory()
+
+  const commons = new SDK({
+    disableSwarm: true,
+    persist: true,
+    baseDir: dir
+  })
+
+  await commons.ready()
+
+  // create content
+  const { rawJSON: contentDat } = await commons.init({
+    type: 'content',
+    title: 'demo',
+    description: 'lorem ipsum'
+  })
+
+  await commons.destroy()
+
+  // another sdk instance will update the content
+  const code = join(__dirname, 'childProcess.js')
+  await execa(code, [contentDat.url, dir])
+
+  const commons2 = new SDK({
+    disableSwarm: true,
+    persist: true,
+    baseDir: dir
+  })
+
+  await commons2.ready()
+
+  // finally we check everything is updated correctly
+  const { rawJSON: updated } = await commons2.get(contentDat.url)
+
+  t.equal(updated.title, 'UPDATED')
+  await commons2.destroy()
   t.end()
 })

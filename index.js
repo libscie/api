@@ -151,16 +151,17 @@ class SDK {
     return { ...rest, ...p2pcommons }
   }
 
-  _seed (archive, joinOpts = {}) {
+  async _seed (archive, joinOpts = {}) {
+    const dkey = DatEncoding.encode(archive.discoveryKey)
+    this.drives.set(dkey, archive)
+
     if (!this.disableSwarm) {
       const defaultJoinOpts = {
         announce: true,
         lookup: true
       }
-      const dkey = DatEncoding.encode(archive.discoveryKey)
-      this.drives.set(dkey, archive)
 
-      this.seeddb.put(dkey, {
+      await this.seeddb.put(dkey, {
         key: dkey,
         opts: { ...defaultJoinOpts, ...joinOpts }
       })
@@ -174,7 +175,7 @@ class SDK {
 
       archive.once('close', () => {
         debug(`closing archive ${dkey}...`)
-        this.networker.unseed(archive.discoveryKey)
+        // this.networker.unseed(archive.discoveryKey)
         this.drives.delete(dkey)
       })
     }
@@ -279,7 +280,7 @@ class SDK {
             }
           )
           */
-        resolve()
+        return resolve()
       })
     })
   }
@@ -363,7 +364,7 @@ class SDK {
     // Note(dk): the pk will be used as a seed, it can be any string
     const { publicKey } = crypto.keyPair()
 
-    const { drive: archive } = await dat.create(publicKey, {
+    const archive = await dat.create(this.store, publicKey, {
       hyperdrive: {
         sparse: this.globalOptions.sparse,
         sparseMetadata: this.globalOptions.sparseMetadata
@@ -455,17 +456,21 @@ class SDK {
 
     let archive
     debug(`saveItem: looking drive ${keyString} in local structure...`)
-    archive = this.drives.get(
-      DatEncoding.encode(crypto.discoveryKey(DatEncoding.decode(datJSON.url)))
+    const dkey = DatEncoding.encode(
+      crypto.discoveryKey(DatEncoding.decode(datJSON.url))
     )
+    archive = this.drives.get(dkey)
+
     if (!archive) {
-      debug(
-        `saveItem: drive not found in local structure. Calling dat open ${keyString}`
+      debug(`saveItem: calling dat open ${keyString}`)
+      const drive = await dat.open(
+        this.store,
+        DatEncoding.decode(datJSON.url),
+        {
+          sparse: this.globalOptions.sparse,
+          sparseMetadata: this.globalOptions.sparseMetadata
+        }
       )
-      const { drive } = await dat.open(datJSON.url, {
-        sparse: this.globalOptions.sparse,
-        sparseMetadata: this.globalOptions.sparseMetadata
-      })
       await drive.ready()
       archive = drive
     }
@@ -477,7 +482,7 @@ class SDK {
 
       version = archive.version
       stat = await archive.stat('/dat.json')
-      this._seed(archive)
+      await this._seed(archive)
     }
 
     debug('saving item on local db')
@@ -558,12 +563,18 @@ class SDK {
     debug('set', { finalJSON })
     assertValid(avroType, finalJSON)
 
-    return this.saveItem({
+    await this.saveItem({
       ...metadata,
       datJSON: finalJSON
     })
   }
 
+  /**
+   * get a module from the localdb (leveldb)
+   *
+   * @param key
+   * @returns {rawJSON:Object, metadata: Object}
+   */
   async get (key) {
     assert(
       typeof key === 'string' || Buffer.isBuffer(key),
@@ -713,7 +724,7 @@ class SDK {
 
   async _getModule (mKey, mVersion) {
     // get module from localdb, if absent will query it from the swarm
-    // this fn will also call _seed() after retrieving the module from the swarm
+    // this fn will also call seed() after retrieving the module from the swarm
     let module
     let version
     try {
@@ -735,13 +746,14 @@ class SDK {
           DatEncoding.encode(crypto.discoveryKey(keyBuffer))
         )
         if (!archive) {
-          const { drive } = await dat.open(keyBuffer, {
+          const drive = await dat.open(this.store, keyBuffer, {
             sparse: this.globalOptions.sparse,
             sparseMetadata: this.globalOptions.sparseMetadata
           })
 
           return drive
         }
+
         return archive
       }
 
@@ -752,14 +764,13 @@ class SDK {
 
       await moduleDat.ready()
 
-      this._seed(moduleDat)
+      await this._seed(moduleDat)
 
       version = mVersion || moduleDat.version
       debug('register: Module version', version)
       // 3 - after fetching module we still need to read the dat.json file
       try {
         const moduleVersion = moduleDat.checkout(version)
-        await moduleVersion.ready()
         debug('register: Reading modules dat.json...')
         module = JSON.parse(await moduleVersion.readFile('dat.json'))
       } catch (err) {
@@ -896,11 +907,15 @@ class SDK {
       debug('closing db...')
       await this.db.close()
       await this.localdb.close()
+      await this.seeddb.close()
     }
     if (swarm && this.networker) {
       debug('closing swarm...')
       await this.networker.close()
     }
+
+    const closing = Array.from(this.drives.values()).map(d => d.close())
+    await Promise.all(closing)
   }
 }
 
