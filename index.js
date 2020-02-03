@@ -175,7 +175,6 @@ class SDK {
 
       archive.once('close', () => {
         debug(`closing archive ${dkey}...`)
-        // this.networker.unseed(archive.discoveryKey)
         this.drives.delete(dkey)
       })
     }
@@ -325,6 +324,25 @@ class SDK {
     }
   }
 
+  /**
+   * initialize a new module. This method will create a specific folder and seed the content if swarm is enabeld.
+   *
+   * @public
+   * @async
+   * @param {{
+   *   type: String,
+   *   title: String,
+   *   subtype: String ,
+   *   description: String,
+   *   main: String,
+   *   authors: Array,
+   *   contents: Array,
+   *   follows: Array,
+   *   parents:Array
+   * }}
+   *
+   * @returns {undefined}
+   */
   async init ({
     type,
     title,
@@ -334,8 +352,7 @@ class SDK {
     authors = [],
     contents = [],
     follows = [],
-    parents = [],
-    datOpts = { datStorage: {} }
+    parents = []
   }) {
     // follow module spec: https://github.com/p2pcommons/specs/pull/1/files?short_path=2d471ef#diff-2d471ef4e3a452b579a3367eb33ccfb9
     // 1. create folder with unique name (pk)
@@ -495,6 +512,21 @@ class SDK {
     })
   }
 
+  /**
+   * updates module fields
+   *
+   * @public
+   * @async
+   * @link https://github.com/p2pcommons/specs/blob/master/module.md
+   * @param {Object} module - Object containing field to update
+   * @param {(String|Buffer)} module.url - module dat url REQUIRED
+   * @param {String} [module.title]
+   * @param {String} [module.description]
+   * @param {String} [module.main]
+   * @param {String} [module.subtype]
+   * @param {Array<String>} [module.authors] - only valid for content modules
+   * @param {Array<String>} [module.contents] - only valid for profile modules
+   */
   async set (params) {
     assert(
       typeof params === 'object',
@@ -572,8 +604,10 @@ class SDK {
   /**
    * get a module from the localdb (leveldb)
    *
-   * @param key
-   * @returns {rawJSON:Object, metadata: Object}
+   * @public
+   * @async
+   * @param {(String|Buffer)} key - a valid dat url
+   * @returns {{ rawJSON:Object, metadata: Object }}
    */
   async get (key) {
     assert(
@@ -656,6 +690,13 @@ class SDK {
     })
   }
 
+  /**
+   * list content modules
+   *
+   * @public
+   * @async
+   * @returns {Array<Object>}
+   */
   async listContent () {
     return new Promise((resolve, reject) => {
       const out = []
@@ -675,6 +716,13 @@ class SDK {
     })
   }
 
+  /**
+   * list profile modules
+   *
+   * @public
+   * @async
+   * @returns {Array<Object>}
+   */
   async listProfiles () {
     return new Promise((resolve, reject) => {
       const out = []
@@ -713,8 +761,22 @@ class SDK {
     })
   }
 
+  /**
+   * get a file descriptor for a given module url
+   *
+   * @public
+   * @async
+   * @param {String|Buffer} key - a valid dat url
+   * @returns {Number} fd - a file descriptor
+   */
   async openFile (key) {
-    assert(typeof key === 'string', ValidationError, 'string', key, 'key')
+    assert(
+      typeof key === 'string' || Buffer.isBuffer(key),
+      ValidationError,
+      "'string' or Buffer",
+      key,
+      'key'
+    )
     const { main } = await this.get(key)
     if (!main) {
       throw new Error('Empty main file')
@@ -794,6 +856,15 @@ class SDK {
     }
   }
 
+  /**
+   * register a content module to a profile
+   *
+   * @public
+   * @async
+   * @link https://github.com/p2pcommons/specs/blob/master/module.md#registration
+   * @param {(String|Buffer)} contentKey - a dat url
+   * @param {(String|Buffer)} profileKey - a dat url
+   */
   async register (contentKey, profileKey) {
     debug(`register contentKey: ${contentKey}`)
     debug(`register profileKey: ${profileKey}`)
@@ -882,6 +953,15 @@ class SDK {
     debug('register: profile updated successfully')
   }
 
+  /**
+   * verify a given module
+   *
+   * @public
+   * @async
+   * @link https://github.com/p2pcommons/specs/blob/master/module.md#verification
+   * @param {Object} source - a module object to verify
+   * @returns {Boolean} - true if module is verified, false otherwise
+   */
   async verify (source) {
     debug('verify', source)
     source = this._unflatten(source)
@@ -902,6 +982,45 @@ class SDK {
     }, Promise.resolve(true))
   }
 
+  /**
+   * delete a module. This method will remove the module from the localdb and seeddb. It will also close the drive.
+   *
+   * @public
+   * @async
+   * @param {(String|Buffer)} key - a valid dat url
+   */
+  async delete (key) {
+    assert(
+      typeof key === 'string' || Buffer.isBuffer(key),
+      ValidationError,
+      "'string' or Buffer",
+      key,
+      'key'
+    )
+
+    const url = DatEncoding.encode(key)
+    const dkey = crypto.discoveryKey(DatEncoding.decode(key))
+    const drive = this.drives.get(dkey)
+    try {
+      await this.localdb.del(url)
+      await this.seeddb.del(dkey)
+      if (drive) {
+        await drive.close()
+      }
+    } catch (err) {
+      debug('delete: %O', err)
+      console.error('Something went wrong with module delete')
+    }
+  }
+
+  /**
+   * shutdown an sdk instance closing all the open hyperdrives
+   *
+   * @public
+   * @async
+   * @param {Boolean} db=true - if true it will close all the internal databases
+   * @param {Boolean} swarm=true - if true it will close the swarm
+   */
   async destroy (db = true, swarm = true) {
     if (db) {
       debug('closing db...')
