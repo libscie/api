@@ -92,8 +92,23 @@ class DatUrlVersion extends LogicalType {
   }
 }
 
+class DateType extends LogicalType {
+  _fromValue (val) {
+    return new Date(val)
+  }
+  _toValue (date) {
+    return date instanceof Date ? date.getTime() : undefined
+  }
+  _resolve (type) {
+    if (avro.Type.isType(type, 'long', 'string', 'logical:timestamp-millis')) {
+      return this._fromValue
+    }
+  }
+}
+
 module.exports = {
   RequiredString,
   DatUrl,
-  DatUrlVersion
+  DatUrlVersion,
+  DateType
 }
