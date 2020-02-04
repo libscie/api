@@ -3,13 +3,19 @@ const assert = require('nanocustomassert')
 const { Type } = require('@avro/types')
 const GenericType = require('./schemas/generic.json')
 const DBItemType = require('./schemas/dbitem.json')
+const { DateType } = require('./validation')
 const { MissingParam, ValidationError } = require('./lib/errors')
 
 class Codec {
   constructor (registry) {
     assert(registry, MissingParam, 'registry')
     Type.forSchema(GenericType, { registry })
-    Type.forSchema(DBItemType, { registry })
+    Type.forSchema(DBItemType, {
+      registry,
+      logicalTypes: {
+        date: DateType
+      }
+    })
     this.registry = registry
     this.buffer = true
     this.type = 'AvroTypes'
