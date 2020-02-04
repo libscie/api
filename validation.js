@@ -97,7 +97,7 @@ class DateType extends LogicalType {
     return new Date(val)
   }
   _toValue (date) {
-    return date instanceof Date ? +date : undefined
+    return date instanceof Date ? String(date) : undefined
   }
   _resolve (type) {
     if (avro.Type.isType(type, 'long', 'string', 'logical:timestamp-millis')) {
