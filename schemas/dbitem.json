@@ -7,8 +7,11 @@
       "name": "isWritable"
     },
     {
-      "type": "long",
-      "name": "lastModified"
+      "name": "lastModified",
+      "type": {
+        "type": "long",
+        "logicalType": "date"
+      }
     },
     {
       "type": "int",
