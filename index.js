@@ -341,7 +341,7 @@ class SDK {
    *   parents:Array
    * }}
    *
-   * @returns {undefined}
+   * @returns {{ rawJSON: Object, metadata:Object }}
    */
   async init ({
     type,
@@ -999,11 +999,20 @@ class SDK {
     )
 
     const url = DatEncoding.encode(key)
-    const dkey = crypto.discoveryKey(DatEncoding.decode(key))
-    const drive = this.drives.get(dkey)
+    const dkey = DatEncoding.encode(
+      crypto.discoveryKey(DatEncoding.decode(key))
+    )
+    const { metadata } = await this.get(key)
+    if (!metadata.isWritable) {
+      if (this.verbose) {
+        console.log('delete: drive is not writable')
+      }
+      return
+    }
     try {
       await this.localdb.del(url)
       await this.seeddb.del(dkey)
+      const drive = this.drives.get(dkey) // if drive is open in memory we can close it
       if (drive) {
         await drive.close()
       }
