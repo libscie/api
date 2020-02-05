@@ -552,3 +552,29 @@ test('re-open SDK (child process)', async t => {
   await commons2.destroy()
   t.end()
 })
+
+test('delete a module from local db', async t => {
+  const dir = tempy.directory()
+  const p2p = new SDK({
+    baseDir: dir
+  })
+
+  await p2p.ready()
+  const modules = await p2p.list()
+  t.equal(modules.length, 0, 'Modules list is empty')
+  // create content
+  const { rawJSON: content } = await p2p.init({
+    type: 'content',
+    title: 'demo',
+    description: 'lorem ipsum'
+  })
+
+  const modules2 = await p2p.list()
+  t.equal(modules2.length, 1, 'Modules list contains 1 element')
+  // delete content
+  await p2p.delete(content.url)
+  const modules3 = await p2p.list()
+  t.equal(modules3.length, 0, 'Modules list is empty again')
+  await p2p.destroy()
+  t.end()
+})
