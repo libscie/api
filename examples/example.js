@@ -53,12 +53,12 @@ process.once('SIGINT', () => commons.destroy())
   console.log('Profiles length', allProfiles.length)
 
   const prof = allProfiles[0].rawJSON
-  // register external dat to a local profile
+  // publish external dat to a local profile
   const externalContentUrl = process.argv[2]
   if (externalContentUrl) {
-    console.log('Registering content...', externalContentUrl)
-    await commons.register(externalContentUrl, prof.url)
-    console.log('content registered successfully')
+    console.log('Publishing content...', externalContentUrl)
+    await commons.publish(externalContentUrl, prof.url)
+    console.log('content published successfully')
   }
 
   const { rawJSON: profileUpdated } = await commons.get(prof.url)
