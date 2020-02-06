@@ -108,26 +108,14 @@ class SDK {
     debug(`swarm enabled? ${!this.disableSwarm}`)
   }
 
-  _replicate (socket, info, handle) {
-    const isInitiator = !!info.client
-    const protocolStream = protocol({ live: true })
-    if (isInitiator) {
-      handle(protocolStream, info.peer.topic)
-    } else {
-      protocolStream.on('feed', discoveryKey => {
-        handle(protocolStream, discoveryKey)
-      })
-    }
-    pump(socket, protocolStream, socket, err => {
-      debug(err.message)
-      if (this.verbose) {
-        console.warn(err.message)
-      }
-    })
-  }
-
   allowedProperties () {
     return ['title', 'description', 'main', 'subtype', 'authors', 'contents']
+  }
+
+  _log (msg, level = 'log') {
+    if (this.verbose) {
+      console[level](msg)
+    }
   }
 
   _getAvroType (appType) {
@@ -233,9 +221,7 @@ class SDK {
       const codec = new Codec(registry)
       level(join(this.dbPath, 'db'), { valueEncoding: codec }, (err, db) => {
         if (err instanceof level.errors.OpenError) {
-          if (this.verbose) {
-            console.error('failed to open database')
-          }
+          this._log('failed to open database', 'error')
           return reject(err)
         }
         this.db = db
@@ -420,12 +406,9 @@ class SDK {
 
     await dat.importFiles(archive, moduleDir)
 
-    if (this.verbose) {
-      // Note(dk): this kind of output can be part of the cli
-      console.log(
-        `Initialized new ${datJSON.p2pcommons.type}, dat://${publicKeyString}`
-      )
-    }
+    this._log(
+      `Initialized new ${datJSON.p2pcommons.type}, dat://${publicKeyString}`
+    )
 
     debug('init datJSON', datJSON)
 
@@ -442,11 +425,9 @@ class SDK {
       datJSON
     })
 
-    if (this.verbose) {
-      console.log(
-        `Saved new ${datJSON.p2pcommons.type}, with key: ${publicKeyString}`
-      )
-    }
+    this._log(
+      `Saved new ${datJSON.p2pcommons.type}, with key: ${publicKeyString}`
+    )
     // Note(dk): flatten p2pcommons obj in order to have a more symmetrical API
     return { rawJSON: this._flatten(datJSON), metadata }
   }
@@ -843,9 +824,7 @@ class SDK {
         debug('_getModule: Reading modules dat.json...')
         module = JSON.parse(await moduleVersion.readFile('dat.json'))
       } catch (err) {
-        if (this.verbose) {
-          console.error(err)
-        }
+        this._log(err.message, 'error')
         throw new Error('_getModule: Problems fetching external module')
       }
       // 4 - clone new module (move into its own method)
@@ -897,8 +876,8 @@ class SDK {
     )
     const { host: cKey, version: contentVersion } = parse(contentKey)
     const { host: pKey, version: profileVersion } = parse(profileKey)
-    if (!contentVersion && this.verbose) {
-      console.log('Content version is not found. Using latest version.')
+    if (!contentVersion) {
+      this._log('Content version is not found. Using latest version.')
     }
     // fetch content and profile
     const {
@@ -951,9 +930,7 @@ class SDK {
 
     // publish new content
     if (profile.p2pcommons.contents.includes(cKeyVersion)) {
-      if (this.verbose) {
-        console.log('publish: Content was already published')
-      }
+      this._log('publish: Content was already published')
       return
     }
 
@@ -1021,26 +998,18 @@ class SDK {
     const { module: profile, metadata } = await this._getModule(profileKey)
 
     if (!metadata.isWritable) {
-      if (this.verbose) {
-        console.log('profile is not writable')
-      }
+      this._log('profile is not writable', 'warn')
       return
     }
 
     if (!profile) {
-      if (this.verbose) {
-        console.log(
-          `profile with key ${DatEncoding.encode(profileKey)} not found`
-        )
-      }
+      this._log(`profile with key ${DatEncoding.encode(profileKey)} not found`)
       return
     }
 
     const { host: cKey, version: contentVersion } = parse(contentKey)
     if (!contentVersion) {
-      if (this.verbose) {
-        console.warn('content url does not include version')
-      }
+      this._log('content url does not include version', 'warn')
     }
 
     const { module: content, versionedKey } = await this._getModule(
@@ -1048,9 +1017,7 @@ class SDK {
       contentVersion
     )
     if (!content) {
-      if (this.verbose) {
-        console.log(`content with key ${cKey} not found`)
-      }
+      this._log(`content with key ${cKey} not found`)
       return
     }
 
@@ -1089,9 +1056,7 @@ class SDK {
     )
     const { metadata } = await this.get(key)
     if (!metadata.isWritable) {
-      if (this.verbose) {
-        console.log('delete: drive is not writable')
-      }
+      this._log('delete: drive is not writable')
       return
     }
     try {
