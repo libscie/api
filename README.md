@@ -139,11 +139,23 @@ Used to obtain a file descriptor from the `main` file of a module.
 - type: indicates the module type to retrieve. Allowed values: `profile`, `content`.
 - key: represents the module key (`url`) to be looked for. It is the buffer archive key `.toString('hex')`
 
-### register
+### publish
 
-> _async_ `register(contentKey: string or buffer, profileKey: string or buffer)`
+> _async_ `publish(contentKey: string or buffer, profileKey: string or buffer)`
 
 Register new content into a profile. The new content is added to the profile's `p2pcommons.contents`.
+
+### unpublish
+
+> _async_ `unpublish(contentKey: string or buffer, profileKey: string or buffer)`
+
+Remove content from a profile.
+
+### delete
+
+> _async_ `delete(key: string or buffer)`
+
+Remove module from local db and seed db. If it was open in memory, its closed.
 
 ### destroy
 
