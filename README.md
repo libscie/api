@@ -155,7 +155,7 @@ Remove content from a profile.
 
 > _async_ `delete(key: string or buffer)`
 
-Remove module from local db and seed db. If it was open in memory, its closed.
+Remove module from local db and seed db. If it was open in memory, its closed. Note: While this will stop the file from being seeded, that does not means that the content won't still be available on the network. This is due to the P2P file sharing dynamics.
 
 ### destroy
 
