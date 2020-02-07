@@ -849,7 +849,7 @@ class SDK {
   }
 
   /**
-   * register a content module to a profile
+   * publish a content module to a profile
    *
    * @public
    * @async
@@ -930,7 +930,7 @@ class SDK {
 
     // publish new content
     if (profile.p2pcommons.contents.includes(cKeyVersion)) {
-      this._log('publish: Content was already published')
+      this._log('publish: Content was already published', 'warn')
       return
     }
 
@@ -940,7 +940,8 @@ class SDK {
       url: profile.url,
       contents: profile.p2pcommons.contents
     })
-    debug('publish: profile updated successfully')
+
+    this._log('publish: profile updated successfully')
   }
 
   /**
@@ -998,13 +999,13 @@ class SDK {
     const { module: profile, metadata } = await this._getModule(profileKey)
 
     if (!metadata.isWritable) {
-      this._log('profile is not writable', 'warn')
-      return
+      throw new Error('profile is not writable')
     }
 
     if (!profile) {
-      this._log(`profile with key ${DatEncoding.encode(profileKey)} not found`)
-      return
+      throw new Error(
+        `profile with key ${DatEncoding.encode(profileKey)} not found`
+      )
     }
 
     const { host: cKey, version: contentVersion } = parse(contentKey)
@@ -1065,6 +1066,9 @@ class SDK {
       const drive = this.drives.get(dkey) // if drive is open in memory we can close it
       if (drive) {
         await drive.close()
+      }
+      if (!this.disableSwarm) {
+        this.networker.unseed(dkey)
       }
     } catch (err) {
       debug('delete: %O', err)
