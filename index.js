@@ -108,26 +108,14 @@ class SDK {
     debug(`swarm enabled? ${!this.disableSwarm}`)
   }
 
-  _replicate (socket, info, handle) {
-    const isInitiator = !!info.client
-    const protocolStream = protocol({ live: true })
-    if (isInitiator) {
-      handle(protocolStream, info.peer.topic)
-    } else {
-      protocolStream.on('feed', discoveryKey => {
-        handle(protocolStream, discoveryKey)
-      })
-    }
-    pump(socket, protocolStream, socket, err => {
-      debug(err.message)
-      if (this.verbose) {
-        console.warn(err.message)
-      }
-    })
-  }
-
   allowedProperties () {
     return ['title', 'description', 'main', 'subtype', 'authors', 'contents']
+  }
+
+  _log (msg, level = 'log') {
+    if (this.verbose) {
+      console[level](msg)
+    }
   }
 
   _getAvroType (appType) {
@@ -233,9 +221,7 @@ class SDK {
       const codec = new Codec(registry)
       level(join(this.dbPath, 'db'), { valueEncoding: codec }, (err, db) => {
         if (err instanceof level.errors.OpenError) {
-          if (this.verbose) {
-            console.error('failed to open database')
-          }
+          this._log('failed to open database', 'error')
           return reject(err)
         }
         this.db = db
@@ -420,12 +406,9 @@ class SDK {
 
     await dat.importFiles(archive, moduleDir)
 
-    if (this.verbose) {
-      // Note(dk): this kind of output can be part of the cli
-      console.log(
-        `Initialized new ${datJSON.p2pcommons.type}, dat://${publicKeyString}`
-      )
-    }
+    this._log(
+      `Initialized new ${datJSON.p2pcommons.type}, dat://${publicKeyString}`
+    )
 
     debug('init datJSON', datJSON)
 
@@ -442,11 +425,9 @@ class SDK {
       datJSON
     })
 
-    if (this.verbose) {
-      console.log(
-        `Saved new ${datJSON.p2pcommons.type}, with key: ${publicKeyString}`
-      )
-    }
+    this._log(
+      `Saved new ${datJSON.p2pcommons.type}, with key: ${publicKeyString}`
+    )
     // Note(dk): flatten p2pcommons obj in order to have a more symmetrical API
     return { rawJSON: this._flatten(datJSON), metadata }
   }
@@ -587,10 +568,14 @@ class SDK {
 
       return out
     }
-
+    const overwriteMerge = (destinationArray, sourceArray, options) =>
+      sourceArray
     const finalJSON = deepMerge(
       this._unflatten(rawJSONFlatten),
-      prepareMergeData(this._unflatten(mod))
+      prepareMergeData(this._unflatten(mod)),
+      {
+        arrayMerge: overwriteMerge
+      }
     )
     debug('set', { finalJSON })
     assertValid(avroType, finalJSON)
@@ -789,17 +774,20 @@ class SDK {
     // this fn will also call seed() after retrieving the module from the swarm
     let module
     let version
+    let meta
+    let stat
     try {
       // 1 - try to get content from localdb
-      debug('register: Fetching module from localdb')
+      debug('_getModule: Fetching module from localdb')
       const { rawJSON, metadata } = await this.get(DatEncoding.encode(mKey))
       module = rawJSON
       version = metadata.version
+      meta = metadata
     } catch (_) {
       // 2 - if no module is found on localdb, then fetch from hyperdrive
       // something like:
       debug(
-        'register: Module was not found on localdb.\nFetching from swarm...'
+        '_getModule: Module was not found on localdb.\nFetching from swarm...'
       )
 
       const _getDat = async key => {
@@ -821,25 +809,23 @@ class SDK {
 
       const moduleDat = await _getDat(mKey)
 
-      debug(`register: Found archive key ${DatEncoding.encode(mKey)}`)
-      debug('register: Waiting for archive ready')
+      debug(`_getModule: Found archive key ${DatEncoding.encode(mKey)}`)
+      debug('_getModule: Waiting for archive ready')
 
       await moduleDat.ready()
 
       await this._seed(moduleDat)
 
       version = mVersion || moduleDat.version
-      debug('register: Module version', version)
+      debug('_getModule: Module version', version)
       // 3 - after fetching module we still need to read the dat.json file
       try {
         const moduleVersion = moduleDat.checkout(version)
-        debug('register: Reading modules dat.json...')
+        debug('_getModule: Reading modules dat.json...')
         module = JSON.parse(await moduleVersion.readFile('dat.json'))
       } catch (err) {
-        if (this.verbose) {
-          console.error(err)
-        }
-        throw new Error('register: Problems fetching external module')
+        this._log(err.message, 'error')
+        throw new Error('_getModule: Problems fetching external module')
       }
       // 4 - clone new module (move into its own method)
       // modulePath = datkey || datkey+version
@@ -847,17 +833,23 @@ class SDK {
       const folderPath = join(this.baseDir, modulePath)
       await ensureDir(folderPath)
       await writeFile(join(folderPath, 'dat.json'), JSON.stringify(module))
+      stat = await moduleDat.stat('dat.json')
     }
 
     return {
       module: this._unflatten(module),
       version,
-      versionedKey: `dat://${mKey}+${version}`
+      versionedKey: `dat://${mKey}+${version}`,
+      metadata: meta || {
+        isWritable: module.writable,
+        lastModified: stat.mtime,
+        version: module.version
+      }
     }
   }
 
   /**
-   * register a content module to a profile
+   * publish a content module to a profile
    *
    * @public
    * @async
@@ -865,9 +857,9 @@ class SDK {
    * @param {(String|Buffer)} contentKey - a dat url
    * @param {(String|Buffer)} profileKey - a dat url
    */
-  async register (contentKey, profileKey) {
-    debug(`register contentKey: ${contentKey}`)
-    debug(`register profileKey: ${profileKey}`)
+  async publish (contentKey, profileKey) {
+    debug(`publish contentKey: ${contentKey}`)
+    debug(`publish profileKey: ${profileKey}`)
     assert(
       typeof contentKey === 'string' || Buffer.isBuffer(contentKey),
       ValidationError,
@@ -884,8 +876,8 @@ class SDK {
     )
     const { host: cKey, version: contentVersion } = parse(contentKey)
     const { host: pKey, version: profileVersion } = parse(profileKey)
-    if (!contentVersion && this.verbose) {
-      console.log('Content version is not found. Using latest version.')
+    if (!contentVersion) {
+      this._log('Content version is not found. Using latest version.')
     }
     // fetch content and profile
     const {
@@ -895,7 +887,7 @@ class SDK {
 
     const { module: profile } = await this._getModule(pKey, profileVersion)
 
-    // TODO(dk): consider add custom errors for register and verification
+    // TODO(dk): consider add custom errors for publish and verification
     assert(
       content.p2pcommons.type === 'content',
       ValidationError,
@@ -936,11 +928,9 @@ class SDK {
     }
     */
 
-    // register new content
+    // publish new content
     if (profile.p2pcommons.contents.includes(cKeyVersion)) {
-      if (this.verbose) {
-        console.log('register: Content was already registered')
-      }
+      this._log('publish: Content was already published', 'warn')
       return
     }
 
@@ -950,7 +940,8 @@ class SDK {
       url: profile.url,
       contents: profile.p2pcommons.contents
     })
-    debug('register: profile updated successfully')
+
+    this._log('publish: profile updated successfully')
   }
 
   /**
@@ -983,6 +974,67 @@ class SDK {
   }
 
   /**
+   * unpublish content from a user's profile
+   *
+   * @param {(String)} contentKey - contentKey should include the version
+   * @param {(String|Buffer)} profileKey
+   */
+  async unpublish (contentKey, profileKey) {
+    assert(
+      typeof contentKey === 'string' || Buffer.isBuffer(contentKey),
+      ValidationError,
+      "'string' or Buffer",
+      contentKey,
+      'contentKey'
+    )
+    assert(
+      typeof profileKey === 'string' || Buffer.isBuffer(profileKey),
+      ValidationError,
+      "'string' or Buffer",
+      profileKey,
+      'profileKey'
+    )
+    debug('unpublish')
+
+    const { module: profile, metadata } = await this._getModule(profileKey)
+
+    if (!metadata.isWritable) {
+      throw new Error('profile is not writable')
+    }
+
+    if (!profile) {
+      throw new Error(
+        `profile with key ${DatEncoding.encode(profileKey)} not found`
+      )
+    }
+
+    const { host: cKey, version: contentVersion } = parse(contentKey)
+    if (!contentVersion) {
+      this._log('content url does not include version', 'warn')
+    }
+
+    const { module: content, versionedKey } = await this._getModule(
+      cKey,
+      contentVersion
+    )
+    if (!content) {
+      this._log(`content with key ${cKey} not found`)
+      return
+    }
+
+    // everything is valid, removing content from contents
+    profile.p2pcommons.contents.splice(
+      profile.p2pcommons.contents.indexOf(versionedKey),
+      1
+    )
+
+    await this.set({
+      url: profile.url,
+      contents: profile.p2pcommons.contents
+    })
+  }
+
+  /**
    * delete a module. This method will remove the module from the localdb and seeddb. It will also close the drive.
    *
    * @public
@@ -998,15 +1050,14 @@ class SDK {
       'key'
     )
 
+    debug('delete')
     const url = DatEncoding.encode(key)
     const dkey = DatEncoding.encode(
       crypto.discoveryKey(DatEncoding.decode(key))
     )
     const { metadata } = await this.get(key)
     if (!metadata.isWritable) {
-      if (this.verbose) {
-        console.log('delete: drive is not writable')
-      }
+      this._log('delete: drive is not writable')
       return
     }
     try {
@@ -1015,6 +1066,9 @@ class SDK {
       const drive = this.drives.get(dkey) // if drive is open in memory we can close it
       if (drive) {
         await drive.close()
+      }
+      if (!this.disableSwarm) {
+        this.networker.unseed(dkey)
       }
     } catch (err) {
       debug('delete: %O', err)

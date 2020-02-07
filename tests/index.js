@@ -358,7 +358,7 @@ test('multiple writes with persistance', async t => {
   }
 })
 
-test('register - local contents', async t => {
+test('publish - local contents', async t => {
   const p2p = createDb()
   await p2p.ready()
   const sampleData = [
@@ -381,7 +381,7 @@ test('register - local contents', async t => {
   // update author on content module
   await p2p.set({ url: content1.url, authors })
   const contentKeyVersion = `${content1.url}+${metadata1.version + 1}`
-  await p2p.register(contentKeyVersion, profile.url)
+  await p2p.publish(contentKeyVersion, profile.url)
   const { rawJSON } = await p2p.get(profile.url)
   t.same(
     rawJSON.contents,
@@ -392,7 +392,7 @@ test('register - local contents', async t => {
   t.end()
 })
 
-test('seed and register', async t => {
+test('seed and publish', async t => {
   const p2p = createDb({
     swarm: true,
     verbose: true,
@@ -436,8 +436,8 @@ test('seed and register', async t => {
 
   await p2p2.destroy(true, false)
 
-  // call register
-  await p2p.register(contentKeyVersion, profile.url)
+  // call publish
+  await p2p.publish(contentKeyVersion, profile.url)
 
   const { rawJSON } = await p2p.get(profile.url)
   t.same(
@@ -451,16 +451,16 @@ test('seed and register', async t => {
     'versioned content dir created successfully'
   )
 
-  // call register again
-  await p2p.register(contentKeyVersion, profile.url)
+  // call publish again
+  await p2p.publish(contentKeyVersion, profile.url)
   const { rawJSON: rawJSON2 } = await p2p.get(profile.url)
-  t.same(rawJSON.contents, rawJSON2.contents, 'register is idempotent')
+  t.same(rawJSON.contents, rawJSON2.contents, 'publish is idempotent')
 
   const dirs2 = await readdir(p2p.baseDir)
   t.same(
     dirs,
     dirs2,
-    'register is idempotent (created directories remains the same)'
+    'publish is idempotent (created directories remains the same)'
   )
   await p2p2.destroy(false, true)
   await p2p.destroy()
@@ -507,7 +507,7 @@ test('verify', async t => {
   t.ok(result, 'content1 meets the verification requirements')
 
   const result2 = await p2p.verify(content2)
-  t.notOk(result2, 'content2 does not has authors registered')
+  t.notOk(result2, 'content2 does not has published authors')
 
   await p2p.destroy()
   t.end()
@@ -575,6 +575,44 @@ test('delete a module from local db', async t => {
   await p2p.delete(content.url)
   const modules3 = await p2p.list()
   t.equal(modules3.length, 0, 'Modules list is empty again')
+  await p2p.destroy()
+  t.end()
+})
+
+test('unpublish content module from profile', async t => {
+  const p2p = createDb()
+  await p2p.ready()
+  const sampleContent = {
+    type: 'content',
+    title: 'demo 1',
+    description: 'lorem ipsum'
+  }
+
+  const { rawJSON: content, metadata: contentMeta } = await p2p.init(
+    sampleContent
+  )
+
+  const sampleProfile = {
+    type: 'profile',
+    title: 'd'
+  }
+
+  const { rawJSON: profile } = await p2p.init(sampleProfile)
+
+  t.equal(profile.contents.length, 0, 'profile.contents is empty')
+  const versioned = `${content.url}+${contentMeta.version}`
+  await p2p.publish(versioned, profile.url)
+
+  const { rawJSON: updatedProfile } = await p2p.get(profile.url)
+
+  t.equal(updatedProfile.contents.length, 1)
+
+  await p2p.unpublish(versioned, profile.url)
+
+  const { rawJSON: deletedContent } = await p2p.get(profile.url)
+
+  t.equal(deletedContent.contents.length, 0, 'content unpublished successfully')
+
   await p2p.destroy()
   t.end()
 })
