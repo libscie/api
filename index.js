@@ -974,7 +974,7 @@ class SDK {
   }
 
   /**
-   * unpublish content from users profile
+   * unpublish content from a user's profile
    *
    * @param {(String)} contentKey - contentKey should include the version
    * @param {(String|Buffer)} profileKey
