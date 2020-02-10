@@ -616,3 +616,64 @@ test('unpublish content module from profile', async t => {
   await p2p.destroy()
   t.end()
 })
+
+test('follow and unfollow a profile', async t => {
+  const p2p = createDb({
+    swarm: true,
+    persist: false,
+    swarmFn: testSwarmCreator
+  })
+  const p2p2 = createDb({
+    swarm: true,
+    persist: false,
+    swarmFn: testSwarmCreator
+  })
+
+  await p2p.ready()
+  await p2p2.ready()
+
+  const professorX = {
+    type: 'profile',
+    title: 'Professor X'
+  }
+
+  const professorY = {
+    type: 'profile',
+    title: 'Professor Y'
+  }
+
+  const { rawJSON: profileX } = await p2p.init(professorX)
+  const { rawJSON: profileY, metadata } = await p2p2.init(professorY)
+
+  t.equal(profileX.follows.length, 0, 'Initially follows should be empty')
+  // call follow
+  await p2p.follow(
+    profileX.url,
+    `${profileY.url.toString('hex')}+${metadata.version}`
+  )
+
+  const { rawJSON: profileXUpdated } = await p2p.get(profileX.url)
+  t.equal(profileXUpdated.follows.length, 1)
+  t.same(
+    profileXUpdated.follows,
+    [`${profileY.url.toString('hex')}+${metadata.version}`],
+    'follows property should contain target profile url'
+  )
+
+  await p2p.unfollow(
+    profileX.url,
+    `${profileY.url.toString('hex')}+${metadata.version}`
+  )
+
+  const { rawJSON: profileXFinal } = await p2p.get(profileX.url)
+  t.equal(
+    profileXFinal.follows.length,
+    0,
+    'unfollow removes the target profile'
+  )
+
+  await p2p.destroy()
+  await p2p2.destroy()
+
+  t.end()
+})
