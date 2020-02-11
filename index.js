@@ -109,9 +109,43 @@ class SDK {
   }
 
   allowedProperties () {
-    return ['title', 'description', 'main', 'subtype', 'authors', 'contents']
+    return [
+      'title',
+      'description',
+      'main',
+      'subtype',
+      'authors',
+      'contents',
+      'follows'
+    ]
   }
 
+  assertDatUrl (datUrl) {
+    assert(
+      typeof datUrl === 'string' || Buffer.isBuffer(datUrl),
+      ValidationError,
+      "'string' or Buffer",
+      datUrl,
+      'datUrl'
+    )
+  }
+
+  assertModuleType (module, mType) {
+    assert(
+      module.p2pcommons.type === mType,
+      ValidationError,
+      mType,
+      module.p2pcommons.type,
+      'type'
+    )
+  }
+
+  assertModule (module) {
+    const localProfileType = this._getAvroType(module.p2pcommons.type)
+    if (!localProfileType.isValid(module)) {
+      throw new Error('Invalid local profile module')
+    }
+  }
   _log (msg, level = 'log') {
     if (this.verbose) {
       console[level](msg)
@@ -1032,6 +1066,139 @@ class SDK {
       url: profile.url,
       contents: profile.p2pcommons.contents
     })
+  }
+
+  async follow (localProfileUrl, targetProfileUrl) {
+    this.assertDatUrl(localProfileUrl)
+    this.assertDatUrl(targetProfileUrl)
+
+    debug('follow')
+
+    // Fetching localProfile module
+    const { module: localProfile, metadata } = await this._getModule(
+      localProfileUrl
+    )
+
+    if (!localProfile) {
+      throw new Error('Module not found')
+    }
+
+    if (!metadata.isWritable) {
+      throw new Error('local profile is not writable')
+    }
+
+    this.assertModuleType(localProfile, 'profile')
+
+    this.assertModule(localProfile)
+
+    const { host: targetProfileKey, version: targetProfileVersion } = parse(
+      targetProfileUrl
+    )
+
+    // Fetching targetProfile module
+    debug(
+      `follow: fetching module with key: ${targetProfileKey} and version: ${targetProfileVersion}`
+    )
+    const {
+      module: targetProfile,
+      metadata: targetMetadata
+    } = await this._getModule(targetProfileKey, targetProfileVersion)
+
+    if (!targetProfile) {
+      throw new Error('Module not found')
+    }
+
+    this.assertModuleType(targetProfile, 'profile')
+
+    this.assertModule(targetProfile)
+
+    // we are ok to update profile metadata
+    const finalTargetProfileKey = targetProfileVersion
+      ? `dat://${targetProfileKey}+${targetProfileVersion}`
+      : `dat://${targetProfileKey}`
+
+    if (localProfile.p2pcommons.follows.includes(finalTargetProfileKey)) {
+      this._log('follow: Target profile was already added to follows', 'warn')
+      return
+    }
+
+    localProfile.p2pcommons.follows.push(finalTargetProfileKey)
+    // update profile
+    await this.set({
+      url: localProfile.url,
+      follows: localProfile.p2pcommons.follows
+    })
+
+    this._log('follow: profile updated successfully')
+  }
+
+  /**
+   * localProfile unfollows a targetProfile
+   *
+   * @public
+   * @async
+   * @param localProfileUrl
+   * @param targetProfileUrl
+   */
+  async unfollow (localProfileUrl, targetProfileUrl) {
+    this.assertDatUrl(localProfileUrl)
+    this.assertDatUrl(targetProfileUrl)
+
+    debug('unfollow')
+
+    // Fetching localProfile module
+    const { module: localProfile, metadata } = await this._getModule(
+      localProfileUrl
+    )
+
+    if (!localProfile) {
+      throw new Error('Module not found')
+    }
+
+    if (!metadata.isWritable) {
+      throw new Error('local profile is not writable')
+    }
+
+    this.assertModuleType(localProfile, 'profile')
+
+    this.assertModule(localProfile)
+
+    const { host: targetProfileKey, version: targetProfileVersion } = parse(
+      targetProfileUrl
+    )
+
+    // Fetching targetProfile module
+    debug(
+      `follow: fetching module with key: ${targetProfileKey} and version: ${targetProfileVersion}`
+    )
+    const {
+      module: targetProfile,
+      metadata: targetMetadata
+    } = await this._getModule(targetProfileKey, targetProfileVersion)
+
+    if (!targetProfile) {
+      throw new Error('Module not found')
+    }
+
+    this.assertModuleType(targetProfile, 'profile')
+
+    this.assertModule(targetProfile)
+
+    // everything is valid, removing profile
+    const finalTargetProfileKey = targetProfileVersion
+      ? `dat://${targetProfileKey}+${targetProfileVersion}`
+      : `dat://${targetProfileKey}`
+    localProfile.p2pcommons.follows.splice(
+      localProfile.p2pcommons.follows.indexOf(finalTargetProfileKey),
+      1
+    )
+
+    await this.set({
+      url: localProfile.url,
+      follows: localProfile.p2pcommons.follows
+    })
+
+    this._log('unfollow: profile updated successfully')
   }
 
   /**
