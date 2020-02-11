@@ -116,6 +116,7 @@ class SDK {
       'subtype',
       'authors',
       'contents',
+      'parents',
       'follows'
     ]
   }
