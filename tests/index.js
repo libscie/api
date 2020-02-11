@@ -645,25 +645,20 @@ test('follow and unfollow a profile', async t => {
   const { rawJSON: profileX } = await p2p.init(professorX)
   const { rawJSON: profileY, metadata } = await p2p2.init(professorY)
 
+  const followUrl = `${profileY.url.toString('hex')}+${metadata.version}`
   t.equal(profileX.follows.length, 0, 'Initially follows should be empty')
   // call follow
-  await p2p.follow(
-    profileX.url,
-    `${profileY.url.toString('hex')}+${metadata.version}`
-  )
+  await p2p.follow(profileX.url, followUrl)
 
   const { rawJSON: profileXUpdated } = await p2p.get(profileX.url)
   t.equal(profileXUpdated.follows.length, 1)
   t.same(
     profileXUpdated.follows,
-    [`${profileY.url.toString('hex')}+${metadata.version}`],
+    [followUrl],
     'follows property should contain target profile url'
   )
 
-  await p2p.unfollow(
-    profileX.url,
-    `${profileY.url.toString('hex')}+${metadata.version}`
-  )
+  await p2p.unfollow(profileX.url, followUrl)
 
   const { rawJSON: profileXFinal } = await p2p.get(profileX.url)
   t.equal(
