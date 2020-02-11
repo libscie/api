@@ -451,7 +451,7 @@ class SDK {
     const metadata = {
       // start hyperswarm
       isWritable: archive.writable,
-      lastModified: stat.mtime,
+      lastModified: stat[0].mtime,
       version: archive.version
     }
 
@@ -521,7 +521,7 @@ class SDK {
     debug('saving item on local db')
     await this.localdb.put(DatEncoding.encode(datJSON.url), {
       isWritable,
-      lastModified: stat ? stat.mtime : lastModified,
+      lastModified: stat ? stat[0].mtime : lastModified,
       version: version,
       rawJSON: datJSON,
       avroType: this._getAvroType(datJSON.p2pcommons.type).name
@@ -877,7 +877,7 @@ class SDK {
       versionedKey: `dat://${mKey}+${version}`,
       metadata: meta || {
         isWritable: module.writable,
-        lastModified: stat.mtime,
+        lastModified: stat[0].mtime,
         version: module.version
       }
     }

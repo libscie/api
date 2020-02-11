@@ -34,7 +34,7 @@
   "homepage": "https://github.com/p2pcommons/sdk-js#readme",
   "dependencies": {
     "@avro/types": "^1.0.5",
-    "@geut/hyperdrive-promise": "^2.0.0",
+    "@geut/hyperdrive-promise": "^3.0.0",
     "@wirelineio/hyperswarm-network-memory": "^0.2.17",
     "corestore": "^5.0.7",
     "corestore-swarm-networking": "^4.0.2",
