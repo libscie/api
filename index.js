@@ -804,16 +804,31 @@ class SDK {
     return open(main)
   }
 
-  async _getModule (mKey, mVersion) {
+  /**
+   * clone
+   *
+   * @public
+   * @async
+   * @param {(String|Buffer) }mKey - a dat url
+   * @param {Number} [mVersion] - a module version
+   * @returns {{
+   *   module: Object,
+   *   version: Number,
+   *   versionedKey: String,
+   *   metadata: Object
+   * }}
+   */
+  async clone (mKey, mVersion, download = true) {
     // get module from localdb, if absent will query it from the swarm
     // this fn will also call seed() after retrieving the module from the swarm
     let module
     let version
     let meta
     let stat
+    let dwldHandle
     try {
       // 1 - try to get content from localdb
-      debug('_getModule: Fetching module from localdb')
+      debug('clone: Fetching module from localdb')
       const { rawJSON, metadata } = await this.get(DatEncoding.encode(mKey))
       module = rawJSON
       version = metadata.version
@@ -821,9 +836,7 @@ class SDK {
     } catch (_) {
       // 2 - if no module is found on localdb, then fetch from hyperdrive
       // something like:
-      debug(
-        '_getModule: Module was not found on localdb.\nFetching from swarm...'
-      )
+      debug('clone: Module was not found on localdb.\nFetching from swarm...')
 
       const _getDat = async key => {
         const keyBuffer = DatEncoding.decode(key)
@@ -844,23 +857,23 @@ class SDK {
 
       const moduleDat = await _getDat(mKey)
 
-      debug(`_getModule: Found archive key ${DatEncoding.encode(mKey)}`)
-      debug('_getModule: Waiting for archive ready')
+      debug(`clone: Found archive key ${DatEncoding.encode(mKey)}`)
+      debug('clone: Waiting for archive ready')
 
       await moduleDat.ready()
 
       await this._seed(moduleDat)
 
       version = mVersion || moduleDat.version
-      debug('_getModule: Module version', version)
+      debug('clone: Module version', version)
       // 3 - after fetching module we still need to read the dat.json file
       try {
         const moduleVersion = moduleDat.checkout(version)
-        debug('_getModule: Reading modules dat.json...')
+        debug('clone: Reading modules dat.json...')
         module = JSON.parse(await moduleVersion.readFile('dat.json'))
       } catch (err) {
         this._log(err.message, 'error')
-        throw new Error('_getModule: Problems fetching external module')
+        throw new Error('clone: Problems fetching external module')
       }
       // 4 - clone new module (move into its own method)
       // modulePath = datkey || datkey+version
@@ -869,6 +882,10 @@ class SDK {
       await ensureDir(folderPath)
       await writeFile(join(folderPath, 'dat.json'), JSON.stringify(module))
       stat = await moduleDat.stat('dat.json')
+      if (download) {
+        dwldHandle = moduleDat.download('/')
+        debugger
+      }
     }
 
     return {
@@ -879,7 +896,8 @@ class SDK {
         isWritable: module.writable,
         lastModified: stat[0].mtime,
         version: module.version
-      }
+      },
+      dwldHandle
     }
   }
 
@@ -915,12 +933,12 @@ class SDK {
       this._log('Content version is not found. Using latest version.')
     }
     // fetch content and profile
-    const {
-      module: content,
-      versionedKey: cKeyVersion
-    } = await this._getModule(cKey, contentVersion)
+    const { module: content, versionedKey: cKeyVersion } = await this.clone(
+      cKey,
+      contentVersion
+    )
 
-    const { module: profile } = await this._getModule(pKey, profileVersion)
+    const { module: profile } = await this.clone(pKey, profileVersion)
 
     // TODO(dk): consider add custom errors for publish and verification
     assert(
@@ -1031,7 +1049,7 @@ class SDK {
     )
     debug('unpublish')
 
-    const { module: profile, metadata } = await this._getModule(profileKey)
+    const { module: profile, metadata } = await this.clone(profileKey)
 
     if (!metadata.isWritable) {
       throw new Error('profile is not writable')
@@ -1048,7 +1066,7 @@ class SDK {
       this._log('content url does not include version', 'warn')
     }
 
-    const { module: content, versionedKey } = await this._getModule(
+    const { module: content, versionedKey } = await this.clone(
       cKey,
       contentVersion
     )
@@ -1076,9 +1094,7 @@ class SDK {
     debug('follow')
 
     // Fetching localProfile module
-    const { module: localProfile, metadata } = await this._getModule(
-      localProfileUrl
-    )
+    const { module: localProfile, metadata } = await this.clone(localProfileUrl)
 
     if (!localProfile) {
       throw new Error('Module not found')
@@ -1103,7 +1119,7 @@ class SDK {
     const {
       module: targetProfile,
       metadata: targetMetadata
-    } = await this._getModule(targetProfileKey, targetProfileVersion)
+    } = await this.clone(targetProfileKey, targetProfileVersion)
 
     if (!targetProfile) {
       throw new Error('Module not found')
@@ -1148,9 +1164,7 @@ class SDK {
     debug('unfollow')
 
     // Fetching localProfile module
-    const { module: localProfile, metadata } = await this._getModule(
-      localProfileUrl
-    )
+    const { module: localProfile, metadata } = await this.clone(localProfileUrl)
 
     if (!localProfile) {
       throw new Error('Module not found')
@@ -1175,7 +1189,7 @@ class SDK {
     const {
       module: targetProfile,
       metadata: targetMetadata
-    } = await this._getModule(targetProfileKey, targetProfileVersion)
+    } = await this.clone(targetProfileKey, targetProfileVersion)
 
     if (!targetProfile) {
       throw new Error('Module not found')
