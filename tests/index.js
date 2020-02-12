@@ -1,5 +1,5 @@
 const {
-  promises: { readdir }
+  promises: { writeFile, readdir }
 } = require('fs')
 const { join } = require('path')
 const execa = require('execa')
@@ -673,5 +673,57 @@ test('follow and unfollow a profile', async t => {
   await p2p.destroy()
   await p2p2.destroy()
 
+  t.end()
+})
+
+test.only('clone a module', async t => {
+  const dir = tempy.directory()
+  const dir2 = tempy.directory()
+
+  const p2p = new SDK({
+    disableSwarm: false,
+    persist: true,
+    baseDir: dir
+  })
+
+  const p2p2 = new SDK({
+    disableSwarm: false,
+    persist: true,
+    baseDir: dir2
+  })
+
+  await p2p.ready()
+  await p2p2.ready()
+
+  const content = {
+    type: 'content',
+    title: 'test',
+    main: 'main.txt'
+  }
+
+  const { rawJSON, metadata } = await p2p.init(content)
+  const rawJSONpath = rawJSON.url.replace('dat://', '')
+
+  // write main.txt
+  await writeFile(join(dir, rawJSONpath, 'main.txt'), 'hello')
+
+  const { module, dwldHandle } = await p2p2.clone(rawJSON.url, metadata.version)
+
+  t.same(module.title, content.title)
+
+  await new Promise((resolve, reject) => {
+    dwldHandle.on('finish', resolve)
+
+    dwldHandle.on('error', reject)
+  })
+
+  // NOTE(dk): the version at the ending shouldnt be necessary
+  const clonedDir = await readdir(
+    join(p2p2.baseDir, `${rawJSONpath}+${metadata.version}`)
+  )
+
+  t.ok(clonedDir.includes('main.txt'), 'clone downloaded content successfully')
+  await p2p.destroy()
+  await p2p2.destroy()
   t.end()
 })
