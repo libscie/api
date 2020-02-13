@@ -395,7 +395,7 @@ test('publish - local contents', async t => {
   t.end()
 })
 
-test('seed and publish', async t => {
+test('seed and publish', { timeout: 3000 }, async t => {
   const p2p = createDb({
     swarm: true,
     verbose: true,
@@ -676,20 +676,22 @@ test('follow and unfollow a profile', async t => {
   t.end()
 })
 
-test.only('clone a module', async t => {
+test.only('clone a module', { timeout: 3000 }, async t => {
   const dir = tempy.directory()
   const dir2 = tempy.directory()
 
   const p2p = new SDK({
     disableSwarm: false,
     persist: true,
-    baseDir: dir
+    baseDir: dir,
+    swarm: testSwarmCreator
   })
 
   const p2p2 = new SDK({
     disableSwarm: false,
     persist: true,
-    baseDir: dir2
+    baseDir: dir2,
+    swarm: testSwarmCreator
   })
 
   await p2p.ready()
@@ -707,20 +709,18 @@ test.only('clone a module', async t => {
   // write main.txt
   await writeFile(join(dir, rawJSONpath, 'main.txt'), 'hello')
 
-  const { module, dwldHandle } = await p2p2.clone(rawJSON.url, metadata.version)
+  const { module, dwldHandle } = await p2p2.clone(rawJSON.url, true)
 
   t.same(module.title, content.title)
 
   await new Promise((resolve, reject) => {
-    dwldHandle.on('finish', resolve)
+    dwldHandle.once('finish', resolve)
 
-    dwldHandle.on('error', reject)
+    dwldHandle.once('error', reject)
   })
 
   // NOTE(dk): the version at the ending shouldnt be necessary
-  const clonedDir = await readdir(
-    join(p2p2.baseDir, `${rawJSONpath}+${metadata.version}`)
-  )
+  const clonedDir = await readdir(join(p2p2.baseDir, rawJSONpath))
 
   t.ok(clonedDir.includes('main.txt'), 'clone downloaded content successfully')
   await p2p.destroy()
