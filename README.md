@@ -177,7 +177,7 @@ Returns an object with multiple values:
 - **version**: the version obtained
 - **versionedKey**: an string indicating the full module url obtained. E.g: `dat://${mKey}+${version}`
 - **metadata**: an object with modules metadata
-- **dwldHandle**: it contains a download event emitter, you can listen to `finish` event to know when the download has been completed. It's defined only if `download === true`.
+- **dwldHandle**: it contains a download event emitter, you can listen to `end` event to know when the download has been completed. It's defined only if `download === true`.
 
 
 ### delete
