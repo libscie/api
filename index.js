@@ -14,6 +14,7 @@ const parse = require('parse-dat-url')
 const DatEncoding = require('dat-encoding')
 const debug = require('debug')('p2pcommons')
 const deepMerge = require('deepmerge')
+const pRetry = require('p-retry')
 const Swarm = require('corestore-swarm-networking')
 const pump = require('pump')
 const protocol = require('hypercore-protocol')
@@ -91,6 +92,7 @@ class SDK {
 
     this.drives = new Map()
     this.stores = new Map() // deprecated
+    this.drivesToWatch = new Map()
 
     // start hyperswarm
     this.disableSwarm = !!finalOpts.disableSwarm
@@ -150,6 +152,7 @@ class SDK {
       throw new Error('Invalid local profile module')
     }
   }
+
   _log (msg, level = 'log') {
     if (this.verbose) {
       console[level](msg)
@@ -207,8 +210,8 @@ class SDK {
   }
 
   async _reseed () {
-    debug('re-seeding modules...')
     const driveList = await collect(this.seeddb)
+    debug(`re-seeding ${driveList.length} modules...`)
     for (const { key: discoveryKey, opts } of driveList) {
       this.networker.seed(discoveryKey, opts)
     }
@@ -313,13 +316,13 @@ class SDK {
       persist: this.persist,
       storageFn: this.storage,
       storageOpts: { storageLocation: this.baseDir },
-      corestoreOpts: { sparse: true, stats: true }
+      corestoreOpts: {}
     })
   }
 
   async startSwarm () {
     if (!this.disableSwarm) {
-      this.networker = this.swarmFn(this.store)
+      this.networker = this.swarmFn(this.store, { announceLocalAddress: true })
       this.networker.on('error', console.error)
       this.networker.listen()
       debug('swarm listening...')
@@ -442,7 +445,20 @@ class SDK {
     // write dat.json
     await writeFile(join(moduleDir, 'dat.json'), JSON.stringify(datJSON))
 
-    await dat.importFiles(archive, moduleDir)
+    const driveWatch = await dat.importFiles(archive, moduleDir, {
+      watch: true
+    })
+
+    this.drivesToWatch.set(DatEncoding.encode(archive.discoveryKey), driveWatch)
+
+    // NOTE(dk): consider return the driveWatch EE.
+    await new Promise((resolve, reject) => {
+      driveWatch.once('put-end', src => {
+        return resolve()
+      })
+      driveWatch.once('error', reject)
+      // Note(dk): consider add a timeout
+    })
 
     this._log(
       `Initialized new ${datJSON.p2pcommons.type}, dat://${publicKeyString}`
@@ -520,7 +536,7 @@ class SDK {
 
       version = archive.version
       stat = await archive.stat('/dat.json')
-      //await this._seed(archive)
+      // await this._seed(archive)
     }
 
     debug('saving item on local db')
@@ -822,7 +838,7 @@ class SDK {
    *   metadata: Object
    * }}
    */
-  async clone (mKey, mVersion, download = false) {
+  async clone (mKey, mVersion, download = true) {
     // get module from localdb, if absent will query it from the swarm
     // this fn will also call seed() after retrieving the module from the swarm
 
@@ -837,6 +853,7 @@ class SDK {
     let meta
     let stat
     let dwldHandle
+    let moduleVersion
     const mKeyString = DatEncoding.encode(mKey)
     try {
       // 1 - try to get content from localdb
@@ -860,18 +877,18 @@ class SDK {
             'clone: Module was not found on memory.\nFetching from swarm...'
           )
           const drive = await dat.open(this.store, keyBuffer, {
-            sparse: this.globalOptions.sparse,
-            sparseMetadata: this.globalOptions.sparseMetadata
+            sparse: false,
+            sparseMetadata: false
           })
 
           await drive.ready()
 
-          await this._seed(drive)
+          await this._seed(drive, { announce: true, lookup: true })
 
           // seed waiting for peers
           await new Promise((resolve, reject) => {
             // NOTE(dk): consider adding some timeout
-            drive.once('peer-add', peer => {
+            drive.once('peer-add', () => {
               return resolve()
             })
           })
@@ -891,19 +908,32 @@ class SDK {
 
       try {
         // 3 - after fetching module we still need to read the dat.json file
-        let moduleVersion
         if (version !== 0) {
           moduleVersion = moduleDat.checkout(version)
         } else {
           moduleVersion = moduleDat
         }
         debug('clone: Reading modules dat.json...')
-        module = JSON.parse(await moduleVersion.readFile('dat.json'))
+
+        const getFile = async () => {
+          try {
+            return moduleVersion.readFile('dat.json', 'utf-8')
+          } catch (_) {}
+        }
+        const content = await pRetry(getFile, {
+          retries: 5,
+          randomize: true
+        })
+
+        module = JSON.parse(content)
         // NOTE (dk): we can consider have another map for checkouts only
         this.drives.set(
           DatEncoding.encode(moduleDat.discoveryKey),
           moduleVersion
         )
+        if (download) {
+          dwldHandle = moduleVersion.download('/')
+        }
       } catch (err) {
         this._log(err.message, 'error')
         throw new Error('clone: Problems fetching external module')
@@ -914,10 +944,10 @@ class SDK {
       const folderPath = join(this.baseDir, modulePath)
       await ensureDir(folderPath)
       await writeFile(join(folderPath, 'dat.json'), JSON.stringify(module))
-      stat = await moduleDat.stat('dat.json')
       if (download) {
-        dwldHandle = moduleDat.download('/')
+        dwldHandle = dat.downloadFiles(moduleVersion, folderPath)
       }
+      stat = await moduleDat.stat('dat.json')
     }
 
     return {
@@ -970,10 +1000,11 @@ class SDK {
     // fetch content and profile
     const { module: content, versionedKey: cKeyVersion } = await this.clone(
       cKey,
-      contentVersion
+      contentVersion,
+      false
     )
 
-    const { module: profile } = await this.clone(pKey, profileVersion)
+    const { module: profile } = await this.clone(pKey, profileVersion, false)
 
     // TODO(dk): consider add custom errors for publish and verification
     assert(
@@ -1084,7 +1115,7 @@ class SDK {
     )
     debug('unpublish')
 
-    const { module: profile, metadata } = await this.clone(profileKey)
+    const { module: profile, metadata } = await this.clone(profileKey, false)
 
     if (!metadata.isWritable) {
       throw new Error('profile is not writable')
@@ -1103,7 +1134,8 @@ class SDK {
 
     const { module: content, versionedKey } = await this.clone(
       cKey,
-      contentVersion
+      contentVersion,
+      false
     )
     if (!content) {
       this._log(`content with key ${cKey} not found`)
@@ -1129,7 +1161,10 @@ class SDK {
     debug('follow')
 
     // Fetching localProfile module
-    const { module: localProfile, metadata } = await this.clone(localProfileUrl)
+    const { module: localProfile, metadata } = await this.clone(
+      localProfileUrl,
+      false
+    )
 
     if (!localProfile) {
       throw new Error('Module not found')
@@ -1154,7 +1189,7 @@ class SDK {
     const {
       module: targetProfile,
       metadata: targetMetadata
-    } = await this.clone(targetProfileKey, targetProfileVersion)
+    } = await this.clone(targetProfileKey, targetProfileVersion, false)
 
     if (!targetProfile) {
       throw new Error('Module not found')
@@ -1199,7 +1234,10 @@ class SDK {
     debug('unfollow')
 
     // Fetching localProfile module
-    const { module: localProfile, metadata } = await this.clone(localProfileUrl)
+    const { module: localProfile, metadata } = await this.clone(
+      localProfileUrl,
+      false
+    )
 
     if (!localProfile) {
       throw new Error('Module not found')
@@ -1224,7 +1262,7 @@ class SDK {
     const {
       module: targetProfile,
       metadata: targetMetadata
-    } = await this.clone(targetProfileKey, targetProfileVersion)
+    } = await this.clone(targetProfileKey, targetProfileVersion, false)
 
     if (!targetProfile) {
       throw new Error('Module not found')
@@ -1313,8 +1351,11 @@ class SDK {
       await this.networker.close()
     }
 
-    //const closing = Array.from(this.drives.values()).map(d => d.close())
-    //await Promise.all(closing)
+    // const closing = Array.from(this.drives.values()).map(d => d.close())
+    // await Promise.all(closing)
+    for (const mirror of this.drivesToWatch.values()) {
+      mirror.destroy()
+    }
   }
 }
 
