@@ -26,7 +26,10 @@ const createDb = opts => {
 }
 test('ready', async t => {
   const p2p = createDb()
-  t.doesNotThrow(async () => p2p.ready(), 'ready method should not throw')
+  t.doesNotThrow(async () => {
+    await p2p.ready()
+    await p2p.destroy()
+  }, 'ready method should not throw')
   t.end()
 })
 
@@ -65,8 +68,8 @@ test('init: create content module', async t => {
   t.ok(metadata.version)
   t.ok(metadata.isWritable)
   t.ok(metadata.lastModified)
-  t.end()
   await p2p.destroy()
+  t.end()
 })
 
 test('init: creation should throw a ValidationError', async t => {
@@ -86,8 +89,8 @@ test('init: creation should throw a ValidationError', async t => {
     t.ok(Object.prototype.hasOwnProperty.call(err, 'expected'))
     t.ok(Object.prototype.hasOwnProperty.call(err, 'received'))
     t.ok(Object.prototype.hasOwnProperty.call(err, 'key'))
-    t.end()
     await p2p.destroy()
+    t.end()
   }
 })
 
@@ -111,8 +114,8 @@ test('init: create profile module', async t => {
   t.same(output.links.spec[0].href, 'https://p2pcommons.com/specs/module/0.2.0')
   t.same(output.follows, [])
   t.same(output.contents, [])
-  t.end()
   await p2p.destroy()
+  t.end()
 })
 
 test('get: retrieve a value from the sdk', async t => {
@@ -129,8 +132,8 @@ test('get: retrieve a value from the sdk', async t => {
   const { rawJSON } = await p2p.get(key)
 
   t.same(rawJSON, metadata)
-  t.end()
   await p2p.destroy()
+  t.end()
 })
 
 test('set: update modules', async t => {
@@ -164,8 +167,8 @@ test('set: update modules', async t => {
   t.same(contentUpdated.description, contentUpdate.description)
   t.same(profileUpdated.title, profileUpdate.title)
   t.same(profileUpdated.description, profileUpdate.description)
-  t.end()
   await p2p.destroy()
+  t.end()
 })
 
 test('set: should throw InvalidKeyError with invalid update', async t => {
@@ -188,7 +191,9 @@ test('set: should throw InvalidKeyError with invalid update', async t => {
     )
     t.ok(Object.prototype.hasOwnProperty.call(err, 'invalid'))
     t.same(err.invalid, 'license')
-    t.end()
+    p2p.destroy().then(() => {
+      t.end()
+    })
   })
 })
 
@@ -213,6 +218,7 @@ test('set: update should fail with bad data', async t => {
     t.same(err.expected, 'required-string')
     t.same(err.received, '')
     t.same(err.key, 'title')
+    await p2p.destroy()
     t.end()
   }
 })
@@ -243,8 +249,8 @@ test('update: check version change', async t => {
     metadata2.lastModified > metadata1.lastModified,
     'lastModified should be bigger than previous lastModified'
   )
-  t.end()
   await p2p.destroy()
+  t.end()
 })
 
 test('list content', async t => {
@@ -273,8 +279,8 @@ test('list content', async t => {
   )
   const result = await p2p.listContent()
   t.same(result.length, sampleDataContent.length)
-  t.end()
   await p2p.destroy()
+  t.end()
 })
 
 test('list profiles', async t => {
@@ -303,8 +309,8 @@ test('list profiles', async t => {
   )
   const result = await p2p.listProfiles()
   t.same(result.length, sampleDataProfile.length)
-  t.end()
   await p2p.destroy()
+  t.end()
 })
 
 test('list modules', async t => {
@@ -327,8 +333,8 @@ test('list modules', async t => {
   await Promise.all([].concat(sampleData).map(d => p2p.init(d)))
   const result = await p2p.list()
   t.same(result.length, sampleData.length)
-  t.end()
   await p2p.destroy()
+  t.end()
 })
 
 test('multiple writes with persistance', async t => {
@@ -378,12 +384,13 @@ test('publish - local contents', async t => {
   const contents = await p2p.listContent()
 
   const { rawJSON: profile } = profiles[0]
-  const { rawJSON: content1, metadata: metadata1 } = contents[0]
+  const { rawJSON: content1 } = contents[0]
   const authors = [profile.url]
 
   // update author on content module
   await p2p.set({ url: content1.url, authors })
-  const contentKeyVersion = `${content1.url}+${metadata1.version + 1}`
+  const { metadata } = await p2p.get(content1.url)
+  const contentKeyVersion = `${content1.url}+${metadata.version}`
   await p2p.publish(contentKeyVersion, profile.url)
   const { rawJSON } = await p2p.get(profile.url)
   t.same(
@@ -646,9 +653,9 @@ test('follow and unfollow a profile', async t => {
   }
 
   const { rawJSON: profileX } = await p2p.init(professorX)
-  const { rawJSON: profileY, metadata } = await p2p2.init(professorY)
+  const { rawJSON: profileY } = await p2p2.init(professorY)
 
-  const followUrl = `${profileY.url.toString('hex')}+${metadata.version}`
+  const followUrl = profileY.url
   t.equal(profileX.follows.length, 0, 'Initially follows should be empty')
   // call follow
   await p2p.follow(profileX.url, followUrl)
@@ -676,7 +683,7 @@ test('follow and unfollow a profile', async t => {
   t.end()
 })
 
-test.only('clone a module', { timeout: 3000 }, async t => {
+test('clone a module', { timeout: 6000 }, async t => {
   const dir = tempy.directory()
   const dir2 = tempy.directory()
 
@@ -687,6 +694,8 @@ test.only('clone a module', { timeout: 3000 }, async t => {
     swarm: testSwarmCreator
   })
 
+  await p2p.ready()
+
   const p2p2 = new SDK({
     disableSwarm: false,
     persist: true,
@@ -694,7 +703,6 @@ test.only('clone a module', { timeout: 3000 }, async t => {
     swarm: testSwarmCreator
   })
 
-  await p2p.ready()
   await p2p2.ready()
 
   const content = {
@@ -703,25 +711,23 @@ test.only('clone a module', { timeout: 3000 }, async t => {
     main: 'main.txt'
   }
 
-  const { rawJSON, metadata } = await p2p.init(content)
+  const { rawJSON } = await p2p.init(content)
   const rawJSONpath = rawJSON.url.replace('dat://', '')
 
   // write main.txt
   await writeFile(join(dir, rawJSONpath, 'main.txt'), 'hello')
 
-  const { module, dwldHandle } = await p2p2.clone(rawJSON.url, true)
+  const { module, dwldHandle } = await p2p2.clone(rawJSON.url)
 
   t.same(module.title, content.title)
 
   await new Promise((resolve, reject) => {
-    dwldHandle.once('finish', resolve)
+    dwldHandle.once('end', resolve)
 
     dwldHandle.once('error', reject)
   })
 
-  // NOTE(dk): the version at the ending shouldnt be necessary
   const clonedDir = await readdir(join(p2p2.baseDir, rawJSONpath))
-
   t.ok(clonedDir.includes('main.txt'), 'clone downloaded content successfully')
   await p2p.destroy()
   await p2p2.destroy()
