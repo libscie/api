@@ -3,6 +3,7 @@ const {
 } = require('fs')
 const { join } = require('path')
 const execa = require('execa')
+const once = require('events.once')
 const test = require('tape')
 const tempy = require('tempy')
 const SDK = require('../')
@@ -345,6 +346,7 @@ test('multiple writes with persistance', async t => {
     })
 
     await p2p1.ready()
+
     const { rawJSON } = await p2p1.init({ type: 'content', title: 'title' })
     t.same(typeof rawJSON.url, 'string')
     await p2p1.destroy()
@@ -354,13 +356,16 @@ test('multiple writes with persistance', async t => {
       baseDir: dir
     })
     await p2p2.ready()
+
     const metadata = { url: rawJSON.url, title: 'beep' }
     await p2p2.set(metadata)
     await p2p2.set({ url: rawJSON.url, description: 'boop' })
     const { rawJSON: updated } = await p2p2.get(rawJSON.url)
+
     t.same(updated.title, metadata.title)
     t.same(updated.description, 'boop')
     await p2p2.destroy()
+
     t.end()
   } catch (err) {
     t.error(err)
@@ -711,21 +716,19 @@ test('clone a module', { timeout: 6000 }, async t => {
     main: 'main.txt'
   }
 
-  const { rawJSON } = await p2p.init(content)
+  const { rawJSON, driveWatch } = await p2p.init(content)
   const rawJSONpath = rawJSON.url.replace('dat://', '')
 
   // write main.txt
   await writeFile(join(dir, rawJSONpath, 'main.txt'), 'hello')
 
+  await once(driveWatch, 'put-end')
+
   const { module, dwldHandle } = await p2p2.clone(rawJSON.url)
 
   t.same(module.title, content.title)
 
-  await new Promise((resolve, reject) => {
-    dwldHandle.once('end', resolve)
-
-    dwldHandle.once('error', reject)
-  })
+  await once(dwldHandle, 'end')
 
   const clonedDir = await readdir(join(p2p2.baseDir, rawJSONpath))
   t.ok(clonedDir.includes('main.txt'), 'clone downloaded content successfully')
