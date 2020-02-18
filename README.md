@@ -136,7 +136,6 @@ Returns an array containing all the modules (flattened rawJSON data) and metadat
 
 Used to obtain a file descriptor from the `main` file of a module.
 
-- type: indicates the module type to retrieve. Allowed values: `profile`, `content`.
 - key: represents the module key (`url`) to be looked for. It is the buffer archive key `.toString('hex')`
 
 ### publish
@@ -150,6 +149,36 @@ Register new content into a profile. The new content is added to the profile's `
 > _async_ `unpublish(contentKey: string or buffer, profileKey: string or buffer)`
 
 Remove content from a profile.
+
+### follow
+
+> _async_ `follow(localProfile: string or buffer, targetProfile: string or buffer)`
+
+Get a local profile and updates its follows property adding a new profile (targetProfile)
+
+### follow
+
+> _async_ `unfollow(localProfile: string or buffer, targetProfile: string or buffer)`
+
+Undo the follow operation.
+
+### clone
+
+> _async_ `clone(mKey: string or buffer, mVersion: number, download: boolean)`
+
+Get a module from the local db or the swarm. If the module is not present on the local db and the swarm is enabled (`disableSwarm === false`) then it will query the swarm.
+
+- mKey: module url
+- mVersion: module version. [OPTIONAL]
+- download: a boolean indicating if module directory needs to be saved on disk. [DEFAULT=TRUE]
+
+Returns an object with multiple values:
+- **module**: the module `dat.json` content
+- **version**: the version obtained
+- **versionedKey**: an string indicating the full module url obtained. E.g: `dat://${mKey}+${version}`
+- **metadata**: an object with modules metadata
+- **dwldHandle**: it contains a download event emitter, you can listen to `end` event to know when the download has been completed. It's defined only if `download === true`.
+
 
 ### delete
 

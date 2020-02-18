@@ -4,6 +4,7 @@ const {
   promises: { open, writeFile, readFile }
 } = require('fs')
 const { ensureDir } = require('fs-extra')
+const once = require('events.once')
 const assert = require('nanocustomassert')
 const level = require('level')
 const sub = require('subleveldown')
@@ -14,9 +15,8 @@ const parse = require('parse-dat-url')
 const DatEncoding = require('dat-encoding')
 const debug = require('debug')('p2pcommons')
 const deepMerge = require('deepmerge')
+const pRetry = require('p-retry')
 const Swarm = require('corestore-swarm-networking')
-const pump = require('pump')
-const protocol = require('hypercore-protocol')
 const dat = require('./lib/dat-helper')
 const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
@@ -91,13 +91,17 @@ class SDK {
 
     this.drives = new Map()
     this.stores = new Map() // deprecated
+    this.drivesToWatch = new Map()
 
     // start hyperswarm
     this.disableSwarm = !!finalOpts.disableSwarm
-    this.swarmFn =
-      finalOpts.swarm && typeof finalOpts.swarm === 'function'
-        ? finalOpts.swarm
-        : (...args) => new Swarm(...args)
+    if (!this.disableSwarm) {
+      this.swarmFn =
+        finalOpts.swarm && typeof finalOpts.swarm === 'function'
+          ? finalOpts.swarm
+          : (...args) => new Swarm(...args)
+    }
+
     // debug constructor
     debug(`platform: ${this.platform}`)
     debug(`Is windows? ${!!this.windows}`)
@@ -147,6 +151,7 @@ class SDK {
       throw new Error('Invalid local profile module')
     }
   }
+
   _log (msg, level = 'log') {
     if (this.verbose) {
       console[level](msg)
@@ -204,8 +209,8 @@ class SDK {
   }
 
   async _reseed () {
-    debug('re-seeding modules...')
     const driveList = await collect(this.seeddb)
+    debug(`re-seeding ${driveList.length} modules...`)
     for (const { key: discoveryKey, opts } of driveList) {
       this.networker.seed(discoveryKey, opts)
     }
@@ -255,16 +260,25 @@ class SDK {
       })
       const codec = new Codec(registry)
       level(join(this.dbPath, 'db'), { valueEncoding: codec }, (err, db) => {
+        if (err) {
+          this._log(err, 'error')
+          reject(err)
+        }
+
         if (err instanceof level.errors.OpenError) {
           this._log('failed to open database', 'error')
           return reject(err)
         }
         this.db = db
-        // create partitions - required by level-auto-index
-        this.localdb = sub(this.db, 'localdb', { valueEncoding: codec })
-        // create seeded modules partitions
-        this.seeddb = sub(this.db, 'seeddb', { valueEncoding: 'json' })
 
+        // create partitions - required by level-auto-index
+        this.localdb = sub(this.db, 'localdb', {
+          valueEncoding: codec
+        })
+        // create seeded modules partitions
+        this.seeddb = sub(this.db, 'seeddb', {
+          valueEncoding: 'json'
+        })
         // create index
         this.idx = {
           title: sub(this.db, 'title'),
@@ -310,13 +324,13 @@ class SDK {
       persist: this.persist,
       storageFn: this.storage,
       storageOpts: { storageLocation: this.baseDir },
-      corestoreOpts: { sparse: true, stats: true }
+      corestoreOpts: {}
     })
   }
 
   async startSwarm () {
     if (!this.disableSwarm) {
-      this.networker = this.swarmFn(this.store)
+      this.networker = this.swarmFn(this.store, { announceLocalAddress: true })
       this.networker.on('error', console.error)
       this.networker.listen()
       debug('swarm listening...')
@@ -336,12 +350,13 @@ class SDK {
 
       // start db
       await this.startdb()
+
       // create hyperdrive storage
       await this.createStore()
       // start swarm
       await this.startSwarm()
     } catch (err) {
-      console.error(err)
+      console.error('Error starting the SDK', err.message)
     }
   }
 
@@ -439,7 +454,23 @@ class SDK {
     // write dat.json
     await writeFile(join(moduleDir, 'dat.json'), JSON.stringify(datJSON))
 
-    await dat.importFiles(archive, moduleDir)
+    const driveWatch = await dat.importFiles(archive, moduleDir, {
+      watch: true
+    })
+
+    driveWatch.on('put-end', src => {
+      debug(`imported.name ${src.name}`)
+      debug(`imported.url ${archive.key.toString('hex')}`)
+      debug(`imported archive version ${archive.version}`)
+      const isDatJSON = src.name.endsWith('/dat.json')
+      debug(`is dat.json ${isDatJSON}`)
+    })
+
+    this.drivesToWatch.set(DatEncoding.encode(archive.discoveryKey), driveWatch)
+
+    // NOTE(dk): consider return the driveWatch EE.
+    // Note(dk): consider add a timeout
+    await once(driveWatch, 'put-end')
 
     this._log(
       `Initialized new ${datJSON.p2pcommons.type}, dat://${publicKeyString}`
@@ -460,11 +491,13 @@ class SDK {
       datJSON
     })
 
+    this._seed(archive)
+
     this._log(
       `Saved new ${datJSON.p2pcommons.type}, with key: ${publicKeyString}`
     )
     // Note(dk): flatten p2pcommons obj in order to have a more symmetrical API
-    return { rawJSON: this._flatten(datJSON), metadata }
+    return { rawJSON: this._flatten(datJSON), metadata, driveWatch }
   }
 
   async saveItem ({ isWritable, lastModified, version, datJSON }) {
@@ -515,7 +548,6 @@ class SDK {
 
       version = archive.version
       stat = await archive.stat('/dat.json')
-      await this._seed(archive)
     }
 
     debug('saving item on local db')
@@ -603,8 +635,7 @@ class SDK {
 
       return out
     }
-    const overwriteMerge = (destinationArray, sourceArray, options) =>
-      sourceArray
+    const overwriteMerge = (dest, source, options) => source
     const finalJSON = deepMerge(
       this._unflatten(rawJSONFlatten),
       prepareMergeData(this._unflatten(mod)),
@@ -804,26 +835,48 @@ class SDK {
     return open(main)
   }
 
-  async _getModule (mKey, mVersion) {
+  /**
+   * clone a module
+   *
+   * @public
+   * @async
+   * @param {(String|Buffer) }mKey - a dat url
+   * @param {Number} [mVersion] - a module version
+   * @returns {{
+   *   module: Object,
+   *   version: Number,
+   *   versionedKey: String,
+   *   metadata: Object
+   * }}
+   */
+  async clone (mKey, mVersion, download = true) {
     // get module from localdb, if absent will query it from the swarm
     // this fn will also call seed() after retrieving the module from the swarm
+
+    this.assertDatUrl(mKey)
+    if (typeof mVersion === 'boolean') {
+      download = mVersion
+      mVersion = null
+    }
+
     let module
     let version
     let meta
     let stat
+    let dwldHandle
+    let moduleVersion
+    const mKeyString = DatEncoding.encode(mKey)
     try {
       // 1 - try to get content from localdb
-      debug('_getModule: Fetching module from localdb')
-      const { rawJSON, metadata } = await this.get(DatEncoding.encode(mKey))
+      debug('clone: Fetching module from localdb')
+      const { rawJSON, metadata } = await this.get(mKeyString)
       module = rawJSON
       version = metadata.version
       meta = metadata
     } catch (_) {
       // 2 - if no module is found on localdb, then fetch from hyperdrive
       // something like:
-      debug(
-        '_getModule: Module was not found on localdb.\nFetching from swarm...'
-      )
+      debug('clone: Module was not found in localdb.\nFetching from memory...')
 
       const _getDat = async key => {
         const keyBuffer = DatEncoding.decode(key)
@@ -831,55 +884,106 @@ class SDK {
           DatEncoding.encode(crypto.discoveryKey(keyBuffer))
         )
         if (!archive) {
+          debug(
+            'clone: Module was not found in memory.\nFetching from swarm...'
+          )
           const drive = await dat.open(this.store, keyBuffer, {
-            sparse: this.globalOptions.sparse,
-            sparseMetadata: this.globalOptions.sparseMetadata
+            sparse: true,
+            sparseMetadata: true
           })
 
+          await drive.ready()
+
+          await this._seed(drive, { announce: true, lookup: true })
+
+          // seed waiting for peers
+          // NOTE(dk): consider adding some timeout
+          await once(drive, 'peer-add')
           return drive
         }
 
         return archive
       }
 
-      const moduleDat = await _getDat(mKey)
+      const moduleDat = await _getDat(mKeyString)
 
-      debug(`_getModule: Found archive key ${DatEncoding.encode(mKey)}`)
-      debug('_getModule: Waiting for archive ready')
-
-      await moduleDat.ready()
-
-      await this._seed(moduleDat)
+      debug(`clone: Found archive key ${mKeyString}`)
+      debug('clone: Waiting for archive ready')
 
       version = mVersion || moduleDat.version
-      debug('_getModule: Module version', version)
-      // 3 - after fetching module we still need to read the dat.json file
+      debug('clone: Module version', version)
+
       try {
-        const moduleVersion = moduleDat.checkout(version)
-        debug('_getModule: Reading modules dat.json...')
-        module = JSON.parse(await moduleVersion.readFile('dat.json'))
+        // 3 - after fetching module we still need to read the dat.json file
+        if (version !== 0) {
+          moduleVersion = moduleDat.checkout(version)
+        } else {
+          moduleVersion = moduleDat
+        }
+        debug('clone: Reading modules dat.json...')
+
+        const getFile = async () => {
+          try {
+            return moduleVersion.readFile('dat.json', 'utf-8')
+          } catch (_) {}
+        }
+
+        const content = await pRetry(getFile, {
+          onFailedAttempt: error => {
+            this._log(
+              `Failed attempt fetching dat.json. ${error.attemptNumber}/${
+                error.retriesLeft
+              }`
+            )
+          },
+          retries: 5,
+          randomize: true
+        })
+
+        module = JSON.parse(content)
+        // NOTE (dk): we can consider have another map for checkouts only
+        this.drives.set(
+          DatEncoding.encode(moduleDat.discoveryKey),
+          moduleVersion
+        )
+        if (download) {
+          dwldHandle = moduleVersion.download('/')
+        }
       } catch (err) {
         this._log(err.message, 'error')
-        throw new Error('_getModule: Problems fetching external module')
+        throw new Error('clone: Problems fetching external module')
       }
       // 4 - clone new module (move into its own method)
       // modulePath = datkey || datkey+version
-      const modulePath = `${mKey}+${version}`
+      const modulePath = version ? `${mKeyString}+${version}` : `${mKeyString}`
       const folderPath = join(this.baseDir, modulePath)
       await ensureDir(folderPath)
       await writeFile(join(folderPath, 'dat.json'), JSON.stringify(module))
+      if (download) {
+        dwldHandle = dat.downloadFiles(moduleVersion, folderPath)
+      }
       stat = await moduleDat.stat('dat.json')
+
+      // store the module in localdb for future fetching (ie: avoid calling seed twice)
+      await this.localdb.put(DatEncoding.encode(module.url), {
+        isWritable: moduleVersion.writable,
+        lastModified: stat[0].mtime,
+        version: Number(moduleVersion.version),
+        rawJSON: module,
+        avroType: this._getAvroType(module.p2pcommons.type).name
+      })
     }
 
     return {
       module: this._unflatten(module),
       version,
-      versionedKey: `dat://${mKey}+${version}`,
+      versionedKey: `dat://${mKeyString}+${version}`,
       metadata: meta || {
         isWritable: module.writable,
         lastModified: stat[0].mtime,
         version: module.version
-      }
+      },
+      dwldHandle
     }
   }
 
@@ -912,15 +1016,19 @@ class SDK {
     const { host: cKey, version: contentVersion } = parse(contentKey)
     const { host: pKey, version: profileVersion } = parse(profileKey)
     if (!contentVersion) {
-      this._log('Content version is not found. Using latest version.')
+      this._log(
+        'publish: Content version is not found. Using latest version.',
+        'warn'
+      )
     }
     // fetch content and profile
-    const {
-      module: content,
-      versionedKey: cKeyVersion
-    } = await this._getModule(cKey, contentVersion)
+    const { module: content, versionedKey: cKeyVersion } = await this.clone(
+      cKey,
+      contentVersion,
+      false
+    )
 
-    const { module: profile } = await this._getModule(pKey, profileVersion)
+    const { module: profile } = await this.clone(pKey, profileVersion, false)
 
     // TODO(dk): consider add custom errors for publish and verification
     assert(
@@ -965,7 +1073,7 @@ class SDK {
 
     // publish new content
     if (profile.p2pcommons.contents.includes(cKeyVersion)) {
-      this._log('publish: Content was already published', 'warn')
+      this._log('publish: content was already published', 'warn')
       return
     }
 
@@ -1031,7 +1139,7 @@ class SDK {
     )
     debug('unpublish')
 
-    const { module: profile, metadata } = await this._getModule(profileKey)
+    const { module: profile, metadata } = await this.clone(profileKey, false)
 
     if (!metadata.isWritable) {
       throw new Error('profile is not writable')
@@ -1048,9 +1156,10 @@ class SDK {
       this._log('content url does not include version', 'warn')
     }
 
-    const { module: content, versionedKey } = await this._getModule(
+    const { module: content, versionedKey } = await this.clone(
       cKey,
-      contentVersion
+      contentVersion,
+      false
     )
     if (!content) {
       this._log(`content with key ${cKey} not found`)
@@ -1076,8 +1185,9 @@ class SDK {
     debug('follow')
 
     // Fetching localProfile module
-    const { module: localProfile, metadata } = await this._getModule(
-      localProfileUrl
+    const { module: localProfile, metadata } = await this.clone(
+      localProfileUrl,
+      false
     )
 
     if (!localProfile) {
@@ -1103,7 +1213,7 @@ class SDK {
     const {
       module: targetProfile,
       metadata: targetMetadata
-    } = await this._getModule(targetProfileKey, targetProfileVersion)
+    } = await this.clone(targetProfileKey, targetProfileVersion, false)
 
     if (!targetProfile) {
       throw new Error('Module not found')
@@ -1148,8 +1258,9 @@ class SDK {
     debug('unfollow')
 
     // Fetching localProfile module
-    const { module: localProfile, metadata } = await this._getModule(
-      localProfileUrl
+    const { module: localProfile, metadata } = await this.clone(
+      localProfileUrl,
+      false
     )
 
     if (!localProfile) {
@@ -1175,7 +1286,7 @@ class SDK {
     const {
       module: targetProfile,
       metadata: targetMetadata
-    } = await this._getModule(targetProfileKey, targetProfileVersion)
+    } = await this.clone(targetProfileKey, targetProfileVersion, false)
 
     if (!targetProfile) {
       throw new Error('Module not found')
@@ -1255,20 +1366,27 @@ class SDK {
   async destroy (db = true, swarm = true) {
     if (db) {
       debug('closing db...')
-      await this.db.close()
-      await this.localdb.close()
-      await this.seeddb.close()
+      if (this.localdb) await this.localdb.close()
+      if (this.seeddb) await this.seeddb.close()
+      if (this.db) await this.db.close()
     }
     if (swarm && this.networker) {
       debug('closing swarm...')
       await this.networker.close()
     }
 
-    const closing = Array.from(this.drives.values()).map(d => d.close())
-    await Promise.all(closing)
+    // const closing = Array.from(this.drives.values()).map(d => d.close())
+    // await Promise.all(closing)
+    for (const mirror of this.drivesToWatch.values()) {
+      mirror.destroy()
+    }
   }
 }
 
 SDK.errors = { ValidationError, InvalidKeyError, MissingParam }
 
 module.exports = SDK
+
+process.on('uncaughtException', (err, origin) => {
+  console.log(`Caught exception: ${err}\n` + `Exception origin: ${origin}`)
+})
