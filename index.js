@@ -4,6 +4,7 @@ const {
   promises: { open, writeFile, readFile }
 } = require('fs')
 const { ensureDir } = require('fs-extra')
+const once = require('events.once')
 const assert = require('nanocustomassert')
 const level = require('level')
 const sub = require('subleveldown')
@@ -16,8 +17,6 @@ const debug = require('debug')('p2pcommons')
 const deepMerge = require('deepmerge')
 const pRetry = require('p-retry')
 const Swarm = require('corestore-swarm-networking')
-const pump = require('pump')
-const protocol = require('hypercore-protocol')
 const dat = require('./lib/dat-helper')
 const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
@@ -261,16 +260,25 @@ class SDK {
       })
       const codec = new Codec(registry)
       level(join(this.dbPath, 'db'), { valueEncoding: codec }, (err, db) => {
+        if (err) {
+          this._log(err, 'error')
+          reject(err)
+        }
+
         if (err instanceof level.errors.OpenError) {
           this._log('failed to open database', 'error')
           return reject(err)
         }
         this.db = db
-        // create partitions - required by level-auto-index
-        this.localdb = sub(this.db, 'localdb', { valueEncoding: codec })
-        // create seeded modules partitions
-        this.seeddb = sub(this.db, 'seeddb', { valueEncoding: 'json' })
 
+        // create partitions - required by level-auto-index
+        this.localdb = sub(this.db, 'localdb', {
+          valueEncoding: codec
+        })
+        // create seeded modules partitions
+        this.seeddb = sub(this.db, 'seeddb', {
+          valueEncoding: 'json'
+        })
         // create index
         this.idx = {
           title: sub(this.db, 'title'),
@@ -342,12 +350,13 @@ class SDK {
 
       // start db
       await this.startdb()
+
       // create hyperdrive storage
       await this.createStore()
       // start swarm
       await this.startSwarm()
     } catch (err) {
-      console.error(err)
+      console.error('Error starting the SDK', err.message)
     }
   }
 
@@ -449,16 +458,19 @@ class SDK {
       watch: true
     })
 
+    driveWatch.on('put-end', src => {
+      debug(`imported.name ${src.name}`)
+      debug(`imported.url ${archive.key.toString('hex')}`)
+      debug(`imported archive version ${archive.version}`)
+      const isDatJSON = src.name.endsWith('/dat.json')
+      debug(`is dat.json ${isDatJSON}`)
+    })
+
     this.drivesToWatch.set(DatEncoding.encode(archive.discoveryKey), driveWatch)
 
     // NOTE(dk): consider return the driveWatch EE.
-    await new Promise((resolve, reject) => {
-      driveWatch.once('put-end', src => {
-        return resolve()
-      })
-      driveWatch.once('error', reject)
-      // Note(dk): consider add a timeout
-    })
+    // Note(dk): consider add a timeout
+    await once(driveWatch, 'put-end')
 
     this._log(
       `Initialized new ${datJSON.p2pcommons.type}, dat://${publicKeyString}`
@@ -485,7 +497,7 @@ class SDK {
       `Saved new ${datJSON.p2pcommons.type}, with key: ${publicKeyString}`
     )
     // Note(dk): flatten p2pcommons obj in order to have a more symmetrical API
-    return { rawJSON: this._flatten(datJSON), metadata }
+    return { rawJSON: this._flatten(datJSON), metadata, driveWatch }
   }
 
   async saveItem ({ isWritable, lastModified, version, datJSON }) {
@@ -536,7 +548,6 @@ class SDK {
 
       version = archive.version
       stat = await archive.stat('/dat.json')
-      // await this._seed(archive)
     }
 
     debug('saving item on local db')
@@ -865,7 +876,7 @@ class SDK {
     } catch (_) {
       // 2 - if no module is found on localdb, then fetch from hyperdrive
       // something like:
-      debug('clone: Module was not found on localdb.\nFetching from memory...')
+      debug('clone: Module was not found in localdb.\nFetching from memory...')
 
       const _getDat = async key => {
         const keyBuffer = DatEncoding.decode(key)
@@ -874,11 +885,11 @@ class SDK {
         )
         if (!archive) {
           debug(
-            'clone: Module was not found on memory.\nFetching from swarm...'
+            'clone: Module was not found in memory.\nFetching from swarm...'
           )
           const drive = await dat.open(this.store, keyBuffer, {
-            sparse: false,
-            sparseMetadata: false
+            sparse: true,
+            sparseMetadata: true
           })
 
           await drive.ready()
@@ -886,12 +897,8 @@ class SDK {
           await this._seed(drive, { announce: true, lookup: true })
 
           // seed waiting for peers
-          await new Promise((resolve, reject) => {
-            // NOTE(dk): consider adding some timeout
-            drive.once('peer-add', () => {
-              return resolve()
-            })
-          })
+          // NOTE(dk): consider adding some timeout
+          await once(drive, 'peer-add')
           return drive
         }
 
@@ -920,7 +927,15 @@ class SDK {
             return moduleVersion.readFile('dat.json', 'utf-8')
           } catch (_) {}
         }
+
         const content = await pRetry(getFile, {
+          onFailedAttempt: error => {
+            this._log(
+              `Failed attempt fetching dat.json. ${error.attemptNumber}/${
+                error.retriesLeft
+              }`
+            )
+          },
           retries: 5,
           randomize: true
         })
@@ -948,6 +963,15 @@ class SDK {
         dwldHandle = dat.downloadFiles(moduleVersion, folderPath)
       }
       stat = await moduleDat.stat('dat.json')
+
+      // store the module in localdb for future fetching (ie: avoid calling seed twice)
+      await this.localdb.put(DatEncoding.encode(module.url), {
+        isWritable: moduleVersion.writable,
+        lastModified: stat[0].mtime,
+        version: Number(moduleVersion.version),
+        rawJSON: module,
+        avroType: this._getAvroType(module.p2pcommons.type).name
+      })
     }
 
     return {
@@ -1342,9 +1366,9 @@ class SDK {
   async destroy (db = true, swarm = true) {
     if (db) {
       debug('closing db...')
-      await this.db.close()
-      await this.localdb.close()
-      await this.seeddb.close()
+      if (this.localdb) await this.localdb.close()
+      if (this.seeddb) await this.seeddb.close()
+      if (this.db) await this.db.close()
     }
     if (swarm && this.networker) {
       debug('closing swarm...')
