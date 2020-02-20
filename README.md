@@ -172,7 +172,7 @@ Get a module from the local db or the swarm. If the module is not present on the
 - mVersion: module version. [OPTIONAL]
 - download: a boolean indicating if module directory needs to be saved on disk. [DEFAULT=TRUE]
 
-Returns an object with multiple values:
+Returns a [cancelable promise](https://github.com/sindresorhus/p-cancelable). When fullfiled returns an object with multiple values:
 - **module**: the module `dat.json` content
 - **version**: the version obtained
 - **versionedKey**: an string indicating the full module url obtained. E.g: `dat://${mKey}+${version}`
