@@ -1,4 +1,5 @@
 const {
+  existsSync,
   promises: { writeFile, readdir }
 } = require('fs')
 const { join } = require('path')
@@ -13,7 +14,8 @@ const testSwarmCreator = (store, opts) => testSwarm(store, opts)
 
 const defaultOpts = () => ({
   swarm: false,
-  persist: false
+  persist: false,
+  watch: false
 })
 
 const createDb = opts => {
@@ -341,22 +343,24 @@ test('list modules', async t => {
 test('multiple writes with persistance', async t => {
   try {
     const dir = tempy.directory()
+
     const p2p1 = new SDK({
+      disableSwarm: true,
+      watch: false,
       baseDir: dir
     })
-
     await p2p1.ready()
-
     const { rawJSON } = await p2p1.init({ type: 'content', title: 'title' })
     t.same(typeof rawJSON.url, 'string')
     await p2p1.destroy()
 
     // create a new instance with same basedir
     const p2p2 = new SDK({
+      watch: false,
+      disableSwarm: true,
       baseDir: dir
     })
     await p2p2.ready()
-
     const metadata = { url: rawJSON.url, title: 'beep' }
     await p2p2.set(metadata)
     await p2p2.set({ url: rawJSON.url, description: 'boop' })
@@ -533,6 +537,7 @@ test('re-open SDK (child process)', async t => {
 
   const commons = new SDK({
     disableSwarm: true,
+    watch: false,
     persist: true,
     baseDir: dir
   })
@@ -554,6 +559,7 @@ test('re-open SDK (child process)', async t => {
 
   const commons2 = new SDK({
     disableSwarm: true,
+    watch: false,
     persist: true,
     baseDir: dir
   })
@@ -571,6 +577,8 @@ test('re-open SDK (child process)', async t => {
 test('delete a module from local db', async t => {
   const dir = tempy.directory()
   const p2p = new SDK({
+    disableSwarm: true,
+    watch: false,
     baseDir: dir
   })
 
@@ -722,16 +730,71 @@ test('clone a module', { timeout: 6000 }, async t => {
   // write main.txt
   await writeFile(join(dir, rawJSONpath, 'main.txt'), 'hello')
 
+  driveWatch.on('put-end', async file => {
+    if (!file.name.endsWith('main.txt')) return
+
+    const { module, dwldHandle } = await p2p2.clone(rawJSON.url)
+
+    t.same(module.title, content.title)
+
+    await once(dwldHandle, 'end')
+
+    const clonedDir = await readdir(join(p2p2.baseDir, rawJSONpath))
+    t.ok(
+      clonedDir.includes('main.txt'),
+      'clone downloaded content successfully'
+    )
+    await p2p.destroy()
+    await p2p2.destroy()
+    t.end()
+  })
+})
+
+test('cancel clone', async t => {
+  const dir = tempy.directory()
+  const dir2 = tempy.directory()
+
+  const p2p = new SDK({
+    disableSwarm: false,
+    persist: true,
+    baseDir: dir,
+    swarm: testSwarmCreator
+  })
+
+  await p2p.ready()
+
+  const p2p2 = new SDK({
+    disableSwarm: false,
+    persist: true,
+    baseDir: dir2,
+    swarm: testSwarmCreator
+  })
+
+  await p2p2.ready()
+
+  const content = {
+    type: 'content',
+    title: 'test',
+    main: 'main.txt'
+  }
+
+  const { rawJSON, driveWatch } = await p2p.init(content)
+  const rawJSONpath = rawJSON.url.replace('dat://', '')
+
+  // write main.txt
+  await writeFile(join(dir, rawJSONpath, 'main.txt'), 'hello')
+
   await once(driveWatch, 'put-end')
 
-  const { module, dwldHandle } = await p2p2.clone(rawJSON.url)
+  // clone can be canceled
+  const cloning = p2p2.clone(rawJSON.url)
+  cloning.cancel()
 
-  t.same(module.title, content.title)
+  t.ok(cloning.isCanceled, 'cloning promise is canceled')
 
-  await once(dwldHandle, 'end')
+  const clonedDir = existsSync(join(p2p2.baseDir, rawJSONpath))
+  t.notOk(clonedDir, 'clone dir does not exists')
 
-  const clonedDir = await readdir(join(p2p2.baseDir, rawJSONpath))
-  t.ok(clonedDir.includes('main.txt'), 'clone downloaded content successfully')
   await p2p.destroy()
   await p2p2.destroy()
   t.end()
