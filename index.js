@@ -16,6 +16,7 @@ const DatEncoding = require('dat-encoding')
 const debug = require('debug')('p2pcommons')
 const deepMerge = require('deepmerge')
 const pRetry = require('p-retry')
+const PCancelable = require('p-cancelable')
 const Swarm = require('corestore-swarm-networking')
 const dat = require('./lib/dat-helper')
 const Codec = require('./codec')
@@ -57,7 +58,8 @@ const assertValid = (type, val) => {
 const DEFAULT_SDK_OPTS = {
   persist: true,
   storage: undefined,
-  versose: false
+  versose: false,
+  watch: true
 }
 
 const DEFAULT_GLOBAL_SETTINGS = {
@@ -88,6 +90,7 @@ class SDK {
     this.storage = finalOpts.storage
     this.verbose = finalOpts.verbose
     this.dbPath = finalOpts.dbPath || this.baseDir
+    this.watch = finalOpts.watch
 
     this.drives = new Map()
     this.stores = new Map() // deprecated
@@ -189,6 +192,7 @@ class SDK {
         lookup: true
       }
 
+      await this.seeddb.open()
       await this.seeddb.put(dkey, {
         key: dkey,
         opts: { ...defaultJoinOpts, ...joinOpts }
@@ -196,7 +200,7 @@ class SDK {
 
       debug(`swarm seeding ${dkey}`)
 
-      this.networker.seed(archive.discoveryKey, {
+      await this.networker.join(archive.discoveryKey, {
         ...defaultJoinOpts,
         ...joinOpts
       })
@@ -211,9 +215,11 @@ class SDK {
   async _reseed () {
     const driveList = await collect(this.seeddb)
     debug(`re-seeding ${driveList.length} modules...`)
-    for (const { key: discoveryKey, opts } of driveList) {
-      this.networker.seed(discoveryKey, opts)
-    }
+    // Note(dk): latest corestore-swarm-networking has an async join
+    const joins = driveList.map(item => {
+      this.networker.join(item.key, item.opts)
+    })
+    await Promise.all(joins)
   }
 
   async getOptionsOrCreate () {
@@ -279,6 +285,7 @@ class SDK {
         this.seeddb = sub(this.db, 'seeddb', {
           valueEncoding: 'json'
         })
+
         // create index
         this.idx = {
           title: sub(this.db, 'title'),
@@ -330,9 +337,14 @@ class SDK {
 
   async startSwarm () {
     if (!this.disableSwarm) {
-      this.networker = this.swarmFn(this.store, { announceLocalAddress: true })
+      this.networker = this.swarmFn(this.store, {
+        announceLocalAddress: true
+      })
       this.networker.on('error', console.error)
-      this.networker.listen()
+      if (typeof this.networker.listen === 'function') {
+        // legacy method - unused by corestore-swarm-networking
+        this.networker.listen()
+      }
       debug('swarm listening...')
 
       await this._reseed()
@@ -350,13 +362,16 @@ class SDK {
 
       // start db
       await this.startdb()
+      await this.db.open()
+      await this.localdb.open()
+      await this.seeddb.open()
 
       // create hyperdrive storage
       await this.createStore()
       // start swarm
       await this.startSwarm()
     } catch (err) {
-      console.error('Error starting the SDK', err.message)
+      console.error('Error starting the SDK', err)
     }
   }
 
@@ -455,22 +470,27 @@ class SDK {
     await writeFile(join(moduleDir, 'dat.json'), JSON.stringify(datJSON))
 
     const driveWatch = await dat.importFiles(archive, moduleDir, {
-      watch: true
+      watch: this.watch
     })
 
-    driveWatch.on('put-end', src => {
-      debug(`imported.name ${src.name}`)
-      debug(`imported.url ${archive.key.toString('hex')}`)
-      debug(`imported archive version ${archive.version}`)
-      const isDatJSON = src.name.endsWith('/dat.json')
-      debug(`is dat.json ${isDatJSON}`)
-    })
+    if (this.watch) {
+      driveWatch.on('put-end', src => {
+        debug(`imported.name ${src.name}`)
+        debug(`imported.url ${archive.key.toString('hex')}`)
+        debug(`imported archive version ${archive.version}`)
+        const isDatJSON = src.name.endsWith('/dat.json')
+        debug(`is dat.json ${isDatJSON}`)
+      })
 
-    this.drivesToWatch.set(DatEncoding.encode(archive.discoveryKey), driveWatch)
+      this.drivesToWatch.set(
+        DatEncoding.encode(archive.discoveryKey),
+        driveWatch
+      )
 
-    // NOTE(dk): consider return the driveWatch EE.
-    // Note(dk): consider add a timeout
-    await once(driveWatch, 'put-end')
+      // NOTE(dk): consider return the driveWatch EE.
+      // Note(dk): consider add a timeout
+      await once(driveWatch, 'put-end')
+    }
 
     this._log(
       `Initialized new ${datJSON.p2pcommons.type}, dat://${publicKeyString}`
@@ -551,6 +571,7 @@ class SDK {
     }
 
     debug('saving item on local db')
+    await this.localdb.open()
     await this.localdb.put(DatEncoding.encode(datJSON.url), {
       isWritable,
       lastModified: stat ? stat[0].mtime : lastModified,
@@ -835,21 +856,7 @@ class SDK {
     return open(main)
   }
 
-  /**
-   * clone a module
-   *
-   * @public
-   * @async
-   * @param {(String|Buffer) }mKey - a dat url
-   * @param {Number} [mVersion] - a module version
-   * @returns {{
-   *   module: Object,
-   *   version: Number,
-   *   versionedKey: String,
-   *   metadata: Object
-   * }}
-   */
-  async clone (mKey, mVersion, download = true) {
+  async _clone (mKey, mVersion, download = true) {
     // get module from localdb, if absent will query it from the swarm
     // this fn will also call seed() after retrieving the module from the swarm
 
@@ -892,13 +899,12 @@ class SDK {
             sparseMetadata: true
           })
 
+          debug(`clone: Found archive key ${mKeyString}`)
+          debug('clone: Waiting for archive ready')
           await drive.ready()
 
           await this._seed(drive, { announce: true, lookup: true })
 
-          // seed waiting for peers
-          // NOTE(dk): consider adding some timeout
-          await once(drive, 'peer-add')
           return drive
         }
 
@@ -906,9 +912,6 @@ class SDK {
       }
 
       const moduleDat = await _getDat(mKeyString)
-
-      debug(`clone: Found archive key ${mKeyString}`)
-      debug('clone: Waiting for archive ready')
 
       version = mVersion || moduleDat.version
       debug('clone: Module version', version)
@@ -965,6 +968,7 @@ class SDK {
       stat = await moduleDat.stat('dat.json')
 
       // store the module in localdb for future fetching (ie: avoid calling seed twice)
+      await this.localdb.open()
       await this.localdb.put(DatEncoding.encode(module.url), {
         isWritable: moduleVersion.writable,
         lastModified: stat[0].mtime,
@@ -985,6 +989,44 @@ class SDK {
       },
       dwldHandle
     }
+  }
+
+  /**
+   * clone a module
+   *
+   * @public
+   * @async
+   * @param {(String|Buffer) }mKey - a dat url
+   * @param {Number} [mVersion] - a module version
+   * @returns {{
+   *   module: Object,
+   *   version: Number,
+   *   versionedKey: String,
+   *   metadata: Object
+   * }}
+   */
+  clone (mKey, mVersion, download = true) {
+    // get module from localdb, if absent will query it from the swarm
+    // this fn will also call seed() after retrieving the module from the swarm
+
+    this.assertDatUrl(mKey)
+    if (typeof mVersion === 'boolean') {
+      download = mVersion
+      mVersion = null
+    }
+
+    return new PCancelable(async (resolve, reject, onCancel) => {
+      onCancel.shouldReject = false
+      onCancel(() => {
+        this._log('clone was canceled')
+      })
+      try {
+        const result = await this._clone(mKey, mVersion, download)
+        return resolve(result)
+      } catch (err) {
+        return reject(err)
+      }
+    })
   }
 
   /**
@@ -1347,7 +1389,7 @@ class SDK {
         await drive.close()
       }
       if (!this.disableSwarm) {
-        this.networker.unseed(dkey)
+        await this.networker.leave(dkey)
       }
     } catch (err) {
       debug('delete: %O', err)
@@ -1364,21 +1406,26 @@ class SDK {
    * @param {Boolean} swarm=true - if true it will close the swarm
    */
   async destroy (db = true, swarm = true) {
+    if (this.watch) {
+      for (const mirror of this.drivesToWatch.values()) {
+        mirror.destroy()
+      }
+    }
     if (db) {
       debug('closing db...')
       if (this.localdb) await this.localdb.close()
       if (this.seeddb) await this.seeddb.close()
       if (this.db) await this.db.close()
+      debug('db successfully closed')
     }
     if (swarm && this.networker) {
       debug('closing swarm...')
-      await this.networker.close()
-    }
-
-    // const closing = Array.from(this.drives.values()).map(d => d.close())
-    // await Promise.all(closing)
-    for (const mirror of this.drivesToWatch.values()) {
-      mirror.destroy()
+      try {
+        await this.networker.close()
+      } catch (err) {
+        this._log(err.message, 'error')
+      }
+      debug('swarm successfully closed')
     }
   }
 }
@@ -1386,7 +1433,3 @@ class SDK {
 SDK.errors = { ValidationError, InvalidKeyError, MissingParam }
 
 module.exports = SDK
-
-process.on('uncaughtException', (err, origin) => {
-  console.log(`Caught exception: ${err}\n` + `Exception origin: ${origin}`)
-})
