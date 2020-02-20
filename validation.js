@@ -1,4 +1,4 @@
-const { LogicalType } = require('@avro/types')
+const { LogicalType, Type } = require('@avro/types')
 const { ValidationError } = require('./lib/errors')
 
 /**
@@ -37,7 +37,7 @@ class RequiredString extends LogicalType {
 class DatUrl extends LogicalType {
   constructor (attrs, opts) {
     super(attrs, opts)
-    this._pattern = new RegExp(/^(dat:\/\/)?(\w{64})$/)
+    this._pattern = new RegExp(/^(dat:\/\/)(\w{64})$/)
   }
 
   _fromValue (val) {
@@ -64,9 +64,9 @@ class DatUrl extends LogicalType {
 class DatUrlVersion extends LogicalType {
   constructor (attrs, opts) {
     super(attrs, opts)
-    let pattern = /^(dat:\/\/)?(\w{64})(\+\d+)?$/
+    let pattern = /^(dat:\/\/)(\w{64})(\+\d+)?$/
     if (attrs.strict) {
-      pattern = /^(dat:\/\/)?(\w{64})(\+\d+)$/
+      pattern = /^(dat:\/\/)(\w{64})(\+\d+)$/
     }
     this._pattern = new RegExp(pattern)
   }
@@ -96,11 +96,13 @@ class DateType extends LogicalType {
   _fromValue (val) {
     return new Date(val)
   }
+
   _toValue (date) {
     return date instanceof Date ? date.getTime() : undefined
   }
+
   _resolve (type) {
-    if (avro.Type.isType(type, 'long', 'string', 'logical:timestamp-millis')) {
+    if (Type.isType(type, 'long', 'string', 'logical:timestamp-millis')) {
       return this._fromValue
     }
   }
