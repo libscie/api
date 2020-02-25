@@ -222,3 +222,7 @@ Error object contains some useful properties:
 ## Release
 
 `npm publish`
+
+Requirements:
+- 2FA enabled
+- signed git tags (`npm config set sign-git-tag true`)
