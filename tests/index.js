@@ -411,7 +411,7 @@ test('publish - local contents', async t => {
   t.end()
 })
 
-test('seed and publish', { timeout: 3000 }, async t => {
+test('seed and publish', async t => {
   const p2p = createDb({
     swarm: true,
     verbose: true,
@@ -696,7 +696,7 @@ test('follow and unfollow a profile', async t => {
   t.end()
 })
 
-test('clone a module', { timeout: 6000 }, async t => {
+test('clone a module', async t => {
   const dir = tempy.directory()
   const dir2 = tempy.directory()
 
