@@ -72,6 +72,7 @@
     "prettier-standard": "^15.0.1",
     "tap-spec": "^5.0.0",
     "tape": "^4.13.0",
+    "tape-catch": "^1.0.6",
     "tempy": "^0.3.0"
   }
 }

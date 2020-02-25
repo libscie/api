@@ -5,7 +5,7 @@ const {
 const { join } = require('path')
 const execa = require('execa')
 const once = require('events.once')
-const test = require('tape')
+const test = require('tape-catch')
 const tempy = require('tempy')
 const SDK = require('../')
 const testSwarm = require('./utils/swarm')
