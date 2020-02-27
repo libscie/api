@@ -17,6 +17,7 @@ const debug = require('debug')('p2pcommons')
 const deepMerge = require('deepmerge')
 const pRetry = require('p-retry')
 const PCancelable = require('p-cancelable')
+const pMemoize = require('p-memoize')
 const Swarm = require('corestore-swarm-networking')
 const dat = require('./lib/dat-helper')
 const Codec = require('./codec')
@@ -40,7 +41,7 @@ const assertValid = (type, val) => {
       if (any !== null && typeof any === 'object') {
         const declared = new Set(type.fields.map(f => f.name))
         const extra = Object.keys(any).filter(n => !declared.has(n))
-        msg += `extra fields (${extra.join(', ')})`
+        msg += ` extra fields (${extra.join(', ')})`
         throw new Error(msg)
       } else {
         msg += `not an object: ${any}`
@@ -74,6 +75,7 @@ class SDK {
   constructor (opts = {}) {
     debug('constructor')
     const finalOpts = { ...DEFAULT_SDK_OPTS, ...opts }
+    this.start = false
     this.platform = platform()
     // NOTE(dk): consider switch to envPaths usage
     this.home =
@@ -105,6 +107,8 @@ class SDK {
           : (...args) => new Swarm(...args)
     }
 
+    // memoize methods
+    this.ready = pMemoize(this.ready)
     // debug constructor
     debug(`platform: ${this.platform}`)
     debug(`Is windows? ${!!this.windows}`)
@@ -192,6 +196,7 @@ class SDK {
         lookup: true
       }
 
+      await this.localdb.open()
       await this.seeddb.open()
       await this.seeddb.put(dkey, {
         key: dkey,
@@ -265,6 +270,7 @@ class SDK {
         }
       })
       const codec = new Codec(registry)
+
       level(join(this.dbPath, 'db'), { valueEncoding: codec }, (err, db) => {
         if (err) {
           this._log(err, 'error')
@@ -352,6 +358,7 @@ class SDK {
   }
 
   async ready () {
+    if (this.start) return
     try {
       // create db dir
       await ensureDir(this.dbPath)
@@ -361,17 +368,27 @@ class SDK {
       this.globalOptions = await this.getOptionsOrCreate()
 
       // start db
-      await this.startdb()
-      await this.db.open()
-      await this.localdb.open()
-      await this.seeddb.open()
+      try {
+        await this.startdb()
+        await this.db.open()
+        await this.localdb.open()
+        await this.seeddb.open()
+      } catch (dberr) {
+        if (dberr.type !== 'OpenError') {
+          throw dberr
+        }
+      }
 
       // create hyperdrive storage
       await this.createStore()
       // start swarm
       await this.startSwarm()
+
+      this.start = true
+      return this.start
     } catch (err) {
-      console.error('Error starting the SDK', err)
+      console.error(`Error starting the SDK: ${err.message}`)
+      throw err
     }
   }
 
@@ -429,6 +446,10 @@ class SDK {
 
     debug(`init ${type}`)
 
+    if (!this.start) {
+      await this.ready()
+    }
+
     // Note(dk): the pk will be used as a seed, it can be any string
     const { publicKey } = crypto.keyPair()
 
@@ -474,14 +495,6 @@ class SDK {
     })
 
     if (this.watch) {
-      driveWatch.on('put-end', src => {
-        debug(`imported.name ${src.name}`)
-        debug(`imported.url ${archive.key.toString('hex')}`)
-        debug(`imported archive version ${archive.version}`)
-        const isDatJSON = src.name.endsWith('/dat.json')
-        debug(`is dat.json ${isDatJSON}`)
-      })
-
       this.drivesToWatch.set(
         DatEncoding.encode(archive.discoveryKey),
         driveWatch
@@ -511,7 +524,7 @@ class SDK {
       datJSON
     })
 
-    this._seed(archive)
+    await this._seed(archive)
 
     this._log(
       `Saved new ${datJSON.p2pcommons.type}, with key: ${publicKeyString}`
@@ -571,7 +584,6 @@ class SDK {
     }
 
     debug('saving item on local db')
-    await this.localdb.open()
     await this.localdb.put(DatEncoding.encode(datJSON.url), {
       isWritable,
       lastModified: stat ? stat[0].mtime : lastModified,
@@ -612,6 +624,9 @@ class SDK {
       'params.url'
     )
 
+    if (!this.start) {
+      await this.ready()
+    }
     // NOTE(dk): some properties are read only (license, follows, ...)
     const { url, ...mod } = params
     debug('set params', params)
@@ -689,7 +704,13 @@ class SDK {
       key,
       'key'
     )
+
+    if (!this.start) {
+      await this.ready()
+    }
+
     key = DatEncoding.encode(key)
+
     const dbitem = await this.localdb.get(key)
     debug('get', dbitem)
     const { rawJSON, ...metadata } = dbitem
@@ -711,6 +732,11 @@ class SDK {
       criteria,
       'criteria'
     )
+
+    if (!this.start) {
+      await this.ready()
+    }
+
     return new Promise((resolve, reject) => {
       this.by[feature].get(criteria, (err, data) => {
         if (err) return reject(err)
@@ -737,6 +763,11 @@ class SDK {
       criteria,
       'criteria'
     )
+
+    if (!this.start) {
+      await this.ready()
+    }
+
     return new Promise((resolve, reject) => {
       const out = []
       const criteriaLower = criteria.toLowerCase()
@@ -770,8 +801,12 @@ class SDK {
    * @returns {Array<Object>}
    */
   async listContent () {
+    if (!this.start) {
+      await this.ready()
+    }
     return new Promise((resolve, reject) => {
       const out = []
+
       const s = this.localdb.createValueStream()
       s.on('data', val => {
         const { rawJSON, ...metadata } = val
@@ -796,6 +831,9 @@ class SDK {
    * @returns {Array<Object>}
    */
   async listProfiles () {
+    if (!this.start) {
+      await this.ready()
+    }
     return new Promise((resolve, reject) => {
       const out = []
       const s = this.localdb.createValueStream()
@@ -815,6 +853,9 @@ class SDK {
   }
 
   async list () {
+    if (!this.start) {
+      await this.ready()
+    }
     return new Promise((resolve, reject) => {
       const out = []
       const s = this.localdb.createValueStream()
@@ -849,6 +890,11 @@ class SDK {
       key,
       'key'
     )
+
+    if (!this.start) {
+      await this.ready()
+    }
+
     const { main } = await this.get(key)
     if (!main) {
       throw new Error('Empty main file')
@@ -864,6 +910,9 @@ class SDK {
     if (typeof mVersion === 'boolean') {
       download = mVersion
       mVersion = null
+    }
+    if (!this.start) {
+      await this.ready()
     }
 
     let module
@@ -968,7 +1017,6 @@ class SDK {
       stat = await moduleDat.stat('dat.json')
 
       // store the module in localdb for future fetching (ie: avoid calling seed twice)
-      await this.localdb.open()
       await this.localdb.put(DatEncoding.encode(module.url), {
         isWritable: moduleVersion.writable,
         lastModified: stat[0].mtime,
@@ -1041,6 +1089,7 @@ class SDK {
   async publish (contentKey, profileKey) {
     debug(`publish contentKey: ${contentKey}`)
     debug(`publish profileKey: ${profileKey}`)
+
     assert(
       typeof contentKey === 'string' || Buffer.isBuffer(contentKey),
       ValidationError,
@@ -1055,6 +1104,10 @@ class SDK {
       profileKey,
       'profileKey'
     )
+    if (!this.start) {
+      await this.ready()
+    }
+
     const { host: cKey, version: contentVersion } = parse(contentKey)
     const { host: pKey, version: profileVersion } = parse(profileKey)
     if (!contentVersion) {
@@ -1148,6 +1201,10 @@ class SDK {
       source.p2pcommons.type,
       'type'
     )
+    if (!this.start) {
+      await this.ready()
+    }
+
     // TODO(dk): check versions
     if (source.p2pcommons.authors.length === 0) return false
     return source.p2pcommons.authors.reduce(async (prevProm, authorKey) => {
@@ -1180,6 +1237,10 @@ class SDK {
       'profileKey'
     )
     debug('unpublish')
+
+    if (!this.start) {
+      await this.ready()
+    }
 
     const { module: profile, metadata } = await this.clone(profileKey, false)
 
@@ -1220,11 +1281,22 @@ class SDK {
     })
   }
 
+  /**
+   * follow a profile
+   * @public
+   * @async
+   * @param {string} localProfileUrl - local profile dat url
+   * @param {string} targetProfileUrl - target profile dat url
+   */
   async follow (localProfileUrl, targetProfileUrl) {
     this.assertDatUrl(localProfileUrl)
     this.assertDatUrl(targetProfileUrl)
 
     debug('follow')
+
+    if (!this.start) {
+      await this.ready()
+    }
 
     // Fetching localProfile module
     const { module: localProfile, metadata } = await this.clone(
@@ -1252,10 +1324,11 @@ class SDK {
     debug(
       `follow: fetching module with key: ${targetProfileKey} and version: ${targetProfileVersion}`
     )
-    const {
-      module: targetProfile,
-      metadata: targetMetadata
-    } = await this.clone(targetProfileKey, targetProfileVersion, false)
+    const { module: targetProfile } = await this.clone(
+      targetProfileKey,
+      targetProfileVersion,
+      false
+    )
 
     if (!targetProfile) {
       throw new Error('Module not found')
@@ -1290,14 +1363,18 @@ class SDK {
    *
    * @public
    * @async
-   * @param localProfileUrl
-   * @param targetProfileUrl
+   * @param {(string|buffer)} localProfileUrl - dat url
+   * @param {(string|buffer)} targetProfileUrl - dat url
    */
   async unfollow (localProfileUrl, targetProfileUrl) {
     this.assertDatUrl(localProfileUrl)
     this.assertDatUrl(targetProfileUrl)
 
     debug('unfollow')
+
+    if (!this.start) {
+      await this.ready()
+    }
 
     // Fetching localProfile module
     const { module: localProfile, metadata } = await this.clone(
@@ -1325,10 +1402,11 @@ class SDK {
     debug(
       `follow: fetching module with key: ${targetProfileKey} and version: ${targetProfileVersion}`
     )
-    const {
-      module: targetProfile,
-      metadata: targetMetadata
-    } = await this.clone(targetProfileKey, targetProfileVersion, false)
+    const { module: targetProfile } = await this.clone(
+      targetProfileKey,
+      targetProfileVersion,
+      false
+    )
 
     if (!targetProfile) {
       throw new Error('Module not found')
@@ -1372,6 +1450,11 @@ class SDK {
     )
 
     debug('delete')
+
+    if (!this.start) {
+      await this.ready()
+    }
+
     const url = DatEncoding.encode(key)
     const dkey = DatEncoding.encode(
       crypto.discoveryKey(DatEncoding.decode(key))
@@ -1398,7 +1481,7 @@ class SDK {
   }
 
   /**
-   * shutdown an sdk instance closing all the open hyperdrives
+   * shutdown a sdk instance closing all the open hyperdrives
    *
    * @public
    * @async
@@ -1427,6 +1510,7 @@ class SDK {
       }
       debug('swarm successfully closed')
     }
+    this.start = false
   }
 }
 
