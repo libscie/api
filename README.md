@@ -32,8 +32,6 @@ const P2PCommons = require('@p2pcommons/sdk-js')
 const p2p = new P2PCommons()
 
 ;(async () => {
-  // call this method first
-  await p2p.ready()
 
   // create a content module
   await p2p.init({ type: 'content' }) // ~/.p2pcommons/hash/dat.json --> type: content
@@ -62,14 +60,6 @@ Returns a new instance of the sdk.
   swarm: // swarm options - defaults to undefined
 }
 ```
-
-### ready
-
-> _async_ `ready()`
-
-After creating a new instance the next **required** step is call the ready method. This method will create (if needed) the db and open it.
-
-Returns a promise. Call this method before any other for expected behavior.
 
 ### init
 
@@ -156,7 +146,7 @@ Remove content from a profile.
 
 Get a local profile and updates its follows property adding a new profile (targetProfile)
 
-### follow
+### unfollow
 
 > _async_ `unfollow(localProfile: string or buffer, targetProfile: string or buffer)`
 
