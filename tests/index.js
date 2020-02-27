@@ -27,10 +27,10 @@ const createDb = opts => {
     baseDir: tempy.directory()
   })
 }
+
 test('ready', async t => {
   const p2p = createDb()
   t.doesNotThrow(async () => {
-    await p2p.ready()
     await p2p.destroy()
   }, 'ready method should not throw')
   t.end()
@@ -38,7 +38,6 @@ test('ready', async t => {
 
 test('init: create content module', async t => {
   const p2p = createDb()
-  await p2p.ready()
   const init = {
     type: 'content',
     subtype: 'Theory',
@@ -77,7 +76,6 @@ test('init: create content module', async t => {
 
 test('init: creation should throw a ValidationError', async t => {
   const p2p = createDb()
-  await p2p.ready()
   const metadata = {
     type: 'content'
   }
@@ -99,7 +97,6 @@ test('init: creation should throw a ValidationError', async t => {
 
 test('init: create profile module', async t => {
   const p2p = createDb()
-  await p2p.ready()
   const metadata = {
     type: 'profile',
     title: 'demo',
@@ -123,7 +120,6 @@ test('init: create profile module', async t => {
 
 test('get: retrieve a value from the sdk', async t => {
   const p2p = createDb()
-  await p2p.ready()
   const sampleData = {
     type: 'profile',
     title: 'demo',
@@ -141,7 +137,6 @@ test('get: retrieve a value from the sdk', async t => {
 
 test('set: update modules', async t => {
   const p2p = createDb()
-  await p2p.ready()
   const sampleContent = {
     type: 'content',
     title: 'demo',
@@ -176,7 +171,6 @@ test('set: update modules', async t => {
 
 test('set: should throw InvalidKeyError with invalid update', async t => {
   const p2p = createDb()
-  await p2p.ready()
   const sampleData = {
     type: 'content',
     title: 'demo',
@@ -202,7 +196,6 @@ test('set: should throw InvalidKeyError with invalid update', async t => {
 
 test('set: update should fail with bad data', async t => {
   const p2p = createDb()
-  await p2p.ready()
   const sampleData = {
     type: 'content',
     title: 'demo',
@@ -228,7 +221,6 @@ test('set: update should fail with bad data', async t => {
 
 test('update: check version change', async t => {
   const p2p = createDb()
-  await p2p.ready()
   const sampleData = {
     type: 'content',
     title: 'demo',
@@ -258,7 +250,6 @@ test('update: check version change', async t => {
 
 test('list content', async t => {
   const p2p = createDb()
-  await p2p.ready()
   const sampleDataContent = [
     {
       type: 'content',
@@ -274,12 +265,10 @@ test('list content', async t => {
 
   const sampleDataProfile = [{ type: 'profile', title: 'Professor X' }]
 
-  await Promise.all(
-    []
-      .concat(sampleDataContent)
-      .concat(sampleDataProfile)
-      .map(d => p2p.init(d))
-  )
+  const modules = [].concat(sampleDataContent).concat(sampleDataProfile)
+
+  await Promise.all(modules.map(d => p2p.init(d)))
+
   const result = await p2p.listContent()
   t.same(result.length, sampleDataContent.length)
   await p2p.destroy()
@@ -288,7 +277,6 @@ test('list content', async t => {
 
 test('list profiles', async t => {
   const p2p = createDb()
-  await p2p.ready()
   const sampleDataContent = [
     {
       type: 'content',
@@ -318,7 +306,6 @@ test('list profiles', async t => {
 
 test('list modules', async t => {
   const p2p = createDb()
-  await p2p.ready()
   const sampleData = [
     {
       type: 'content',
@@ -378,7 +365,6 @@ test('multiple writes with persistance', async t => {
 
 test('publish - local contents', async t => {
   const p2p = createDb()
-  await p2p.ready()
   const sampleData = [
     {
       type: 'content',
@@ -424,9 +410,6 @@ test('seed and publish', async t => {
     persist: false,
     swarmFn: testSwarmCreator
   })
-
-  await p2p.ready()
-  await p2p2.ready()
 
   const sampleData = {
     type: 'content',
@@ -488,7 +471,6 @@ test('seed and publish', async t => {
 
 test('verify', async t => {
   const p2p = createDb()
-  await p2p.ready()
   const sampleData = [
     {
       type: 'content',
@@ -582,7 +564,6 @@ test('delete a module from local db', async t => {
     baseDir: dir
   })
 
-  await p2p.ready()
   const modules = await p2p.list()
   t.equal(modules.length, 0, 'Modules list is empty')
   // create content
@@ -604,7 +585,6 @@ test('delete a module from local db', async t => {
 
 test('unpublish content module from profile', async t => {
   const p2p = createDb()
-  await p2p.ready()
   const sampleContent = {
     type: 'content',
     title: 'demo 1',
@@ -651,9 +631,6 @@ test('follow and unfollow a profile', async t => {
     persist: false,
     swarmFn: testSwarmCreator
   })
-
-  await p2p.ready()
-  await p2p2.ready()
 
   const professorX = {
     type: 'profile',
@@ -707,8 +684,6 @@ test('clone a module', async t => {
     swarm: testSwarmCreator
   })
 
-  await p2p.ready()
-
   const p2p2 = new SDK({
     disableSwarm: false,
     persist: true,
@@ -760,8 +735,6 @@ test('cancel clone', async t => {
     baseDir: dir,
     swarm: testSwarmCreator
   })
-
-  await p2p.ready()
 
   const p2p2 = new SDK({
     disableSwarm: false,
