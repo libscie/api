@@ -41,8 +41,8 @@ const assertValid = (type, val) => {
       if (any !== null && typeof any === 'object') {
         const declared = new Set(type.fields.map(f => f.name))
         const extra = Object.keys(any).filter(n => !declared.has(n))
-        msg += ` extra fields (${extra.join(', ')})`
-        throw new Error(msg)
+        msg = `extra fields (${extra.join(', ')})`
+        throw new ValidationError('', msg, extra.join(', '))
       } else {
         msg += `not an object: ${any}`
         throw new Error(msg)
