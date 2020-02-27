@@ -196,6 +196,8 @@ class SDK {
         lookup: true
       }
 
+      await this.localdb.open()
+      await this.seeddb.open()
       await this.seeddb.put(dkey, {
         key: dkey,
         opts: { ...defaultJoinOpts, ...joinOpts }
