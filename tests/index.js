@@ -31,6 +31,7 @@ const createDb = opts => {
 test('ready', async t => {
   const p2p = createDb()
   t.doesNotThrow(async () => {
+    await p2p.ready()
     await p2p.destroy()
   }, 'ready method should not throw')
   t.end()
