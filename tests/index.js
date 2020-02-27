@@ -195,6 +195,33 @@ test('set: should throw InvalidKeyError with invalid update', async t => {
   })
 })
 
+test('set: should throw validation error with extra params', async t => {
+  const p2p = createDb()
+  const sampleData = {
+    type: 'profile',
+    title: 'professor',
+    description: 'lorem ipsum'
+  }
+  const { rawJSON: metadata } = await p2p.init(sampleData)
+  const key = metadata.url
+
+  try {
+    await p2p.set({
+      url: key,
+      parents: [
+        'be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a'
+      ]
+    })
+  } catch (err) {
+    t.ok(
+      err instanceof SDK.errors.ValidationError,
+      'extra params should throw ValidationError'
+    )
+  }
+  await p2p.destroy()
+  t.end()
+})
+
 test('set: update should fail with bad data', async t => {
   const p2p = createDb()
   const sampleData = {
