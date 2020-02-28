@@ -41,8 +41,8 @@ const assertValid = (type, val) => {
       if (any !== null && typeof any === 'object') {
         const declared = new Set(type.fields.map(f => f.name))
         const extra = Object.keys(any).filter(n => !declared.has(n))
-        msg += ` extra fields (${extra.join(', ')})`
-        throw new Error(msg)
+        msg = `extra fields (${extra.join(', ')})`
+        throw new ValidationError('', msg, extra.join(', '))
       } else {
         msg += `not an object: ${any}`
         throw new Error(msg)
@@ -109,6 +109,8 @@ class SDK {
 
     // memoize methods
     this.ready = pMemoize(this.ready)
+    // cancelable methods
+    this.clone = PCancelable.fn(this.clone.bind(this))
     // debug constructor
     debug(`platform: ${this.platform}`)
     debug(`Is windows? ${!!this.windows}`)
@@ -274,7 +276,7 @@ class SDK {
       level(join(this.dbPath, 'db'), { valueEncoding: codec }, (err, db) => {
         if (err) {
           this._log(err, 'error')
-          reject(err)
+          return reject(err)
         }
 
         if (err instanceof level.errors.OpenError) {
@@ -358,7 +360,10 @@ class SDK {
   }
 
   async ready () {
-    if (this.start) return
+    if (this.start) {
+      this._log('already started')
+      return
+    }
     try {
       // create db dir
       await ensureDir(this.dbPath)
@@ -446,9 +451,7 @@ class SDK {
 
     debug(`init ${type}`)
 
-    if (!this.start) {
-      await this.ready()
-    }
+    await this.ready()
 
     // Note(dk): the pk will be used as a seed, it can be any string
     const { publicKey } = crypto.keyPair()
@@ -624,9 +627,7 @@ class SDK {
       'params.url'
     )
 
-    if (!this.start) {
-      await this.ready()
-    }
+    await this.ready()
     // NOTE(dk): some properties are read only (license, follows, ...)
     const { url, ...mod } = params
     debug('set params', params)
@@ -705,9 +706,7 @@ class SDK {
       'key'
     )
 
-    if (!this.start) {
-      await this.ready()
-    }
+    await this.ready()
 
     key = DatEncoding.encode(key)
 
@@ -733,9 +732,7 @@ class SDK {
       'criteria'
     )
 
-    if (!this.start) {
-      await this.ready()
-    }
+    await this.ready()
 
     return new Promise((resolve, reject) => {
       this.by[feature].get(criteria, (err, data) => {
@@ -764,9 +761,7 @@ class SDK {
       'criteria'
     )
 
-    if (!this.start) {
-      await this.ready()
-    }
+    await this.ready()
 
     return new Promise((resolve, reject) => {
       const out = []
@@ -801,9 +796,7 @@ class SDK {
    * @returns {Array<Object>}
    */
   async listContent () {
-    if (!this.start) {
-      await this.ready()
-    }
+    await this.ready()
     return new Promise((resolve, reject) => {
       const out = []
 
@@ -831,9 +824,7 @@ class SDK {
    * @returns {Array<Object>}
    */
   async listProfiles () {
-    if (!this.start) {
-      await this.ready()
-    }
+    await this.ready()
     return new Promise((resolve, reject) => {
       const out = []
       const s = this.localdb.createValueStream()
@@ -853,9 +844,7 @@ class SDK {
   }
 
   async list () {
-    if (!this.start) {
-      await this.ready()
-    }
+    await this.ready()
     return new Promise((resolve, reject) => {
       const out = []
       const s = this.localdb.createValueStream()
@@ -891,9 +880,7 @@ class SDK {
       'key'
     )
 
-    if (!this.start) {
-      await this.ready()
-    }
+    await this.ready()
 
     const { main } = await this.get(key)
     if (!main) {
@@ -902,7 +889,21 @@ class SDK {
     return open(main)
   }
 
-  async _clone (mKey, mVersion, download = true) {
+  /**
+   * clone a module
+   *
+   * @public
+   * @async
+   * @param {(String|Buffer) }mKey - a dat url
+   * @param {Number} [mVersion] - a module version
+   * @returns {{
+   *   module: Object,
+   *   version: Number,
+   *   versionedKey: String,
+   *   metadata: Object
+   * }}
+   */
+  async clone (mKey, mVersion, download = true, onCancel) {
     // get module from localdb, if absent will query it from the swarm
     // this fn will also call seed() after retrieving the module from the swarm
 
@@ -911,9 +912,18 @@ class SDK {
       download = mVersion
       mVersion = null
     }
-    if (!this.start) {
-      await this.ready()
+
+    if (typeof mVersion === 'function') {
+      onCancel = mVersion
+      mVersion = null
+      download = true
     }
+
+    if (onCancel) {
+      onCancel.shouldReject = false
+    }
+
+    await this.ready()
 
     let module
     let version
@@ -1040,44 +1050,6 @@ class SDK {
   }
 
   /**
-   * clone a module
-   *
-   * @public
-   * @async
-   * @param {(String|Buffer) }mKey - a dat url
-   * @param {Number} [mVersion] - a module version
-   * @returns {{
-   *   module: Object,
-   *   version: Number,
-   *   versionedKey: String,
-   *   metadata: Object
-   * }}
-   */
-  clone (mKey, mVersion, download = true) {
-    // get module from localdb, if absent will query it from the swarm
-    // this fn will also call seed() after retrieving the module from the swarm
-
-    this.assertDatUrl(mKey)
-    if (typeof mVersion === 'boolean') {
-      download = mVersion
-      mVersion = null
-    }
-
-    return new PCancelable(async (resolve, reject, onCancel) => {
-      onCancel.shouldReject = false
-      onCancel(() => {
-        this._log('clone was canceled')
-      })
-      try {
-        const result = await this._clone(mKey, mVersion, download)
-        return resolve(result)
-      } catch (err) {
-        return reject(err)
-      }
-    })
-  }
-
-  /**
    * publish a content module to a profile
    *
    * @public
@@ -1104,9 +1076,7 @@ class SDK {
       profileKey,
       'profileKey'
     )
-    if (!this.start) {
-      await this.ready()
-    }
+    await this.ready()
 
     const { host: cKey, version: contentVersion } = parse(contentKey)
     const { host: pKey, version: profileVersion } = parse(profileKey)
@@ -1201,9 +1171,8 @@ class SDK {
       source.p2pcommons.type,
       'type'
     )
-    if (!this.start) {
-      await this.ready()
-    }
+
+    await this.ready()
 
     // TODO(dk): check versions
     if (source.p2pcommons.authors.length === 0) return false
@@ -1238,9 +1207,7 @@ class SDK {
     )
     debug('unpublish')
 
-    if (!this.start) {
-      await this.ready()
-    }
+    await this.ready()
 
     const { module: profile, metadata } = await this.clone(profileKey, false)
 
@@ -1294,9 +1261,7 @@ class SDK {
 
     debug('follow')
 
-    if (!this.start) {
-      await this.ready()
-    }
+    await this.ready()
 
     // Fetching localProfile module
     const { module: localProfile, metadata } = await this.clone(
@@ -1372,9 +1337,7 @@ class SDK {
 
     debug('unfollow')
 
-    if (!this.start) {
-      await this.ready()
-    }
+    await this.ready()
 
     // Fetching localProfile module
     const { module: localProfile, metadata } = await this.clone(
@@ -1451,9 +1414,7 @@ class SDK {
 
     debug('delete')
 
-    if (!this.start) {
-      await this.ready()
-    }
+    await this.ready()
 
     const url = DatEncoding.encode(key)
     const dkey = DatEncoding.encode(
