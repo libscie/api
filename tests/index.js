@@ -771,8 +771,6 @@ test('cancel clone', async t => {
     swarm: testSwarmCreator
   })
 
-  await p2p2.ready()
-
   const content = {
     type: 'content',
     title: 'test',
