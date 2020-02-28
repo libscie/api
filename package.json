@@ -6,7 +6,7 @@
   "scripts": {
     "test": "node tests/index.js | tap-spec",
     "format": "prettier-standard --format",
-    "version": "chan gh-release ${npm_package_version} && git add CHANGELOG.md"
+    "version": "chan release ${npm_package_version} --ghrelease && git add CHANGELOG.md"
   },
   "precommit": "prettier-standard --lint --staged",
   "repository": {
