@@ -144,6 +144,15 @@ class SDK {
     )
   }
 
+  assertVersionedUrl (datUrl) {
+    assert(typeof datUrl === 'string', ValidationError, 'string', 'datUrl')
+    const { version } = parse(datUrl)
+    if (version !== 0 && !version) {
+      throw new ValidationError('versioned dat url', datUrl, 'datUrl')
+    }
+    return true
+  }
+
   assertModuleType (module, mType) {
     assert(
       module.p2pcommons.type === mType,
@@ -227,6 +236,24 @@ class SDK {
       this.networker.join(item.key, item.opts)
     })
     await Promise.all(joins)
+  }
+
+  /**
+   * get dat modules url with latests version
+   *
+   * @private
+   *
+   * @param {(string|buffer)} datUrl
+   * @returns {string}
+   */
+  async _getVersionedUrl (datUrl) {
+    this.assertDatUrl(datUrl)
+
+    const { versionedKey } = await this.clone(datUrl, null, false)
+    if (!versionedKey) {
+      throw new Error(`Unable to found module with dat url: ${datUrl}`)
+    }
+    return versionedKey
   }
 
   async getOptionsOrCreate () {
@@ -1123,16 +1150,20 @@ class SDK {
 
     // Note(dk): at this point is safe to save the new modules if necessary
 
-    // if (contentUnflatten.p2pcommons.authors.length === 0) {
-    //  throw new Error('Authors is empty')
-    // }
+    if (content.p2pcommons.authors.length === 0) {
+      throw new Error('Authors field is empty')
+    }
+
+    if (!content.p2pcommons.authors.includes(profile.url)) {
+      throw new Error('Content module does not include profile url')
+    }
+
     /*
-     * Note(dk): omiting verification for now - WIP
     // verify content first
-    const verified = await this.verify(content)
+    const verified = await this.verify(cKeyVersion)
 
     if (!verified) {
-      throw new Error('content module does not met the requirements')
+      throw new Error('Content module does not satisfy the requirements')
     }
     */
 
@@ -1158,29 +1189,32 @@ class SDK {
    * @public
    * @async
    * @link https://github.com/p2pcommons/specs/blob/master/module.md#verification
-   * @param {Object} source - a module object to verify
+   * @param {String} datUrl - a versioned dat url
    * @returns {Boolean} - true if module is verified, false otherwise
    */
-  async verify (source) {
-    debug('verify', source)
-    source = this._unflatten(source)
+  async verify (datUrl) {
+    debug('verify %s', datUrl)
+    const { host: url, version } = parse(datUrl)
+    if (!version) {
+      throw new Error('Module can not be verified: unversioned content')
+    }
+    await this.ready()
+    const { module } = await this.clone(url, version, false)
+
     assert(
-      source.p2pcommons.type === 'content',
+      module.p2pcommons.type === 'content',
       ValidationError,
       'content',
-      source.p2pcommons.type,
+      module.p2pcommons.type,
       'type'
     )
 
-    await this.ready()
-
-    // TODO(dk): check versions
-    if (source.p2pcommons.authors.length === 0) return false
-    return source.p2pcommons.authors.reduce(async (prevProm, authorKey) => {
+    if (module.p2pcommons.authors.length === 0) return false
+    return module.p2pcommons.authors.reduce(async (prevProm, authorKey) => {
       const prev = await prevProm
       // Note(dk): what if authorKey is not present on local db. fetch from swarm?
       const { rawJSON: profile } = await this.get(authorKey)
-      return prev && profile.contents.includes(source.url)
+      return prev && profile.contents.includes(datUrl)
     }, Promise.resolve(true))
   }
 
