@@ -518,7 +518,7 @@ test('verify', async t => {
   const contents = await p2p.listContent()
 
   const { rawJSON: profile } = profiles[0]
-  const { rawJSON: content1 } = contents[0]
+  const { rawJSON: content1, metadata } = contents[0]
   const { rawJSON: content2 } = contents[1]
   const authors = [profile.url]
 
@@ -526,17 +526,25 @@ test('verify', async t => {
   // update author on content module
   await p2p.set({ url: content1.url, authors })
   // update content in author profile
-  await p2p.set({ url: profile.url, contents: [content1.url] })
+  await p2p.set({
+    url: profile.url,
+    contents: [`${content1.url}+${metadata.version}`]
+  })
   // END ATOMIC OP
 
-  const { rawJSON: content1Updated } = await p2p.get(content1.url)
-
-  const result = await p2p.verify(content1Updated)
+  const result = await p2p.verify(`${content1.url}+${metadata.version}`)
 
   t.ok(result, 'content1 meets the verification requirements')
 
-  const result2 = await p2p.verify(content2)
-  t.notOk(result2, 'content2 does not has published authors')
+  try {
+    await p2p.verify(content2.url)
+  } catch (err) {
+    t.same(
+      err.message,
+      'Module can not be verified: unversioned content',
+      'verify should throw with an unversioned content module'
+    )
+  }
 
   await p2p.destroy()
   t.end()
@@ -619,9 +627,7 @@ test('unpublish content module from profile', async t => {
     description: 'lorem ipsum'
   }
 
-  const { rawJSON: content, metadata: contentMeta } = await p2p.init(
-    sampleContent
-  )
+  const { rawJSON: content } = await p2p.init(sampleContent)
 
   const sampleProfile = {
     type: 'profile',
@@ -630,7 +636,12 @@ test('unpublish content module from profile', async t => {
 
   const { rawJSON: profile } = await p2p.init(sampleProfile)
 
+  // Manually setting the author profile
+  await p2p.set({ url: content.url, authors: [profile.url] })
+  const { metadata: contentMeta } = await p2p.get(content.url)
+
   t.equal(profile.contents.length, 0, 'profile.contents is empty')
+
   const versioned = `${content.url}+${contentMeta.version}`
   await p2p.publish(versioned, profile.url)
 
