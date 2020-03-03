@@ -1212,9 +1212,8 @@ class SDK {
     if (module.p2pcommons.authors.length === 0) return false
     return module.p2pcommons.authors.reduce(async (prevProm, authorKey) => {
       const prev = await prevProm
-      // Note(dk): what if authorKey is not present on local db. fetch from swarm?
-      const { rawJSON: profile } = await this.get(authorKey)
-      return prev && profile.contents.includes(datUrl)
+      const { module: profile } = await this.clone(authorKey, null, false)
+      return prev && profile.p2pcommons.contents.includes(datUrl)
     }, Promise.resolve(true))
   }
 
