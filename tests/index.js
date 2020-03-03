@@ -550,6 +550,56 @@ test('verify', async t => {
   t.end()
 })
 
+test('verify multiple authors', async t => {
+  const p2p = createDb({
+    swarm: true,
+    persist: false,
+    swarmFn: testSwarmCreator
+  })
+  const p2p2 = createDb({
+    swarm: true,
+    persist: false,
+    swarmFn: testSwarmCreator
+  })
+  const sampleData = {
+    type: 'content',
+    title: 'demo',
+    description: 'lorem ipsum'
+  }
+  const sampleProfile = { type: 'profile', title: 'Professor X' }
+
+  const externalProfile = { type: 'profile', title: 'Professor Y' }
+
+  const { rawJSON: content1 } = await p2p.init(sampleData)
+  const { rawJSON: profile } = await p2p.init(sampleProfile)
+
+  const { rawJSON: profileY } = await p2p2.init(externalProfile)
+
+  // content has multiple authors
+  const authors = [profile.url, profileY.url]
+  // update authors on content module
+  await p2p.set({ url: content1.url, authors })
+  const { rawJSON, metadata } = await p2p.get(content1.url)
+  t.same(rawJSON.authors, authors, 'content authors contains two profiles')
+  const versioned = `${content1.url}+${metadata.version}`
+  // update content in authors profiles
+  await p2p.publish(versioned, profile.url)
+  await p2p2.publish(versioned, profileY.url)
+
+  const { rawJSON: pUpdated } = await p2p.get(profile.url)
+  const { rawJSON: pUpdatedY } = await p2p2.get(profileY.url)
+  t.same(pUpdated.contents, [versioned], 'profile 1 updated ok')
+  t.same(pUpdatedY.contents, [versioned], 'profile 2 updated ok')
+
+  const result = await p2p.verify(versioned)
+
+  t.ok(result, 'content with multiple authors is verified ok')
+
+  await p2p.destroy()
+  await p2p2.destroy()
+  t.end()
+})
+
 test('re-open SDK (child process)', async t => {
   const dir = tempy.directory()
 
