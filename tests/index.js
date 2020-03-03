@@ -247,6 +247,112 @@ test('set: update should fail with bad data', async t => {
   }
 })
 
+test('set: content and profile idempotent with repeated values', async t => {
+  const p2p = createDb()
+  const sampleData = {
+    type: 'content',
+    title: 'demo',
+    description: 'lorem ipsum',
+    authors: [
+      'dat://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860e9d'
+    ],
+    parents: [
+      'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
+    ]
+  }
+  const sampleProfile = {
+    type: 'profile',
+    title: 'professorX',
+    subtype: '',
+    main: 'test-profile.html',
+    avatar: './test.png',
+    follows: [
+      'dat://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4'
+    ],
+    contents: [
+      'dat://00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23+12'
+    ]
+  }
+
+  const { rawJSON: content } = await p2p.init(sampleData)
+  const { rawJSON: profile } = await p2p.init(sampleProfile)
+
+  const ckey = content.url
+  const pkey = profile.url
+
+  const authors = sampleData.authors.concat(
+    'dat://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860alf'
+  )
+  // set data
+  await p2p.set({
+    url: ckey,
+    authors,
+    parents: sampleData.parents
+  })
+
+  const { rawJSON: cUpdated } = await p2p.get(ckey)
+  t.same(cUpdated.authors, authors)
+  t.same(cUpdated.parents, sampleData.parents)
+
+  // update profile
+  const contents = [
+    'dat://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860alf',
+    'dat://00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23+12'
+  ]
+  const follows = [
+    'dat://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4',
+    'dat://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c208062123'
+  ]
+
+  await p2p.set({
+    url: pkey,
+    follows,
+    contents
+  })
+  const { rawJSON: pUpdated } = await p2p.get(pkey)
+
+  t.same(pUpdated.follows, follows)
+  t.same(pUpdated.contents, contents)
+
+  await p2p.destroy()
+  t.end()
+})
+
+test.only('follows: must not self-reference', async t => {
+  const p2p = createDb()
+
+  t.plan(1)
+
+  const sampleProfile = {
+    type: 'profile',
+    title: 'professorX',
+    subtype: '',
+    main: 'test-profile.html',
+    avatar: './test.png',
+    follows: [
+      'dat://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4'
+    ],
+    contents: [
+      'dat://00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23+12'
+    ]
+  }
+
+  const { rawJSON: profile } = await p2p.init(sampleProfile)
+
+  try {
+    await p2p.set({ url: profile.url, follows: [profile.url] })
+  } catch (err) {
+    t.same(
+      err.message,
+      'Can not self-reference',
+      'should throw when tries to self-reference'
+    )
+  }
+
+  await p2p.destroy()
+  t.end()
+})
+
 test('update: check version change', async t => {
   const p2p = createDb()
   const sampleData = {
