@@ -1,6 +1,6 @@
 # @p2pcommons/sdk-js
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
-[![All Contributors](https://img.shields.io/badge/all_contributors-1-orange.svg?style=flat-square)](#contributors-)
+[![All Contributors](https://img.shields.io/badge/all_contributors-2-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 
 ![npm version](https://img.shields.io/npm/v/@p2pcommons/sdk-js?color=4F2D84)
@@ -230,6 +230,7 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
 <table>
   <tr>
     <td align="center"><a href="http://dpaez.github.io/"><img src="https://avatars0.githubusercontent.com/u/837500?v=4" width="100px;" alt=""/><br /><sub><b>Diego</b></sub></a><br /><a href="https://github.com/p2pcommons/sdk-js/commits?author=dpaez" title="Code">💻</a> <a href="https://github.com/p2pcommons/sdk-js/commits?author=dpaez" title="Documentation">📖</a> <a href="#ideas-dpaez" title="Ideas, Planning, & Feedback">🤔</a> <a href="#infra-dpaez" title="Infrastructure (Hosting, Build-Tools, etc)">🚇</a></td>
+    <td align="center"><a href="http://twitter.com/juliangruber/"><img src="https://avatars2.githubusercontent.com/u/10247?v=4" width="100px;" alt=""/><br /><sub><b>Julian Gruber</b></sub></a><br /><a href="#ideas-juliangruber" title="Ideas, Planning, & Feedback">🤔</a> <a href="https://github.com/p2pcommons/sdk-js/pulls?q=is%3Apr+reviewed-by%3Ajuliangruber" title="Reviewed Pull Requests">👀</a> <a href="https://github.com/p2pcommons/sdk-js/commits?author=juliangruber" title="Tests">⚠️</a></td>
   </tr>
 </table>
 

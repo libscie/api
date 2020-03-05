@@ -16,6 +16,17 @@
         "ideas",
         "infra"
       ]
+    },
+    {
+      "login": "juliangruber",
+      "name": "Julian Gruber",
+      "avatar_url": "https://avatars2.githubusercontent.com/u/10247?v=4",
+      "profile": "http://twitter.com/juliangruber/",
+      "contributions": [
+        "ideas",
+        "review",
+        "test"
+      ]
     }
   ],
   "contributorsPerLine": 7,
