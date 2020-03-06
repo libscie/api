@@ -1293,6 +1293,12 @@ class SDK {
 
     debug('follow')
 
+    const localUrl = DatEncoding.encode(localProfileUrl)
+    const targetUrl = DatEncoding.encode(targetProfileUrl)
+    if (localUrl === targetUrl) {
+      throw new Error('Self-reference profile is invalid')
+    }
+
     await this.ready()
 
     // Fetching localProfile module
