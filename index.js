@@ -1052,7 +1052,6 @@ class SDK {
       if (download) {
         dwldHandle = dat.downloadFiles(moduleVersion, folderPath)
       }
-      // store the module in localdb for future fetching
 
       let lastMeta
       try {
@@ -1060,6 +1059,7 @@ class SDK {
         lastMeta = metadata
       } catch (_) {}
 
+      // Note(dk): only update localdb if fetched module is more recent
       if (!lastMeta || stat.lastModified > lastMeta.lastModified) {
         await this.localdb.put(DatEncoding.encode(module.url), {
           isWritable: moduleVersion.writable,
