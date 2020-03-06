@@ -144,6 +144,15 @@ class SDK {
     )
   }
 
+  assertVersionedUrl (datUrl) {
+    assert(typeof datUrl === 'string', ValidationError, 'string', 'datUrl')
+    const { version } = parse(datUrl)
+    if (version !== 0 && !version) {
+      throw new ValidationError('versioned dat url', datUrl, 'datUrl')
+    }
+    return true
+  }
+
   assertModuleType (module, mType) {
     assert(
       module.p2pcommons.type === mType,
@@ -227,6 +236,31 @@ class SDK {
       this.networker.join(item.key, item.opts)
     })
     await Promise.all(joins)
+  }
+
+  /**
+   * handy method for getting the dar url with its version (if version is omitted then module is fetched to get the latest version)
+   *
+   * @private
+   *
+   * @param {(string|buffer)} datUrl
+   * @returns {string}
+   */
+  async _getVersionedUrl (datUrl, version = null) {
+    this.assertDatUrl(datUrl)
+
+    const { version: versioned } = parse(datUrl)
+    if (versioned) return datUrl
+
+    if (version && typeof version === 'number') {
+      return `${datUrl}+${version}`
+    }
+
+    const { versionedKey } = await this.clone(datUrl, null, false)
+    if (!versionedKey) {
+      throw new Error(`Unable to found module with dat url: ${datUrl}`)
+    }
+    return versionedKey
   }
 
   async getOptionsOrCreate () {
@@ -558,21 +592,14 @@ class SDK {
 
     let archive
     debug(`saveItem: looking drive ${keyString} in local structure...`)
-    const dkey = DatEncoding.encode(
-      crypto.discoveryKey(DatEncoding.decode(datJSON.url))
-    )
-    archive = this.drives.get(dkey)
-
+    const dkey = DatEncoding.encode(crypto.discoveryKey(keyString))
+    archive = this.drives.get(version ? `${dkey}+${version}` : dkey)
     if (!archive) {
       debug(`saveItem: calling dat open ${keyString}`)
-      const drive = await dat.open(
-        this.store,
-        DatEncoding.decode(datJSON.url),
-        {
-          sparse: this.globalOptions.sparse,
-          sparseMetadata: this.globalOptions.sparseMetadata
-        }
-      )
+      const drive = dat.open(this.store, DatEncoding.decode(datJSON.url), {
+        sparse: this.globalOptions.sparse,
+        sparseMetadata: this.globalOptions.sparseMetadata
+      })
       await drive.ready()
       archive = drive
     }
@@ -585,6 +612,16 @@ class SDK {
       version = archive.version
       stat = await archive.stat('/dat.json')
     }
+
+    debug('updating cache value')
+
+    // Note(dk): we are almost all the time fetching profiles without indicating any specific version so this is more effective
+    this.drives.set(
+      version && datJSON.p2pcommons.type !== 'profile'
+        ? `${dkey}+${version}`
+        : dkey,
+      archive
+    )
 
     debug('saving item on local db')
     await this.localdb.put(DatEncoding.encode(datJSON.url), {
@@ -942,35 +979,31 @@ class SDK {
     } catch (_) {
       // 2 - if no module is found on localdb, then fetch from hyperdrive
       // something like:
-      debug('clone: Module was not found in localdb.\nFetching from memory...')
+      debug('clone: Module was not found in localdb.')
 
-      const _getDat = async key => {
+      const _getDat = async (key, version) => {
         const keyBuffer = DatEncoding.decode(key)
-        const archive = this.drives.get(
-          DatEncoding.encode(crypto.discoveryKey(keyBuffer))
-        )
-        if (!archive) {
-          debug(
-            'clone: Module was not found in memory.\nFetching from swarm...'
-          )
-          const drive = await dat.open(this.store, keyBuffer, {
-            sparse: true,
-            sparseMetadata: true
-          })
+        const dkey = DatEncoding.encode(crypto.discoveryKey(key))
+        const cacheKey = version ? `${dkey}+${version}` : dkey
 
-          debug(`clone: Found archive key ${mKeyString}`)
-          debug('clone: Waiting for archive ready')
-          await drive.ready()
+        const archive = this.drives.get(cacheKey)
+        if (archive) return archive
 
-          await this._seed(drive, { announce: true, lookup: true })
+        const drive = dat.open(this.store, keyBuffer, {
+          sparse: true,
+          sparseMetadata: true
+        })
 
-          return drive
-        }
+        debug(`clone: Found archive key ${mKeyString}`)
+        debug('clone: Waiting for archive ready')
+        await drive.ready()
 
-        return archive
+        await this._seed(drive, { announce: true, lookup: true })
+
+        return drive
       }
 
-      const moduleDat = await _getDat(mKeyString)
+      const moduleDat = await _getDat(mKeyString, mVersion)
 
       version = mVersion || moduleDat.version
       debug('clone: Module version', version)
@@ -1004,36 +1037,38 @@ class SDK {
 
         module = JSON.parse(content)
         // NOTE (dk): we can consider have another map for checkouts only
-        this.drives.set(
-          DatEncoding.encode(moduleDat.discoveryKey),
-          moduleVersion
-        )
-        if (download) {
-          dwldHandle = moduleVersion.download('/')
-        }
+        const dkey = DatEncoding.encode(moduleVersion.discoveryKey)
+        this.drives.set(version ? `${dkey}+${version}` : dkey, moduleVersion)
       } catch (err) {
         this._log(err.message, 'error')
         throw new Error('clone: Problems fetching external module')
       }
       // 4 - clone new module (move into its own method)
-      // modulePath = datkey || datkey+version
       const modulePath = version ? `${mKeyString}+${version}` : `${mKeyString}`
       const folderPath = join(this.baseDir, modulePath)
       await ensureDir(folderPath)
       await writeFile(join(folderPath, 'dat.json'), JSON.stringify(module))
+      stat = await moduleDat.stat('dat.json')
       if (download) {
         dwldHandle = dat.downloadFiles(moduleVersion, folderPath)
       }
-      stat = await moduleDat.stat('dat.json')
 
-      // store the module in localdb for future fetching (ie: avoid calling seed twice)
-      await this.localdb.put(DatEncoding.encode(module.url), {
-        isWritable: moduleVersion.writable,
-        lastModified: stat[0].mtime,
-        version: Number(moduleVersion.version),
-        rawJSON: module,
-        avroType: this._getAvroType(module.p2pcommons.type).name
-      })
+      let lastMeta
+      try {
+        const { metadata } = await this.get(mKeyString)
+        lastMeta = metadata
+      } catch (_) {}
+
+      // Note(dk): only update localdb if fetched module is more recent
+      if (!lastMeta || stat.lastModified > lastMeta.lastModified) {
+        await this.localdb.put(DatEncoding.encode(module.url), {
+          isWritable: moduleVersion.writable,
+          lastModified: stat[0].mtime,
+          version: Number(moduleVersion.version),
+          rawJSON: module,
+          avroType: this._getAvroType(module.p2pcommons.type).name
+        })
+      }
     }
 
     return {
@@ -1123,18 +1158,13 @@ class SDK {
 
     // Note(dk): at this point is safe to save the new modules if necessary
 
-    // if (contentUnflatten.p2pcommons.authors.length === 0) {
-    //  throw new Error('Authors is empty')
-    // }
-    /*
-     * Note(dk): omiting verification for now - WIP
-    // verify content first
-    const verified = await this.verify(content)
-
-    if (!verified) {
-      throw new Error('content module does not met the requirements')
+    if (content.p2pcommons.authors.length === 0) {
+      throw new Error('Authors field is empty')
     }
-    */
+
+    if (!content.p2pcommons.authors.includes(profile.url)) {
+      throw new Error('Content module does not include profile url')
+    }
 
     // publish new content
     if (profile.p2pcommons.contents.includes(cKeyVersion)) {
@@ -1158,29 +1188,31 @@ class SDK {
    * @public
    * @async
    * @link https://github.com/p2pcommons/specs/blob/master/module.md#verification
-   * @param {Object} source - a module object to verify
+   * @param {String} datUrl - a versioned dat url
    * @returns {Boolean} - true if module is verified, false otherwise
    */
-  async verify (source) {
-    debug('verify', source)
-    source = this._unflatten(source)
+  async verify (datUrl) {
+    debug('verify %s', datUrl)
+    const { host: url, version } = parse(datUrl)
+    if (!version) {
+      throw new Error('Module can not be verified: unversioned content')
+    }
+    await this.ready()
+    const { module } = await this.clone(url, version, false)
+
     assert(
-      source.p2pcommons.type === 'content',
+      module.p2pcommons.type === 'content',
       ValidationError,
       'content',
-      source.p2pcommons.type,
+      module.p2pcommons.type,
       'type'
     )
 
-    await this.ready()
-
-    // TODO(dk): check versions
-    if (source.p2pcommons.authors.length === 0) return false
-    return source.p2pcommons.authors.reduce(async (prevProm, authorKey) => {
+    if (module.p2pcommons.authors.length === 0) return false
+    return module.p2pcommons.authors.reduce(async (prevProm, authorKey) => {
       const prev = await prevProm
-      // Note(dk): what if authorKey is not present on local db. fetch from swarm?
-      const { rawJSON: profile } = await this.get(authorKey)
-      return prev && profile.contents.includes(source.url)
+      const { module: profile } = await this.clone(authorKey, null, false)
+      return prev && profile.p2pcommons.contents.includes(datUrl)
     }, Promise.resolve(true))
   }
 
@@ -1429,6 +1461,8 @@ class SDK {
       await this.localdb.del(url)
       await this.seeddb.del(dkey)
       const drive = this.drives.get(dkey) // if drive is open in memory we can close it
+      // Note(dk): what about the checkouts? this can be dkey + version
+      // maybe keep things inside a map structure would be better -> map of maps
       if (drive) {
         await drive.close()
       }
