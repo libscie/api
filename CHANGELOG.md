@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - make parents dat url validation strict #96
 
+### Fixed
+- leveldb open errors ignored #112
 
 ## 0.5.2 - 2020-02-28
 ### Added
