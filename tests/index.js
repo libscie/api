@@ -9,6 +9,7 @@ const test = require('tape-catch')
 const tempy = require('tempy')
 const SDK = require('../')
 const testSwarm = require('./utils/swarm')
+const level = require('level')
 
 const testSwarmCreator = (store, opts) => testSwarm(store, opts)
 
@@ -857,5 +858,27 @@ test('cancel clone', async t => {
 
   await p2p.destroy()
   await p2p2.destroy()
+  t.end()
+})
+
+test('leveldb open error', async t => {
+  const dir = tempy.directory()
+  const db = level(`${dir}/db`)
+  await db.open()
+  const commons = new SDK({
+    disableSwarm: true,
+    watch: false,
+    persist: true,
+    baseDir: dir
+  })
+
+  let err
+  try {
+    await commons.ready()
+  } catch (_err) {
+    err = _err
+  }
+  t.ok(err)
+
   t.end()
 })

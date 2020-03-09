@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - make parents dat url validation strict #96
 - switch to GitHub actions for CI #114
 
+### Fixed
+- leveldb open errors ignored #112
+
 ## 0.5.2 - 2020-02-28
 ### Added
 - new changelog file
