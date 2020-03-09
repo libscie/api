@@ -260,6 +260,7 @@ test('set: content and profile idempotent with repeated values', async t => {
       'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
     ]
   }
+
   const sampleProfile = {
     type: 'profile',
     title: 'professorX',
@@ -283,42 +284,58 @@ test('set: content and profile idempotent with repeated values', async t => {
   const authors = sampleData.authors.concat(
     'dat://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860alf'
   )
-  // set data
-  await p2p.set({
-    url: ckey,
-    authors,
-    parents: sampleData.parents
-  })
+
+  try {
+    // set content data parents field with some repeated values
+    await p2p.set({
+      url: ckey,
+      authors,
+      parents: sampleData.parents
+    })
+  } catch (err) {
+    t.ok(
+      err instanceof SDK.errors.ValidationError,
+      'trying to set duplicated values should throw ValidationError'
+    )
+  }
 
   const { rawJSON: cUpdated } = await p2p.get(ckey)
-  t.same(cUpdated.authors, authors)
-  t.same(cUpdated.parents, sampleData.parents)
+  t.same(cUpdated.authors, sampleData.authors, 'authors remains the same')
+  t.same(cUpdated.parents, sampleData.parents, 'parents remains the same')
 
-  // update profile
+  // update profile with repeated values
   const contents = [
     'dat://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860alf',
-    'dat://00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23+12'
+    'dat://00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23+12' // repeated value
   ]
   const follows = [
-    'dat://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4',
+    'dat://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4', // repeated value
     'dat://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c208062123'
   ]
 
-  await p2p.set({
-    url: pkey,
-    follows,
-    contents
-  })
+  try {
+    await p2p.set({
+      url: pkey,
+      follows,
+      contents
+    })
+  } catch (err) {
+    t.ok(
+      err instanceof SDK.errors.ValidationError,
+      'trying to set duplicated values should throw ValidationError'
+    )
+  }
+
   const { rawJSON: pUpdated } = await p2p.get(pkey)
 
-  t.same(pUpdated.follows, follows)
-  t.same(pUpdated.contents, contents)
+  t.same(pUpdated.follows, sampleProfile.follows, 'follows remains the same')
+  t.same(pUpdated.contents, sampleProfile.contents, 'contents remains the same')
 
   await p2p.destroy()
   t.end()
 })
 
-test.only('follows: must not self-reference', async t => {
+test('follows: must not self-reference', async t => {
   const p2p = createDb()
 
   t.plan(1)
@@ -340,15 +357,46 @@ test.only('follows: must not self-reference', async t => {
   const { rawJSON: profile } = await p2p.init(sampleProfile)
 
   try {
-    await p2p.set({ url: profile.url, follows: [profile.url] })
+    await p2p.follow(profile.url, profile.url)
   } catch (err) {
-    t.same(
-      err.message,
-      'Can not self-reference',
+    t.ok(
+      err instanceof SDK.errors.ValidationError,
       'should throw when tries to self-reference'
     )
   }
 
+  await p2p.destroy()
+  t.end()
+})
+
+test('set: dont allow future parents versions nor self-reference', async t => {
+  const p2p = createDb()
+  const sampleData = {
+    type: 'content',
+    title: 'sample content',
+    description: 'lorem ipsum',
+    parents: [
+      'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
+    ]
+  }
+  const { rawJSON } = await p2p.init(sampleData)
+  const ckey = rawJSON.url
+
+  try {
+    await p2p.set({
+      url: ckey,
+      parents: [
+        'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4',
+        'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4',
+        'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
+      ]
+    })
+  } catch (err) {
+    t.ok(
+      err instanceof SDK.errors.ValidationError,
+      'invalid parents should throw ValidationError'
+    )
+  }
   await p2p.destroy()
   t.end()
 })
@@ -573,7 +621,7 @@ test('seed and publish', async t => {
   await p2p2.destroy(true, false)
 
   // call publish
-  await p2p.publish(contentKeyVersion, profile.url)
+  await p2p.publish(contentKeyVersionPrefix, profile.url)
 
   const { rawJSON } = await p2p.get(profile.url)
   t.same(
@@ -588,15 +636,20 @@ test('seed and publish', async t => {
   )
 
   // call publish again
-  await p2p.publish(contentKeyVersion, profile.url)
-  const { rawJSON: rawJSON2 } = await p2p.get(profile.url)
-  t.same(rawJSON.contents, rawJSON2.contents, 'publish is idempotent')
+  try {
+    await p2p.publish(contentKeyVersionPrefix, profile.url)
+  } catch (err) {
+    t.ok(
+      err instanceof SDK.errors.ValidationError,
+      'throws ValidationError with duplicated publish call'
+    )
+  }
 
   const dirs2 = await readdir(p2p.baseDir)
   t.same(
     dirs,
     dirs2,
-    'publish is idempotent (created directories remains the same)'
+    'repeated publish method call, created directories remains the same'
   )
   await p2p2.destroy(false, true)
   await p2p.destroy()
@@ -842,6 +895,7 @@ test('follow and unfollow a profile', async t => {
 
   const followUrl = profileY.url
   t.equal(profileX.follows.length, 0, 'Initially follows should be empty')
+
   // call follow
   await p2p.follow(profileX.url, followUrl)
 
