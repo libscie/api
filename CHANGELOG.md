@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - make parents dat url validation strict #96
-
+- switch to GitHub actions for CI #114
 
 ## 0.5.2 - 2020-02-28
 ### Added
