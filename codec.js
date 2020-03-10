@@ -3,7 +3,7 @@ const assert = require('nanocustomassert')
 const { Type } = require('@avro/types')
 const GenericType = require('./schemas/generic.json')
 const DBItemType = require('./schemas/dbitem.json')
-const { DateType } = require('./validation')
+const { DateType } = require('./schemas/validation')
 const { MissingParam, ValidationError } = require('./lib/errors')
 
 class Codec {
