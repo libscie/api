@@ -23,7 +23,7 @@ const dat = require('./lib/dat-helper')
 const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
-const ValidationTypes = require('./validation')
+const ValidationTypes = require('./schemas/validation')
 const {
   InvalidKeyError,
   ValidationError,
@@ -201,6 +201,7 @@ class SDK {
 
   async _seed (archive, joinOpts = {}) {
     const dkey = DatEncoding.encode(archive.discoveryKey)
+
     this.drives.set(dkey, archive)
 
     if (!this.disableSwarm) {
@@ -594,7 +595,9 @@ class SDK {
 
     let archive
     debug(`saveItem: looking drive ${keyString} in local structure...`)
-    const dkey = DatEncoding.encode(crypto.discoveryKey(keyString))
+    const dkey = DatEncoding.encode(
+      crypto.discoveryKey(DatEncoding.decode(keyString))
+    )
     archive = this.drives.get(version ? `${dkey}+${version}` : dkey)
     if (!archive) {
       debug(`saveItem: calling dat open ${keyString}`)
@@ -616,7 +619,6 @@ class SDK {
     }
 
     debug('updating cache value')
-
     // Note(dk): we are almost all the time fetching profiles without indicating any specific version so this is more effective
     this.drives.set(
       version && datJSON.p2pcommons.type !== 'profile'
@@ -1058,11 +1060,14 @@ class SDK {
 
       const _getDat = async (key, version) => {
         const keyBuffer = DatEncoding.decode(key)
-        const dkey = DatEncoding.encode(crypto.discoveryKey(key))
+        const dkey = DatEncoding.encode(crypto.discoveryKey(keyBuffer))
         const cacheKey = version ? `${dkey}+${version}` : dkey
 
         const archive = this.drives.get(cacheKey)
-        if (archive) return archive
+        if (archive) {
+          debug(`clone: module found in cache with cachekey ${cacheKey}`)
+          return archive
+        }
 
         const drive = dat.open(this.store, keyBuffer, {
           sparse: true,
@@ -1106,8 +1111,8 @@ class SDK {
               }`
             )
           },
-          retries: 5,
-          randomize: true
+          retries: 3,
+          minTimeout: 500
         })
 
         module = JSON.parse(content)
@@ -1220,7 +1225,6 @@ class SDK {
     }
 
     // Note(dk): at this point is safe to save the new modules if necessary
-
     if (content.p2pcommons.authors.length === 0) {
       throw new ValidationError(
         'authors field should not be empty',
@@ -1383,7 +1387,7 @@ class SDK {
     const localUrl = DatEncoding.encode(localProfileUrl)
     const targetUrl = DatEncoding.encode(targetProfileUrl)
     if (localUrl === targetUrl) {
-      throw new ValidationError('unique value', targetProfileUrl, 'follows')
+      throw new ValidationError('self-reference', targetProfileUrl, 'follows')
     }
 
     await this.ready()
@@ -1525,10 +1529,10 @@ class SDK {
       ? `dat://${targetProfileKey}+${targetProfileVersion}`
       : `dat://${targetProfileKey}`
 
-    localProfile.p2pcommons.follows.splice(
-      localProfile.p2pcommons.follows.indexOf(finalTargetProfileKey),
-      1
-    )
+    const idx = localProfile.p2pcommons.follows.indexOf(finalTargetProfileKey)
+    if (idx !== -1) {
+      localProfile.p2pcommons.follows.splice(idx, 1)
+    }
 
     await this.set(
       {
