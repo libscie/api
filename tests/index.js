@@ -282,7 +282,7 @@ test('set: content and profile idempotent with repeated values', async t => {
   const pkey = profile.url
 
   const authors = sampleData.authors.concat(
-    'dat://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860alf'
+    'dat://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860e9d'
   )
 
   try {
@@ -320,9 +320,10 @@ test('set: content and profile idempotent with repeated values', async t => {
       contents
     })
   } catch (err) {
-    t.ok(
-      err instanceof SDK.errors.ValidationError,
-      'trying to set duplicated values should throw ValidationError'
+    t.same(
+      err.message,
+      'clone: Problems fetching external module',
+      'if module url is not found it will throw'
     )
   }
 
@@ -891,22 +892,49 @@ test('follow and unfollow a profile', async t => {
   }
 
   const { rawJSON: profileX } = await p2p.init(professorX)
-  const { rawJSON: profileY } = await p2p2.init(professorY)
+  const { rawJSON: profileY, metadata } = await p2p2.init(professorY)
 
   const followUrl = profileY.url
+  const followVersionedUrl = `${profileY.url}+${metadata.version}`
+
   t.equal(profileX.follows.length, 0, 'Initially follows should be empty')
 
-  // call follow
+  // call follow (unversioned)
   await p2p.follow(profileX.url, followUrl)
 
+  // follow an nonexistant profile should throw
+  try {
+    await p2p.follow(
+      profileX.url,
+      'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a'
+    )
+  } catch (err) {
+    t.same(
+      err.message,
+      'clone: Problems fetching external module',
+      'Trying to follow a nonexistant module should throw'
+    )
+  }
+
   const { rawJSON: profileXUpdated } = await p2p.get(profileX.url)
-  t.equal(profileXUpdated.follows.length, 1)
+  t.equal(profileXUpdated.follows.length, 1, 'following 1 new profile')
   t.same(
     profileXUpdated.follows,
     [followUrl],
     'follows property should contain target profile url'
   )
 
+  // unfollow versioned profile url which does not exists
+  await p2p.unfollow(profileX.url, followVersionedUrl)
+
+  const { rawJSON: profileXSame } = await p2p.get(profileX.url)
+  t.equal(
+    profileXSame.follows.length,
+    1,
+    'unfollow does nothing when profile does not match (versioned)'
+  )
+
+  // unfollow unversioned profile url
   await p2p.unfollow(profileX.url, followUrl)
 
   const { rawJSON: profileXFinal } = await p2p.get(profileX.url)
@@ -914,6 +942,37 @@ test('follow and unfollow a profile', async t => {
     profileXFinal.follows.length,
     0,
     'unfollow removes the target profile'
+  )
+
+  // call follow (versioned)
+  await p2p.follow(profileX.url, followVersionedUrl)
+
+  const { rawJSON: profileXUpdated2 } = await p2p.get(profileX.url)
+  t.equal(profileXUpdated2.follows.length, 1, 'following 1 new profile')
+  t.same(
+    profileXUpdated2.follows,
+    [followVersionedUrl],
+    'follows property should contain target profile versioned url'
+  )
+
+  // unfollow unversioned profile but only versioned is being followed
+  await p2p.unfollow(profileX.url, followUrl)
+
+  const { rawJSON: profileXNoChange } = await p2p.get(profileX.url)
+  t.equal(
+    profileXNoChange.follows.length,
+    1,
+    'unfollow does nothing when the target profile does not match (unversioned)'
+  )
+
+  // unfollow versioned profile url
+  await p2p.unfollow(profileX.url, followVersionedUrl)
+
+  const { rawJSON: profileXFinal2 } = await p2p.get(profileX.url)
+  t.equal(
+    profileXFinal2.follows.length,
+    0,
+    'unfollow removes the target versioned profile '
   )
 
   await p2p.destroy()
