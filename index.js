@@ -23,7 +23,8 @@ const dat = require('./lib/dat-helper')
 const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
-const ValidationTypes = require('./schemas/validation')
+const ValidationTypes = require('./schemas/validation') // avro related validations
+
 const {
   InvalidKeyError,
   ValidationError,
@@ -663,16 +664,26 @@ class SDK {
       return true
     }
 
+    const isUnique = (arr = [], newValue, property) => {
+      if (arr.includes(newValue)) {
+        throw new ValidationError(
+          'unique values',
+          `${newValue} is already included`,
+          property
+        )
+      }
+    }
+
+    if (params.authors && original.type === 'content') {
+      for (const a of params.authors) {
+        isUnique(original.authors, a, 'authors')
+      }
+    }
+
     if (params.parents && original.type === 'content') {
       for (const p of params.parents) {
         // detect repeated
-        if (original.parents.includes(p)) {
-          throw new ValidationError(
-            'unique values',
-            `${p} is already included`,
-            'parents'
-          )
-        }
+        isUnique(original.parents, p, 'parents')
         // O(n^2) - detect invalid future values
         validateNoFutureParents(original, p)
       }
@@ -680,20 +691,15 @@ class SDK {
 
     if (params.follows && original.type === 'profile') {
       for (const f of params.follows) {
-        await this.followValidations(original.url, f, original)
-        if (original.follows.includes(f)) {
-          throw new ValidationError(
-            'unique values',
-            `${f} is already included`,
-            'follows'
-          )
-        }
+        await this.validateFollow(original.url, f, original)
+        isUnique(original.follows, f, 'follows')
       }
     }
 
     if (params.contents && original.type === 'profile') {
       for (const c of params.contents) {
-        await this.publishValidations(c, original.url)
+        await this.validatePublish(c, original.url)
+        isUnique(original.contents, c, 'contents')
       }
     }
     // all good
@@ -1164,7 +1170,7 @@ class SDK {
     }
   }
 
-  async publishValidations (contentKey, profileKey) {
+  async validatePublish (contentKey, profileKey) {
     assert(
       typeof contentKey === 'string' || Buffer.isBuffer(contentKey),
       ValidationError,
@@ -1372,7 +1378,7 @@ class SDK {
     )
   }
 
-  async followValidations (
+  async validateFollow (
     localProfileUrl,
     targetProfileUrl,
     profileModule = null
