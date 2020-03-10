@@ -411,16 +411,10 @@ class SDK {
       this.globalOptions = await this.getOptionsOrCreate()
 
       // start db
-      try {
-        await this.startdb()
-        await this.db.open()
-        await this.localdb.open()
-        await this.seeddb.open()
-      } catch (dberr) {
-        if (dberr.type !== 'OpenError') {
-          throw dberr
-        }
-      }
+      await this.startdb()
+      await this.db.open()
+      await this.localdb.open()
+      await this.seeddb.open()
 
       // create hyperdrive storage
       await this.createStore()

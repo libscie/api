@@ -4,7 +4,7 @@
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 
 ![npm version](https://img.shields.io/npm/v/@p2pcommons/sdk-js?color=4F2D84)
-[![Build Status](https://travis-ci.com/p2pcommons/sdk-js.svg?branch=master)](https://travis-ci.com/p2pcommons/sdk-js)
+![ci](https://github.com/p2pcommons/sdk-js/workflows/ci/badge.svg)
 
 The base Software Development Kit in JavaScript (`sdk-js`) for a p2p communication infrastructure. More
 information on this infrastructure is available in this [conceptual
