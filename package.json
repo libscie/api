@@ -1,6 +1,6 @@
 {
   "name": "@p2pcommons/sdk-js",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "The SDK for the p2p commons",
   "main": "index.js",
   "scripts": {
