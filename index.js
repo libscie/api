@@ -23,7 +23,8 @@ const dat = require('./lib/dat-helper')
 const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
-const ValidationTypes = require('./validation')
+const ValidationTypes = require('./schemas/validation') // avro related validations
+
 const {
   InvalidKeyError,
   ValidationError,
@@ -154,18 +155,20 @@ class SDK {
   }
 
   assertModuleType (module, mType) {
+    const unflatten = this._unflatten(module)
     assert(
-      module.p2pcommons.type === mType,
+      unflatten.p2pcommons.type === mType,
       ValidationError,
       mType,
-      module.p2pcommons.type,
+      unflatten.p2pcommons.type,
       'type'
     )
   }
 
   assertModule (module) {
-    const localProfileType = this._getAvroType(module.p2pcommons.type)
-    if (!localProfileType.isValid(module)) {
+    const unflatten = this._unflatten(module)
+    const localProfileType = this._getAvroType(unflatten.p2pcommons.type)
+    if (!localProfileType.isValid(unflatten)) {
       throw new Error('Invalid local profile module')
     }
   }
@@ -199,6 +202,7 @@ class SDK {
 
   async _seed (archive, joinOpts = {}) {
     const dkey = DatEncoding.encode(archive.discoveryKey)
+
     this.drives.set(dkey, archive)
 
     if (!this.disableSwarm) {
@@ -586,7 +590,9 @@ class SDK {
 
     let archive
     debug(`saveItem: looking drive ${keyString} in local structure...`)
-    const dkey = DatEncoding.encode(crypto.discoveryKey(keyString))
+    const dkey = DatEncoding.encode(
+      crypto.discoveryKey(DatEncoding.decode(keyString))
+    )
     archive = this.drives.get(version ? `${dkey}+${version}` : dkey)
     if (!archive) {
       debug(`saveItem: calling dat open ${keyString}`)
@@ -608,7 +614,6 @@ class SDK {
     }
 
     debug('updating cache value')
-
     // Note(dk): we are almost all the time fetching profiles without indicating any specific version so this is more effective
     this.drives.set(
       version && datJSON.p2pcommons.type !== 'profile'
@@ -628,6 +633,74 @@ class SDK {
   }
 
   /**
+   * validate params passed to set
+   *
+   * @throws ValidationError
+   * @param params={}
+   * @returns {Boolean}
+   */
+  async validateParams (original, params = {}) {
+    // internal validations helpers
+    const validateNoFutureParents = (arr, newValue) => {
+      const { host: target, version: targetVersion } = parse(newValue)
+      for (const val of arr) {
+        const { host: root, version: localVersion } = parse(val)
+        if (root === target) {
+          if (targetVersion > localVersion) {
+            throw new ValidationError(
+              'version equal or lower',
+              newValue,
+              'version'
+            )
+          }
+        }
+      }
+      return true
+    }
+
+    const isUnique = (arr = [], newValue, property) => {
+      if (arr.includes(newValue)) {
+        throw new ValidationError(
+          'unique values',
+          `${newValue} is already included`,
+          property
+        )
+      }
+    }
+
+    if (params.authors && original.type === 'content') {
+      for (const a of params.authors) {
+        isUnique(original.authors, a, 'authors')
+      }
+    }
+
+    if (params.parents && original.type === 'content') {
+      for (const p of params.parents) {
+        // detect repeated
+        isUnique(original.parents, p, 'parents')
+        // O(n^2) - detect invalid future values
+        validateNoFutureParents(original, p)
+      }
+    }
+
+    if (params.follows && original.type === 'profile') {
+      for (const f of params.follows) {
+        await this.validateFollow(original.url, f, original)
+        isUnique(original.follows, f, 'follows')
+      }
+    }
+
+    if (params.contents && original.type === 'profile') {
+      for (const c of params.contents) {
+        await this.validatePublish(c, original.url)
+        isUnique(original.contents, c, 'contents')
+      }
+    }
+    // all good
+    return true
+  }
+
+  /**
    * updates module fields
    *
    * @public
@@ -642,7 +715,7 @@ class SDK {
    * @param {Array<String>} [module.authors] - only valid for content modules
    * @param {Array<String>} [module.contents] - only valid for profile modules
    */
-  async set (params) {
+  async set (params, force = false) {
     assert(
       typeof params === 'object',
       ValidationError,
@@ -659,6 +732,7 @@ class SDK {
     )
 
     await this.ready()
+
     // NOTE(dk): some properties are read only (license, follows, ...)
     const { url, ...mod } = params
     debug('set params', params)
@@ -680,8 +754,12 @@ class SDK {
       throw new Error(`Module with url ${url} can not be found on localdb`)
     }
 
-    // Check if keys values are valid (ie: non empty, etc)
-    const avroType = this._getAvroType(rawJSONFlatten.type)
+    // check valid params
+    if (!force) {
+      await this.validateParams(rawJSONFlatten, params) // this will throw if invalid params are present
+      debug('set: valid params')
+    }
+
     const prepareMergeData = ({
       title,
       description,
@@ -700,20 +778,24 @@ class SDK {
       ) {
         out.p2pcommons = p2pcommons
       }
-
       return out
     }
+
     const overwriteMerge = (dest, source, options) => source
     const finalJSON = deepMerge(
       this._unflatten(rawJSONFlatten),
       prepareMergeData(this._unflatten(mod)),
       {
-        arrayMerge: overwriteMerge
+        arrayMerge: force ? overwriteMerge : null
       }
     )
+
     debug('set', { finalJSON })
+    // Check if keys values are valid (ie: non empty, etc)
+    const avroType = this._getAvroType(rawJSONFlatten.type)
     assertValid(avroType, finalJSON)
 
+    debug('set: valid input')
     await this.saveItem({
       ...metadata,
       datJSON: finalJSON
@@ -962,6 +1044,7 @@ class SDK {
     let stat
     let dwldHandle
     let moduleVersion
+
     const mKeyString = DatEncoding.encode(mKey)
     try {
       // 1 - try to get content from localdb
@@ -977,11 +1060,14 @@ class SDK {
 
       const _getDat = async (key, version) => {
         const keyBuffer = DatEncoding.decode(key)
-        const dkey = DatEncoding.encode(crypto.discoveryKey(key))
+        const dkey = DatEncoding.encode(crypto.discoveryKey(keyBuffer))
         const cacheKey = version ? `${dkey}+${version}` : dkey
 
         const archive = this.drives.get(cacheKey)
-        if (archive) return archive
+        if (archive) {
+          debug(`clone: module found in cache with cachekey ${cacheKey}`)
+          return archive
+        }
 
         const drive = dat.open(this.store, keyBuffer, {
           sparse: true,
@@ -1025,8 +1111,8 @@ class SDK {
               }`
             )
           },
-          retries: 5,
-          randomize: true
+          retries: 3,
+          minTimeout: 500
         })
 
         module = JSON.parse(content)
@@ -1078,19 +1164,7 @@ class SDK {
     }
   }
 
-  /**
-   * publish a content module to a profile
-   *
-   * @public
-   * @async
-   * @link https://github.com/p2pcommons/specs/blob/master/module.md#registration
-   * @param {(String|Buffer)} contentKey - a dat url
-   * @param {(String|Buffer)} profileKey - a dat url
-   */
-  async publish (contentKey, profileKey) {
-    debug(`publish contentKey: ${contentKey}`)
-    debug(`publish profileKey: ${profileKey}`)
-
+  async validatePublish (contentKey, profileKey) {
     assert(
       typeof contentKey === 'string' || Buffer.isBuffer(contentKey),
       ValidationError,
@@ -1151,26 +1225,47 @@ class SDK {
     }
 
     // Note(dk): at this point is safe to save the new modules if necessary
-
     if (content.p2pcommons.authors.length === 0) {
-      throw new Error('Authors field is empty')
+      throw new ValidationError(
+        'authors field should not be empty',
+        content.p2pcommons.authors,
+        'authors'
+      )
     }
 
     if (!content.p2pcommons.authors.includes(profile.url)) {
-      throw new Error('Content module does not include profile url')
+      throw new ValidationError(
+        'authors should include profile url',
+        profile.url,
+        'authors'
+      )
     }
 
-    // publish new content
     if (profile.p2pcommons.contents.includes(cKeyVersion)) {
-      this._log('publish: content was already published', 'warn')
-      return
+      throw new ValidationError('unique value', cKeyVersion, 'contents')
     }
 
-    profile.p2pcommons.contents.push(cKeyVersion)
+    return true
+  }
+
+  /**
+   * publish a content module to a profile
+   *
+   * @public
+   * @async
+   * @link https://github.com/p2pcommons/specs/blob/master/module.md#registration
+   * @param {(String|Buffer)} contentKey - a dat url
+   * @param {(String|Buffer)} profileKey - a dat url
+   */
+  async publish (contentKey, profileKey) {
+    debug(`publish contentKey: ${contentKey}`)
+    debug(`publish profileKey: ${profileKey}`)
+
+    // profile.p2pcommons.contents.push(cKeyVersion)
     // update profile
     await this.set({
-      url: profile.url,
-      contents: profile.p2pcommons.contents
+      url: profileKey,
+      contents: [contentKey]
     })
 
     this._log('publish: profile updated successfully')
@@ -1268,39 +1363,49 @@ class SDK {
       1
     )
 
-    await this.set({
-      url: profile.url,
-      contents: profile.p2pcommons.contents
-    })
+    await this.set(
+      {
+        url: profile.url,
+        contents: profile.p2pcommons.contents
+      },
+      true
+    )
   }
 
-  /**
-   * follow a profile
-   * @public
-   * @async
-   * @param {string} localProfileUrl - local profile dat url
-   * @param {string} targetProfileUrl - target profile dat url
-   */
-  async follow (localProfileUrl, targetProfileUrl) {
+  async validateFollow (
+    localProfileUrl,
+    targetProfileUrl,
+    profileModule = null
+  ) {
     this.assertDatUrl(localProfileUrl)
     this.assertDatUrl(targetProfileUrl)
 
-    debug('follow')
+    debug('validate follow')
+
+    let localProfile
+
+    const localUrl = DatEncoding.encode(localProfileUrl)
+    const targetUrl = DatEncoding.encode(targetProfileUrl)
+    if (localUrl === targetUrl) {
+      throw new ValidationError('self-reference', targetProfileUrl, 'follows')
+    }
 
     await this.ready()
 
-    // Fetching localProfile module
-    const { module: localProfile, metadata } = await this.clone(
-      localProfileUrl,
-      false
-    )
-
-    if (!localProfile) {
-      throw new Error('Module not found')
+    if (profileModule) {
+      localProfile = profileModule
+    } else {
+      // Fetching localProfile module
+      const { module, metadata } = await this.clone(localProfileUrl, false)
+      if (!metadata.isWritable) {
+        throw new Error('Profile is not writable')
+      }
+      localProfile = module
     }
 
-    if (!metadata.isWritable) {
-      throw new Error('local profile is not writable')
+    // Note(dk): consider make custom error types for these
+    if (!localProfile) {
+      throw new Error('Profile module not found')
     }
 
     this.assertModuleType(localProfile, 'profile')
@@ -1313,7 +1418,7 @@ class SDK {
 
     // Fetching targetProfile module
     debug(
-      `follow: fetching module with key: ${targetProfileKey} and version: ${targetProfileVersion}`
+      `follow validation: fetching module with key: ${targetProfileKey} and version: ${targetProfileVersion}`
     )
     const { module: targetProfile } = await this.clone(
       targetProfileKey,
@@ -1322,28 +1427,42 @@ class SDK {
     )
 
     if (!targetProfile) {
-      throw new Error('Module not found')
+      throw new Error('Profile module not found')
     }
 
     this.assertModuleType(targetProfile, 'profile')
 
     this.assertModule(targetProfile)
 
-    // we are ok to update profile metadata
     const finalTargetProfileKey = targetProfileVersion
       ? `dat://${targetProfileKey}+${targetProfileVersion}`
       : `dat://${targetProfileKey}`
 
-    if (localProfile.p2pcommons.follows.includes(finalTargetProfileKey)) {
-      this._log('follow: Target profile was already added to follows', 'warn')
-      return
+    if (localProfile.follows.includes(finalTargetProfileKey)) {
+      throw new ValidationError(
+        'unique value',
+        finalTargetProfileKey,
+        'follows'
+      )
     }
 
-    localProfile.p2pcommons.follows.push(finalTargetProfileKey)
+    return true
+  }
+
+  /**
+   * follow a profile
+   * @public
+   * @async
+   * @param {string} localProfileUrl - local profile dat url
+   * @param {string} targetProfileUrl - target profile dat url
+   */
+  async follow (localProfileUrl, targetProfileUrl) {
+    debug('follow')
+
     // update profile
     await this.set({
-      url: localProfile.url,
-      follows: localProfile.p2pcommons.follows
+      url: localProfileUrl,
+      follows: [targetProfileUrl]
     })
 
     this._log('follow: profile updated successfully')
@@ -1409,15 +1528,19 @@ class SDK {
     const finalTargetProfileKey = targetProfileVersion
       ? `dat://${targetProfileKey}+${targetProfileVersion}`
       : `dat://${targetProfileKey}`
-    localProfile.p2pcommons.follows.splice(
-      localProfile.p2pcommons.follows.indexOf(finalTargetProfileKey),
-      1
-    )
 
-    await this.set({
-      url: localProfile.url,
-      follows: localProfile.p2pcommons.follows
-    })
+    const idx = localProfile.p2pcommons.follows.indexOf(finalTargetProfileKey)
+    if (idx !== -1) {
+      localProfile.p2pcommons.follows.splice(idx, 1)
+    }
+
+    await this.set(
+      {
+        url: localProfile.url,
+        follows: localProfile.p2pcommons.follows
+      },
+      true
+    )
 
     this._log('unfollow: profile updated successfully')
   }

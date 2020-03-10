@@ -1,5 +1,5 @@
 const { LogicalType, Type } = require('@avro/types')
-const { ValidationError } = require('./lib/errors')
+const { ValidationError } = require('../lib/errors')
 
 /**
  * string validator
