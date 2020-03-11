@@ -76,6 +76,27 @@ test('init: create content module', async t => {
   t.end()
 })
 
+test('init: title longer than 300 char should throw a ValidationError', async t => {
+  const p2p = createDb()
+  const metadata = {
+    type: 'content',
+    title:
+      'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia.'
+  }
+
+  try {
+    await p2p.init(metadata)
+  } catch (err) {
+    t.ok(
+      err instanceof SDK.errors.ValidationError,
+      'It should be a custom SDK error'
+    )
+  }
+
+  await p2p.destroy()
+  t.end()
+})
+
 test('init: creation should throw a ValidationError', async t => {
   const p2p = createDb()
   const metadata = {
