@@ -19,6 +19,11 @@ class RequiredString extends LogicalType {
     if (!this._pattern.test(val)) {
       throw new ValidationError('non empty string', val)
     }
+
+    if (val.length > 300) {
+      throw new ValidationError('max limit exceeded (300)', val)
+    }
+
     return val
   }
 
@@ -30,6 +35,11 @@ class RequiredString extends LogicalType {
     if (!this._pattern.test(val)) {
       throw new ValidationError('non empty string', val)
     }
+
+    if (val.length > 300) {
+      throw new ValidationError('max limit exceeded (300)', val)
+    }
+
     return val
   }
 }
