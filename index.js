@@ -1187,7 +1187,7 @@ class SDK {
     }
 
     return {
-      module: this._unflatten(module),
+      module: this._flatten(module),
       version,
       versionedKey: `dat://${mKeyString}+${version}`,
       metadata: meta || {
@@ -1235,40 +1235,41 @@ class SDK {
 
     // TODO(dk): consider add custom errors for publish and verification
     assert(
-      content.p2pcommons.type === 'content',
+      content.type === 'content',
       ValidationError,
       'content',
-      content.p2pcommons.type,
+      content.type,
       'type'
     )
     assert(
-      profile.p2pcommons.type === 'profile',
+      profile.type === 'profile',
       ValidationError,
       'profile',
-      profile.p2pcommons.type,
+      profile.type,
       'type'
     )
-    const profileType = this._getAvroType(profile.p2pcommons.type)
-    const profileValid = profileType.isValid(profile)
+
+    const profileType = this._getAvroType(profile.type)
+    const profileValid = profileType.isValid(this._unflatten(profile))
     if (!profileValid) {
       throw new Error('Invalid profile module')
     }
-    const contentType = this._getAvroType(content.p2pcommons.type)
-    const contentValid = contentType.isValid(content)
+    const contentType = this._getAvroType(content.type)
+    const contentValid = contentType.isValid(this._unflatten(content))
     if (!contentValid) {
       throw new Error('Invalid content module')
     }
 
     // Note(dk): at this point is safe to save the new modules if necessary
-    if (content.p2pcommons.authors.length === 0) {
+    if (content.authors.length === 0) {
       throw new ValidationError(
         'authors field should not be empty',
-        content.p2pcommons.authors,
+        content.authors,
         'authors'
       )
     }
 
-    if (!content.p2pcommons.authors.includes(profile.url)) {
+    if (!content.authors.includes(profile.url)) {
       throw new ValidationError(
         'authors should include profile url',
         profile.url,
@@ -1276,7 +1277,7 @@ class SDK {
       )
     }
 
-    if (profile.p2pcommons.contents.includes(cKeyVersion)) {
+    if (profile.contents.includes(cKeyVersion)) {
       throw new ValidationError('unique value', cKeyVersion, 'contents')
     }
 
@@ -1325,18 +1326,18 @@ class SDK {
     const { module } = await this.clone(url, version, false)
 
     assert(
-      module.p2pcommons.type === 'content',
+      module.type === 'content',
       ValidationError,
       'content',
-      module.p2pcommons.type,
+      module.type,
       'type'
     )
 
-    if (module.p2pcommons.authors.length === 0) return false
-    return module.p2pcommons.authors.reduce(async (prevProm, authorKey) => {
+    if (module.authors.length === 0) return false
+    return module.authors.reduce(async (prevProm, authorKey) => {
       const prev = await prevProm
       const { module: profile } = await this.clone(authorKey, null, false)
-      return prev && profile.p2pcommons.contents.includes(datUrl)
+      return prev && profile.contents.includes(datUrl)
     }, Promise.resolve(true))
   }
 
@@ -1393,15 +1394,12 @@ class SDK {
     }
 
     // everything is valid, removing content from contents
-    profile.p2pcommons.contents.splice(
-      profile.p2pcommons.contents.indexOf(versionedKey),
-      1
-    )
+    profile.contents.splice(profile.contents.indexOf(versionedKey), 1)
 
     await this.set(
       {
         url: profile.url,
-        contents: profile.p2pcommons.contents
+        contents: profile.contents
       },
       true
     )
@@ -1564,15 +1562,15 @@ class SDK {
       ? `dat://${targetProfileKey}+${targetProfileVersion}`
       : `dat://${targetProfileKey}`
 
-    const idx = localProfile.p2pcommons.follows.indexOf(finalTargetProfileKey)
+    const idx = localProfile.follows.indexOf(finalTargetProfileKey)
     if (idx !== -1) {
-      localProfile.p2pcommons.follows.splice(idx, 1)
+      localProfile.follows.splice(idx, 1)
     }
 
     await this.set(
       {
         url: localProfile.url,
-        follows: localProfile.p2pcommons.follows
+        follows: localProfile.follows
       },
       true
     )
