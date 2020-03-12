@@ -10,6 +10,7 @@ const tempy = require('tempy')
 const SDK = require('../')
 const testSwarm = require('./utils/swarm')
 const level = require('level')
+const { encode } = require('dat-encoding')
 
 const testSwarmCreator = (store, opts) => testSwarm(store, opts)
 
@@ -316,6 +317,12 @@ test('set: can update main', async t => {
   const { rawJSON: profile } = await p2p.init(sampleProfile)
   const { rawJSON: content } = await p2p.init(sampleContent)
 
+  // manually writing a dummy file
+  await writeFile(
+    join(p2p.baseDir, encode(profile.url), 'file.txt'),
+    'hola mundo'
+  )
+
   await p2p.set({
     url: profile.url,
     main: 'file.txt'
@@ -323,6 +330,12 @@ test('set: can update main', async t => {
 
   const { rawJSON: updatedProfile } = await p2p.get(profile.url)
   t.same(updatedProfile.main, 'file.txt')
+
+  // manually writing a dummy file
+  await writeFile(
+    join(p2p.baseDir, encode(content.url), 'file.txt'),
+    'hola mundo'
+  )
 
   await p2p.set({
     url: content.url,
