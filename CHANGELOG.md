@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.5.4] - 2020-03-12
 ### Fixed
 - add missing char limit for titles #116
 - future parents checks
@@ -38,5 +40,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ready method call is now implicit
 - extra params now throw validationError
 
-[Unreleased]: https://github.com/p2pcommons/sdk-js/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/p2pcommons/sdk-js/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/p2pcommons/sdk-js/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/p2pcommons/sdk-js/compare/v0.5.2...v0.5.3
