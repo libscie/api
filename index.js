@@ -296,7 +296,8 @@ class SDK {
       this.contentType = Type.forSchema(ContentSchema, {
         registry,
         logicalTypes: {
-          'required-string': ValidationTypes.RequiredString,
+          title: ValidationTypes.Title,
+          path: ValidationTypes.Path,
           'dat-url': ValidationTypes.DatUrl,
           'dat-versioned-url': ValidationTypes.DatUrlVersion
         }
@@ -304,7 +305,8 @@ class SDK {
       this.profileType = Type.forSchema(ProfileSchema, {
         registry,
         logicalTypes: {
-          'required-string': ValidationTypes.RequiredString,
+          title: ValidationTypes.Title,
+          path: ValidationTypes.Path,
           'dat-url': ValidationTypes.DatUrl,
           'dat-versioned-url': ValidationTypes.DatUrlVersion
         }
@@ -424,7 +426,7 @@ class SDK {
       this.start = true
       return this.start
     } catch (err) {
-      console.error(`Error starting the SDK: ${err.message}`)
+      this._log(`Error starting the SDK: ${err.message}`, 'error')
       throw err
     }
   }
@@ -439,7 +441,6 @@ class SDK {
    *   title: String,
    *   subtype: String ,
    *   description: String,
-   *   main: String,
    *   authors: Array,
    *   contents: Array,
    *   follows: Array,
@@ -453,7 +454,7 @@ class SDK {
     title,
     subtype = '',
     description = '',
-    main = '',
+    avatar = '',
     authors = [],
     contents = [],
     follows = [],
@@ -509,7 +510,8 @@ class SDK {
       title,
       subtype,
       description,
-      main,
+      main: '',
+      avatar,
       authors,
       parents,
       follows,
@@ -641,6 +643,7 @@ class SDK {
    */
   async validateParams (original, params = {}) {
     // internal validations helpers
+    // no future parents (versions) validation
     const validateNoFutureParents = (arr, newValue) => {
       const { host: target, version: targetVersion } = parse(newValue)
       for (const val of arr) {
@@ -658,6 +661,7 @@ class SDK {
       return true
     }
 
+    // uniqueness validation
     const isUnique = (arr = [], newValue, property) => {
       if (arr.includes(newValue)) {
         throw new ValidationError(
@@ -666,6 +670,17 @@ class SDK {
           property
         )
       }
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(params, 'main') &&
+      params.main.length === 0
+    ) {
+      throw new ValidationError(
+        'a valid path must be defined',
+        params.main,
+        'main'
+      )
     }
 
     if (params.authors && original.type === 'content') {
