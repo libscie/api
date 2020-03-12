@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Fixed
 - add missing char limit for titles #116
+- future parents checks
 
 ### Added
 - support for avatar and simple path validation #118
