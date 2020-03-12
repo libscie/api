@@ -1,7 +1,7 @@
 const { join, isAbsolute } = require('path')
 const { homedir, tmpdir, platform } = require('os')
 const {
-  promises: { open, writeFile, readFile }
+  promises: { open, writeFile, readFile, access }
 } = require('fs')
 const { ensureDir } = require('fs-extra')
 const once = require('events.once')
@@ -672,6 +672,7 @@ class SDK {
       }
     }
 
+    // main file validations
     if (
       Object.prototype.hasOwnProperty.call(params, 'main') &&
       params.main.length === 0
@@ -681,6 +682,25 @@ class SDK {
         params.main,
         'main'
       )
+    }
+
+    if (params.main) {
+      // check if file exists
+      try {
+        let thePath
+        if (isAbsolute(params.main)) {
+          thePath = params.main
+        } else {
+          thePath = join(
+            this.baseDir,
+            DatEncoding.encode(original.url),
+            params.main
+          )
+        }
+        await access(thePath)
+      } catch (err) {
+        throw new ValidationError('file exists', err.message, 'main')
+      }
     }
 
     if (params.authors && original.type === 'content') {
