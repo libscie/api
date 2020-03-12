@@ -7,7 +7,7 @@
       "name": "title",
       "type": {
         "type": "string",
-        "logicalType": "required-string"
+        "logicalType": "title"
       }
     },
     {"name": "description", "type": "string"},
@@ -70,7 +70,13 @@
             }
           },
           {"name": "subtype", "type": "string"},
-          {"name": "main", "type": "string"},
+          {
+            "name": "main",
+            "type": {
+              "type": "string",
+              "logicalType": "path"
+            }
+          },
           {
             "name": "authors",
             "type": {
