@@ -714,7 +714,7 @@ class SDK {
         // detect repeated
         isUnique(original.parents, p, 'parents')
         // O(n^2) - detect invalid future values
-        validateNoFutureParents(original, p)
+        validateNoFutureParents(original.parents, p)
       }
     }
 

@@ -255,6 +255,55 @@ test('set: should throw validation error with extra params', async t => {
   t.end()
 })
 
+test('set: should throw validation error with future parents', async t => {
+  const p2p = createDb()
+  const sampleData = {
+    type: 'content',
+    title: 'random',
+    description: 'lorem ipsum',
+    parents: [
+      'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+3'
+    ]
+  }
+  const { rawJSON: metadata } = await p2p.init(sampleData)
+  const key = metadata.url
+
+  try {
+    await p2p.set({
+      url: key,
+      parents: [
+        'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
+      ]
+    })
+  } catch (err) {
+    t.ok(
+      err instanceof SDK.errors.ValidationError,
+      'future parents versions should throw ValidationError'
+    )
+  }
+
+  await p2p.set({
+    url: key,
+    parents: [
+      'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+2'
+    ]
+  })
+
+  const { rawJSON } = await p2p.get(key)
+
+  t.same(
+    rawJSON.parents,
+    [
+      'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+3',
+      'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+2'
+    ],
+    'parents updated successfully'
+  )
+
+  await p2p.destroy()
+  t.end()
+})
+
 test('set: should throw validation error with invalid main', async t => {
   const p2p = createDb()
   const sampleProfile = {
