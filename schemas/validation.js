@@ -6,7 +6,7 @@ const { ValidationError } = require('../lib/errors')
  *
  */
 
-class RequiredString extends LogicalType {
+class Title extends LogicalType {
   constructor (attrs, opts) {
     super(attrs, opts)
     this._pattern = new RegExp(/^(?!\s*$).+/)
@@ -38,6 +38,43 @@ class RequiredString extends LogicalType {
 
     if (val.length > 300) {
       throw new ValidationError('max limit exceeded (300)', val)
+    }
+
+    return val
+  }
+}
+
+class Path extends LogicalType {
+  constructor (attrs, opts) {
+    super(attrs, opts)
+    this._pattern = new RegExp(/^((?!\/)|(\.\/))(?!~|\.).*(?<!\/)$/)
+    this.required = attrs.strict
+  }
+
+  _fromValue (val) {
+    if (
+      this.required &&
+      (val === undefined || val === null || val.length === 0)
+    ) {
+      throw new ValidationError('path must be defined', val)
+    }
+    if (!this._pattern.test(val)) {
+      throw new ValidationError('invalid path', val)
+    }
+
+    return val
+  }
+
+  _toValue (val) {
+    if (
+      this.required &&
+      (val === undefined || val === null || val.length === 0)
+    ) {
+      throw new ValidationError('non empty string', val)
+    }
+
+    if (!this._pattern.test(val)) {
+      throw new ValidationError('invalid path', val)
     }
 
     return val
@@ -119,7 +156,8 @@ class DateType extends LogicalType {
 }
 
 module.exports = {
-  RequiredString,
+  Title,
+  Path,
   DatUrl,
   DatUrlVersion,
   DateType

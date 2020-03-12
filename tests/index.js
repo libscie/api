@@ -5,11 +5,12 @@ const {
 const { join } = require('path')
 const execa = require('execa')
 const once = require('events.once')
-const test = require('tape-catch')
+const test = require('tape')
 const tempy = require('tempy')
 const SDK = require('../')
 const testSwarm = require('./utils/swarm')
 const level = require('level')
+const { encode } = require('dat-encoding')
 
 const testSwarmCreator = (store, opts) => testSwarm(store, opts)
 
@@ -45,7 +46,6 @@ test('init: create content module', async t => {
     subtype: 'Theory',
     title: 'demo',
     description: 'lorem ipsum',
-    main: 'file.txt',
     authors: [
       'dat://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860e9d'
     ],
@@ -65,7 +65,11 @@ test('init: create content module', async t => {
     'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
   )
   t.same(output.links.spec[0].href, 'https://p2pcommons.com/specs/module/0.2.0')
-  t.same(output.main, init.main)
+  t.same(
+    output.main,
+    '',
+    'main property can not be set on init (default: empty)'
+  )
   t.same(output.authors, init.authors)
   t.same(output.parents, init.parents)
   t.same(typeof metadata, 'object')
@@ -123,13 +127,20 @@ test('init: create profile module', async t => {
   const metadata = {
     type: 'profile',
     title: 'demo',
-    description: 'lorem ipsum'
+    description: 'lorem ipsum',
+    avatar: 'avatar.jpg'
   }
   const { rawJSON: output } = await p2p.init(metadata)
   t.same(output.type, metadata.type)
   t.same(output.title, metadata.title)
   t.same(output.description, metadata.description)
   t.same(typeof output.url, 'string', 'url is a string')
+  t.same(
+    output.main,
+    '',
+    'main property can not be set on init (default: empty)'
+  )
+  t.same(output.avatar, metadata.avatar)
   t.same(
     output.links.license[0].href,
     'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
@@ -244,6 +255,101 @@ test('set: should throw validation error with extra params', async t => {
   t.end()
 })
 
+test('set: should throw validation error with invalid main', async t => {
+  const p2p = createDb()
+  const sampleProfile = {
+    type: 'profile',
+    title: 'professor',
+    description: 'lorem ipsum'
+  }
+
+  const sampleContent = {
+    type: 'content',
+    title: 'intro to magic',
+    description: 'd'
+  }
+
+  const { rawJSON: profile } = await p2p.init(sampleProfile)
+  const { rawJSON: content } = await p2p.init(sampleContent)
+
+  try {
+    await p2p.set({
+      url: profile.url,
+      main: ''
+    })
+  } catch (err) {
+    t.ok(
+      err instanceof SDK.errors.ValidationError,
+      'empty main should throw ValidationError'
+    )
+  }
+
+  try {
+    await p2p.set({
+      url: content.url,
+      main: './path/to/something/'
+    })
+  } catch (err) {
+    t.ok(
+      err instanceof SDK.errors.ValidationError,
+      'invalid path should throw ValidationError'
+    )
+  }
+
+  await p2p.destroy()
+  t.end()
+})
+
+test('set: can update main', async t => {
+  const p2p = createDb()
+  const sampleProfile = {
+    type: 'profile',
+    title: 'professor',
+    description: 'lorem ipsum'
+  }
+
+  const sampleContent = {
+    type: 'content',
+    title: 'intro to magic',
+    description: 'd'
+  }
+
+  const { rawJSON: profile } = await p2p.init(sampleProfile)
+  const { rawJSON: content } = await p2p.init(sampleContent)
+
+  // manually writing a dummy file
+  await writeFile(
+    join(p2p.baseDir, encode(profile.url), 'file.txt'),
+    'hola mundo'
+  )
+
+  await p2p.set({
+    url: profile.url,
+    main: 'file.txt'
+  })
+
+  const { rawJSON: updatedProfile } = await p2p.get(profile.url)
+  t.same(updatedProfile.main, 'file.txt')
+
+  // manually writing a dummy file
+  await writeFile(
+    join(p2p.baseDir, encode(content.url), 'file.txt'),
+    'hola mundo'
+  )
+
+  await p2p.set({
+    url: content.url,
+    main: 'file.txt'
+  })
+
+  const { rawJSON: updatedContent } = await p2p.get(content.url)
+
+  t.same(updatedContent.main, 'file.txt')
+
+  await p2p.destroy()
+  t.end()
+})
+
 test('set: update should fail with bad data', async t => {
   const p2p = createDb()
   const sampleData = {
@@ -261,7 +367,7 @@ test('set: update should fail with bad data', async t => {
       err instanceof SDK.errors.ValidationError,
       'error should be instance of ValidationError'
     )
-    t.same(err.expected, 'required-string')
+    t.same(err.expected, 'title')
     t.same(err.received, '')
     t.same(err.key, 'title')
     await p2p.destroy()
@@ -287,7 +393,6 @@ test('set: content and profile idempotent with repeated values', async t => {
     type: 'profile',
     title: 'professorX',
     subtype: '',
-    main: 'test-profile.html',
     avatar: './test.png',
     follows: [
       'dat://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4'
@@ -367,7 +472,6 @@ test('follows: must not self-reference', async t => {
     type: 'profile',
     title: 'professorX',
     subtype: '',
-    main: 'test-profile.html',
     avatar: './test.png',
     follows: [
       'dat://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4'
@@ -1025,8 +1129,7 @@ test('clone a module', async t => {
 
   const content = {
     type: 'content',
-    title: 'test',
-    main: 'main.txt'
+    title: 'test'
   }
 
   const { rawJSON, driveWatch } = await p2p.init(content)
@@ -1075,8 +1178,7 @@ test('cancel clone', async t => {
 
   const content = {
     type: 'content',
-    title: 'test',
-    main: 'main.txt'
+    title: 'test'
   }
 
   const { rawJSON, driveWatch } = await p2p.init(content)
