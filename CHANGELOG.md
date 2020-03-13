@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Changed
 - allow empty string on main #133
+- replaced parse-dat-url with url-parse
 
 ## [0.5.4] - 2020-03-12
 ### Fixed
