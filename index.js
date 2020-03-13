@@ -672,18 +672,6 @@ class SDK {
       }
     }
 
-    // main file validations
-    if (
-      Object.prototype.hasOwnProperty.call(params, 'main') &&
-      params.main.length === 0
-    ) {
-      throw new ValidationError(
-        'a valid path must be defined',
-        params.main,
-        'main'
-      )
-    }
-
     if (params.main) {
       // check if file exists
       try {
