@@ -321,17 +321,14 @@ test('set: should throw validation error with invalid main', async t => {
   const { rawJSON: profile } = await p2p.init(sampleProfile)
   const { rawJSON: content } = await p2p.init(sampleContent)
 
-  try {
-    await p2p.set({
-      url: profile.url,
-      main: ''
-    })
-  } catch (err) {
-    t.ok(
-      err instanceof SDK.errors.ValidationError,
-      'empty main should throw ValidationError'
-    )
-  }
+  await p2p.set({
+    url: profile.url,
+    main: ''
+  })
+
+  const { rawJSON: updated } = await p2p.get(profile.url)
+
+  t.same(updated.main, '', 'main can be cleared')
 
   try {
     await p2p.set({
