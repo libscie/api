@@ -11,8 +11,6 @@ const sub = require('subleveldown')
 const AutoIndex = require('level-auto-index')
 const { Type } = require('@avro/types')
 const crypto = require('hypercore-crypto')
-const urlParse = require('url-parse')
-const hexTo32 = require('hex-to-32')
 const DatEncoding = require('dat-encoding')
 const debug = require('debug')('p2pcommons')
 const deepMerge = require('deepmerge')
@@ -21,50 +19,11 @@ const PCancelable = require('p-cancelable')
 const pMemoize = require('p-memoize')
 const Swarm = require('corestore-swarm-networking')
 const dat = require('./lib/dat-helper')
+const parse = require('./lib/parse-url')
 const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
 const ValidationTypes = require('./schemas/validation') // avro related validations
-
-const BASE_32_KEY_LENGTH = 52
-
-const parse = url => {
-  let host = null
-  let version = null
-
-  if (url) {
-    if (
-      !url.startsWith('dat://') &&
-      !url.startsWith('http://') &&
-      !url.startsWith('https://')
-    ) {
-      url = `dat://${url}`
-    }
-    const parsed = urlParse(url)
-    let hostname = null
-    const isDat = parsed.protocol.indexOf('dat') === 0
-    const isUndefined = parsed.protocol.indexOf('undefined') === 0
-    if (isDat || isUndefined) {
-      const hostnameParts = parsed.hostname.split('+')
-      hostname = hostnameParts[0]
-      version = hostnameParts[1] || null
-    } else {
-      const hostnameParts = parsed.hostname.split('.')
-      const subdomain = hostnameParts[0]
-      if (subdomain.length === BASE_32_KEY_LENGTH) {
-        hostname = hexTo32.decode(subdomain)
-      } else {
-        hostname = parsed.hostname
-      }
-    }
-    host = hostname
-  }
-
-  return {
-    host,
-    version
-  }
-}
 
 const {
   InvalidKeyError,
