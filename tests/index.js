@@ -1187,7 +1187,7 @@ test('clone a module', async t => {
   driveWatch.on('put-end', async file => {
     if (!file.name.endsWith('main.txt')) return
 
-    const { module, dwldHandle } = await p2p2.clone(rawJSON.url)
+    const { rawJSON: module, dwldHandle } = await p2p2.clone(rawJSON.url)
 
     t.same(module.title, content.title)
 
