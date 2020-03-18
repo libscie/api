@@ -1175,7 +1175,7 @@ class SDK {
     }
 
     return {
-      module: this._flatten(module),
+      rawJSON: this._flatten(module),
       version,
       versionedKey: `dat://${mKeyString}+${version}`,
       metadata: meta || {
@@ -1213,13 +1213,13 @@ class SDK {
       )
     }
     // fetch content and profile
-    const { module: content, versionedKey: cKeyVersion } = await this.clone(
+    const { rawJSON: content, versionedKey: cKeyVersion } = await this.clone(
       cKey,
       contentVersion,
       false
     )
 
-    const { module: profile } = await this.clone(pKey, profileVersion, false)
+    const { rawJSON: profile } = await this.clone(pKey, profileVersion, false)
 
     // TODO(dk): consider add custom errors for publish and verification
     assert(
@@ -1311,7 +1311,7 @@ class SDK {
       throw new Error('Module can not be verified: unversioned content')
     }
     await this.ready()
-    const { module } = await this.clone(url, version, false)
+    const { rawJSON: module } = await this.clone(url, version, false)
 
     assert(
       module.type === 'content',
@@ -1324,7 +1324,7 @@ class SDK {
     if (module.authors.length === 0) return false
     return module.authors.reduce(async (prevProm, authorKey) => {
       const prev = await prevProm
-      const { module: profile } = await this.clone(authorKey, null, false)
+      const { rawJSON: profile } = await this.clone(authorKey, null, false)
       return prev && profile.contents.includes(datUrl)
     }, Promise.resolve(true))
   }
@@ -1354,7 +1354,7 @@ class SDK {
 
     await this.ready()
 
-    const { module: profile, metadata } = await this.clone(profileKey, false)
+    const { rawJSON: profile, metadata } = await this.clone(profileKey, false)
 
     if (!metadata.isWritable) {
       throw new Error('profile is not writable')
@@ -1371,7 +1371,7 @@ class SDK {
       this._log('content url does not include version', 'warn')
     }
 
-    const { module: content, versionedKey } = await this.clone(
+    const { rawJSON: content, versionedKey } = await this.clone(
       cKey,
       contentVersion,
       false
@@ -1417,7 +1417,10 @@ class SDK {
       localProfile = profileModule
     } else {
       // Fetching localProfile module
-      const { module, metadata } = await this.clone(localProfileUrl, false)
+      const { rawJSON: module, metadata } = await this.clone(
+        localProfileUrl,
+        false
+      )
       if (!metadata.isWritable) {
         throw new Error('Profile is not writable')
       }
@@ -1441,7 +1444,7 @@ class SDK {
     debug(
       `follow validation: fetching module with key: ${targetProfileKey} and version: ${targetProfileVersion}`
     )
-    const { module: targetProfile } = await this.clone(
+    const { rawJSON: targetProfile } = await this.clone(
       targetProfileKey,
       targetProfileVersion,
       false
@@ -1506,7 +1509,7 @@ class SDK {
     await this.ready()
 
     // Fetching localProfile module
-    const { module: localProfile, metadata } = await this.clone(
+    const { rawJSON: localProfile, metadata } = await this.clone(
       localProfileUrl,
       false
     )
@@ -1531,7 +1534,7 @@ class SDK {
     debug(
       `follow: fetching module with key: ${targetProfileKey} and version: ${targetProfileVersion}`
     )
-    const { module: targetProfile } = await this.clone(
+    const { rawJSON: targetProfile } = await this.clone(
       targetProfileKey,
       targetProfileVersion,
       false

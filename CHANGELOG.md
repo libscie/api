@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - bump acorn dep #137
 
+### Changed
+- clone method output module to rawJSON
+
 ## [0.5.5] - 2020-03-13
 ### Changed
 - allow empty string on main #133
