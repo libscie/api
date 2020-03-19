@@ -175,9 +175,11 @@ Returns a [cancelable promise](https://github.com/sindresorhus/p-cancelable). Wh
 
 ### delete
 
-> _async_ `delete(key: string or buffer)`
+> _async_ `delete(key: string or buffer, force: boolean)`
 
 Remove module from local db and seed db. If it was open in memory, its closed. Note: While this will stop the file from being seeded, that does not means that the content won't still be available on the network. This is due to the P2P file sharing dynamics.
+
+If `force` option is passed, then the target folder will be moved to the trash bin.
 
 ### destroy
 
