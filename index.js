@@ -13,6 +13,7 @@ const { Type } = require('@avro/types')
 const crypto = require('hypercore-crypto')
 const DatEncoding = require('dat-encoding')
 const debug = require('debug')('p2pcommons')
+const trash = require('trash')
 const deepMerge = require('deepmerge')
 const pRetry = require('p-retry')
 const PCancelable = require('p-cancelable')
@@ -1575,8 +1576,9 @@ class SDK {
    * @public
    * @async
    * @param {(String|Buffer)} key - a valid dat url
+   * @param {boolean} force - if true, then moves the drive folder to the trash bin
    */
-  async delete (key) {
+  async delete (key, force = false) {
     assert(
       typeof key === 'string' || Buffer.isBuffer(key),
       ValidationError,
@@ -1589,8 +1591,8 @@ class SDK {
 
     await this.ready()
 
-    const url = DatEncoding.encode(key)
-    const dkey = DatEncoding.encode(
+    const keyString = DatEncoding.encode(key)
+    const dkeyString = DatEncoding.encode(
       crypto.discoveryKey(DatEncoding.decode(key))
     )
     const { metadata } = await this.get(key)
@@ -1599,20 +1601,28 @@ class SDK {
       return
     }
     try {
-      await this.localdb.del(url)
-      await this.seeddb.del(dkey)
-      const drive = this.drives.get(dkey) // if drive is open in memory we can close it
+      await this.localdb.del(keyString)
+      await this.seeddb.del(dkeyString)
+
+      const drivePath = join(this.baseDir, keyString)
+
+      if (force) {
+        debug(`Moving drive folde ${drivePath} to trash bin`)
+        await trash(drivePath)
+      }
+
+      const drive = this.drives.get(dkeyString) // if drive is open in memory we can close it
       // Note(dk): what about the checkouts? this can be dkey + version
       // maybe keep things inside a map structure would be better -> map of maps
       if (drive) {
         await drive.close()
       }
       if (!this.disableSwarm) {
-        await this.networker.leave(dkey)
+        await this.networker.leave(dkeyString)
       }
     } catch (err) {
       debug('delete: %O', err)
-      console.error('Something went wrong with module delete')
+      console.error('Something went wrong with delete')
     }
   }
 
