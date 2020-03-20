@@ -1576,9 +1576,9 @@ class SDK {
    * @public
    * @async
    * @param {(String|Buffer)} key - a valid dat url
-   * @param {boolean} force - if true, then moves the drive folder to the trash bin
+   * @param {boolean} deleteFiles - if true, then moves the drive folder to the trash bin
    */
-  async delete (key, force = false) {
+  async delete (key, deleteFiles = false) {
     assert(
       typeof key === 'string' || Buffer.isBuffer(key),
       ValidationError,
@@ -1606,7 +1606,7 @@ class SDK {
 
       const drivePath = join(this.baseDir, keyString)
 
-      if (force) {
+      if (deleteFiles) {
         debug(`Moving drive folde ${drivePath} to trash bin`)
         await trash(drivePath)
       }
