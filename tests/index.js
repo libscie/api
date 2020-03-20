@@ -991,12 +991,31 @@ test('delete a module from local db', async t => {
     description: 'lorem ipsum'
   })
 
+  const { rawJSON: content2 } = await p2p.init({
+    type: 'content',
+    title: 'demo 2',
+    description: 'lorem ipsum 2'
+  })
+
   const modules2 = await p2p.list()
-  t.equal(modules2.length, 1, 'Modules list contains 1 element')
-  // delete content
+  t.equal(modules2.length, 2, 'Modules list contains 2 elements')
+  // soft delete content
   await p2p.delete(content.url)
+
   const modules3 = await p2p.list()
-  t.equal(modules3.length, 0, 'Modules list is empty again')
+  t.equal(modules3.length, 1, 'Modules list contains 1 element')
+
+  // hard delete
+  await p2p.delete(content2.url, true)
+  const baseDir = await readdir(join(p2p.baseDir))
+
+  t.notok(
+    baseDir.includes(encode(content2.url)),
+    'Module folder has been removed'
+  )
+
+  const modules4 = await p2p.list()
+  t.equal(modules4.length, 0, 'Modules list is empty again')
   await p2p.destroy()
   t.end()
 })
