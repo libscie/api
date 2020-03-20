@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
-- new force option to delete method #90
+- new deleteFiles option to delete method #90
 
 ## [0.5.6] - 2020-03-18
 ### Security
