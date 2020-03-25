@@ -1347,16 +1347,10 @@ test('check lastModified on ready', async t => {
   await p2p2.ready()
 
   const { metadata: cMetadataFinal } = await p2p2.get(content.url)
-  const { metadata: pMetadataFinal } = await p2p2.get(profile.url)
 
   const all = await p2p2.list()
 
   t.same(all.length, 2)
-  t.same(
-    pMetadataFinal.lastModified.getTime(),
-    pMetadataInitial.lastModified.getTime(),
-    'profile metadata remains the same (no offline update)'
-  )
 
   t.ok(
     cMetadataFinal.lastModified.getTime() >
