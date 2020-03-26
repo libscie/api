@@ -1,7 +1,7 @@
 const { join, isAbsolute } = require('path')
 const { homedir, tmpdir, platform } = require('os')
 const {
-  promises: { open, writeFile, readFile, access }
+  promises: { open, writeFile, readFile, readdir, access, stat: statFn }
 } = require('fs')
 const { ensureDir } = require('fs-extra')
 const once = require('events.once')
@@ -375,6 +375,77 @@ class SDK {
     })
   }
 
+  async refreshMTimes () {
+    const modules = await collect(this.localdb)
+
+    for (const {
+      value: { rawJSON, ...metadata }
+    } of modules) {
+      const { host: urlString } = parse(rawJSON.url)
+
+      const drive = dat.open(this.store, DatEncoding.decode(urlString), {
+        sparse: this.globalOptions.sparse,
+        sparseMetadata: this.globalOptions.sparseMetadata
+      })
+      await drive.ready()
+
+      try {
+        const moduleDir = join(this.baseDir, urlString)
+
+        const statDrive = await drive.stat('/')
+        const statDir = await statFn(join(moduleDir, 'dat.json'))
+        const statDriveMtime = statDrive[0].mtime
+        const statDirMtime = statDir.mtime
+
+        const mtime =
+          statDriveMtime.getTime() >= statDirMtime.getTime()
+            ? statDriveMtime
+            : statDirMtime
+
+        const driveWatch = await dat.importFiles(drive, moduleDir, {
+          watch: this.watch,
+          keepExisting: true
+        })
+
+        if (this.watch) {
+          this.drivesToWatch.set(
+            DatEncoding.encode(drive.discoveryKey),
+            driveWatch
+          )
+
+          // NOTE(dk): consider return the driveWatch EE.
+          // Note(dk): consider add a timeout
+          await once(driveWatch, 'put-end')
+        }
+
+        if (metadata.lastModified.getTime() >= mtime.getTime()) continue
+
+        // Note(dk): this looks like an heuristic...
+        if (metadata.version === drive.version) {
+          const files = await drive.readdir('/')
+          const dirFiles = await readdir(moduleDir)
+          if (dirFiles.length === files.length) continue
+        }
+
+        // update dat.json file
+        const module = await drive.readFile('dat.json')
+        const datJSON = this._unflatten(JSON.parse(module))
+
+        // update metadata
+        metadata.lastModified = mtime
+        metadata.version = drive.version
+        // update localdb
+        await this.localdb.put(urlString, {
+          ...metadata,
+          rawJSON: datJSON,
+          avroType: this._getAvroType(datJSON.p2pcommons.type).name
+        })
+      } catch (err) {
+        this._log(`refreshMTimes: ${err.message}`, 'error')
+      }
+    }
+  }
+
   async createStore () {
     this.store = await dat.getDriveStorage({
       persist: this.persist,
@@ -423,6 +494,9 @@ class SDK {
       await this.createStore()
       // start swarm
       await this.startSwarm()
+
+      // check latest mtimes
+      await this.refreshMTimes()
 
       this.start = true
       return this.start
@@ -549,7 +623,7 @@ class SDK {
 
     debug('init datJSON', datJSON)
 
-    const stat = await archive.stat('dat.json')
+    const stat = await archive.stat('/')
     const metadata = {
       // start hyperswarm
       isWritable: archive.writable,
@@ -557,9 +631,10 @@ class SDK {
       version: archive.version
     }
 
-    await this.saveItem({
+    await this.localdb.put(publicKeyString, {
       ...metadata,
-      datJSON
+      rawJSON: datJSON,
+      avroType: avroType.name
     })
 
     await this._seed(archive)
@@ -607,13 +682,14 @@ class SDK {
       archive = drive
     }
 
-    let stat
+    let stat, mtime
     if (isWritable) {
       await writeFile(join(datJSONDir, 'dat.json'), JSON.stringify(datJSON))
       await dat.importFiles(archive, datJSONDir)
 
       version = archive.version
       stat = await archive.stat('/dat.json')
+      mtime = stat[0].mtime
     }
 
     debug('updating cache value')
@@ -628,7 +704,10 @@ class SDK {
     debug('saving item on local db')
     await this.localdb.put(DatEncoding.encode(datJSON.url), {
       isWritable,
-      lastModified: stat ? stat[0].mtime : lastModified,
+      lastModified:
+        mtime && mtime.getTime() >= lastModified.getTime()
+          ? mtime
+          : lastModified,
       version: version,
       rawJSON: datJSON,
       avroType: this._getAvroType(datJSON.p2pcommons.type).name
@@ -1164,7 +1243,10 @@ class SDK {
       } catch (_) {}
 
       // Note(dk): only update localdb if fetched module is more recent
-      if (!lastMeta || stat.lastModified > lastMeta.lastModified) {
+      if (
+        !lastMeta ||
+        stat.lastModified.getTime() > lastMeta.lastModified.getTime()
+      ) {
         await this.localdb.put(DatEncoding.encode(module.url), {
           isWritable: moduleVersion.writable,
           lastModified: stat[0].mtime,

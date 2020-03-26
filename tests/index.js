@@ -955,7 +955,7 @@ test('re-open SDK (child process)', async t => {
 
   // another sdk instance will update the content
   const code = join(__dirname, 'childProcess.js')
-  await execa(code, [contentDat.url, dir])
+  await execa.node(code, [contentDat.url, dir])
 
   const commons2 = new SDK({
     disableSwarm: true,
@@ -1287,5 +1287,77 @@ test('leveldb open error', async t => {
   }
   t.ok(err)
 
+  t.end()
+})
+
+test('check lastModified on ready', async t => {
+  const dir = tempy.directory()
+
+  const p2p = new SDK({
+    disableSwarm: true,
+    watch: false,
+    persist: true,
+    baseDir: dir
+  })
+
+  const profileData = {
+    type: 'profile',
+    title: 'Professor X'
+  }
+  const contentData = {
+    type: 'content',
+    title: 'test',
+    description: 'sample content'
+  }
+
+  const { rawJSON: content, metadata: cMetadataInitial } = await p2p.init(
+    contentData
+  )
+  const { rawJSON: profile, metadata: pMetadataInitial } = await p2p.init(
+    profileData
+  )
+
+  const contentPath = encode(content.url)
+
+  // write main.txt
+  await writeFile(join(dir, contentPath, 'main.txt'), 'hello')
+  await writeFile(join(dir, contentPath, 'main2.txt'), 'hello')
+  await p2p.set({ url: content.url, main: 'main.txt' })
+  const { rawJSON, metadata: cMetadataUpdate } = await p2p.get(content.url)
+
+  t.ok(
+    cMetadataInitial.lastModified.getTime() <
+      cMetadataUpdate.lastModified.getTime(),
+    'content metadata lastModified is updated'
+  )
+
+  await p2p.destroy()
+
+  // update main.txt while sdk is off...
+  await writeFile(join(dir, contentPath, 'main.txt'), 'hello world')
+  rawJSON.description = 'what is this??'
+  await writeFile(join(dir, contentPath, 'dat.json'), JSON.stringify(rawJSON))
+
+  const p2p2 = new SDK({
+    disableSwarm: true,
+    watch: false,
+    persist: true,
+    baseDir: dir
+  })
+  await p2p2.ready()
+
+  const { metadata: cMetadataFinal } = await p2p2.get(content.url)
+
+  const all = await p2p2.list()
+
+  t.same(all.length, 2)
+
+  t.ok(
+    cMetadataFinal.lastModified.getTime() >
+      cMetadataUpdate.lastModified.getTime(),
+    'latest content metadata (lastModified) should be bigger than previous one (offline update)'
+  )
+
+  await p2p2.destroy()
   t.end()
 })
