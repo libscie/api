@@ -739,8 +739,20 @@ test('publish - local contents', async t => {
 
   // update author on content module
   await p2p.set({ url: content1.url, authors })
+
+  // manually writing a dummy file
+  await writeFile(
+    join(p2p.baseDir, encode(content1.url), 'file.txt'),
+    'hola mundo'
+  )
+  await p2p.set({
+    url: content1.url,
+    main: 'file.txt'
+  })
+
   const { metadata } = await p2p.get(content1.url)
   const contentKeyVersion = `${content1.url}+${metadata.version}`
+
   await p2p.publish(contentKeyVersion, profile.url)
   const { rawJSON } = await p2p.get(profile.url)
   t.same(
@@ -773,6 +785,7 @@ test('seed and publish', async t => {
   }
 
   const sampleProfile = { type: 'profile', title: 'Professor X' }
+
   await p2p2.init(sampleData)
   await p2p.init(sampleProfile)
 
@@ -785,6 +798,16 @@ test('seed and publish', async t => {
 
   // update author on content module
   await p2p2.set({ url: content1.url, authors })
+  // manually writing a dummy file
+  await writeFile(
+    join(p2p2.baseDir, encode(content1.url), 'file.txt'),
+    'hola mundo'
+  )
+  await p2p2.set({
+    url: content1.url,
+    main: 'file.txt'
+  })
+
   const { metadata: contentMetadata } = await p2p2.get(content1.url)
   const contentKeyVersion = `${content1.url.replace(/dat:\/\//, '')}+${
     contentMetadata.version
@@ -850,23 +873,30 @@ test('verify', async t => {
   const contents = await p2p.listContent()
 
   const { rawJSON: profile } = profiles[0]
-  const { rawJSON: content1, metadata } = contents[0]
+  const { rawJSON: content1 } = contents[0]
   const { rawJSON: content2 } = contents[1]
   const authors = [profile.url]
 
-  // ATOMIC OP?
+  // manually writing a dummy file
+  await writeFile(
+    join(p2p.baseDir, encode(content1.url), 'file.txt'),
+    'hola mundo'
+  )
+  await p2p.set({
+    url: content1.url,
+    main: 'file.txt'
+  })
   // update author on content module
   await p2p.set({ url: content1.url, authors })
   // update content in author profile
-  await p2p.set({
-    url: profile.url,
-    contents: [`${content1.url}+${metadata.version}`]
-  })
-  // END ATOMIC OP
 
-  const result = await p2p.verify(`${content1.url}+${metadata.version}`)
+  const { metadata: metadata2 } = await p2p.get(content1.url)
 
-  t.ok(result, 'content1 meets the verification requirements')
+  await p2p.publish(`${content1.url}+${metadata2.version}`, profile.url)
+
+  const result = await p2p.verify(`${content1.url}+${metadata2.version}`)
+
+  t.ok(result, 'content meets the verification requirements')
 
   try {
     await p2p.verify(content2.url)
@@ -911,6 +941,17 @@ test('verify multiple authors', async t => {
   const authors = [profile.url, profileY.url]
   // update authors on content module
   await p2p.set({ url: content1.url, authors })
+
+  // manually writing a dummy file
+  await writeFile(
+    join(p2p.baseDir, encode(content1.url), 'file.txt'),
+    'hola mundo'
+  )
+  await p2p.set({
+    url: content1.url,
+    main: 'file.txt'
+  })
+
   const { rawJSON, metadata } = await p2p.get(content1.url)
   t.same(rawJSON.authors, authors, 'content authors contains two profiles')
   const versioned = `${content1.url}+${metadata.version}`
@@ -1039,10 +1080,20 @@ test('unpublish content module from profile', async t => {
 
   // Manually setting the author profile
   await p2p.set({ url: content.url, authors: [profile.url] })
-  const { metadata: contentMeta } = await p2p.get(content.url)
 
   t.equal(profile.contents.length, 0, 'profile.contents is empty')
 
+  // manually writing a dummy file
+  await writeFile(
+    join(p2p.baseDir, encode(content.url), 'file.txt'),
+    'hola mundo'
+  )
+  await p2p.set({
+    url: content.url,
+    main: 'file.txt'
+  })
+
+  const { metadata: contentMeta } = await p2p.get(content.url)
   const versioned = `${content.url}+${contentMeta.version}`
   await p2p.publish(versioned, profile.url)
 
