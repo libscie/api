@@ -42,6 +42,10 @@ The [project board](https://github.com/orgs/p2pcommons/projects/1) mostly update
 
 If your work adds functionality or changes the way existing functionality works, please document this in the [README.md](https://github.com/p2pcommons/sdk-js/blob/master/README.md). Always add changes to the [CHANGELOG.md](https://github.com/p2pcommons/sdk-js/blob/master/CHANGELOG.md).
 
+**Tip**: We are using [`chan`](https://github.com/geut/chan/tree/master/packages/chan) to easily modify and manage the changelog.
+
 ### Style guide
 
-???
+We are using `eslint` with the `standard` [config](https://github.com/standard/eslint-config-standard).
+
+**Tip**: If you are using an editor like `vim` you can check out GEUT's [xd](https://github.com/geut/xd) to improve your _dx_. :v:
