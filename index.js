@@ -26,6 +26,12 @@ const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
 const ValidationTypes = require('./schemas/validation') // avro related validations
 
+/**
+ * @typedef {Object} Module
+ * @property {object} rawJSON - Module's dat.json object
+ * @property {object} metadata - Module's metadata, this can contain latest version and modification time.
+ */
+
 const {
   InvalidKeyError,
   ValidationError,
@@ -715,6 +721,40 @@ class SDK {
   }
 
   /**
+   * validateMain
+   *
+   * @throws ValidationError
+   * @param {string} mainParam - the main param to check
+   * @param {string|buffer} url - the module url
+   * @param {[number]} version - the module version
+   * @returns {Boolean} -  true if validation went well
+   */
+  async validateMain (mainParam, url, version) {
+    // check if file exists
+    assert(
+      mainParam.length > 0,
+      ValidationError,
+      'non empty string',
+      mainParam,
+      'main'
+    )
+    try {
+      let thePath
+      if (isAbsolute(mainParam)) {
+        thePath = mainParam
+      } else {
+        const datUrl = version
+          ? `${DatEncoding.encode(url)}+${version}`
+          : DatEncoding.encode(url)
+        thePath = join(this.baseDir, datUrl, mainParam)
+      }
+      await access(thePath)
+    } catch (err) {
+      throw new ValidationError('file exists', err.message, 'main')
+    }
+  }
+
+  /**
    * validate params passed to set
    *
    * @throws ValidationError
@@ -753,22 +793,7 @@ class SDK {
     }
 
     if (params.main) {
-      // check if file exists
-      try {
-        let thePath
-        if (isAbsolute(params.main)) {
-          thePath = params.main
-        } else {
-          thePath = join(
-            this.baseDir,
-            DatEncoding.encode(original.url),
-            params.main
-          )
-        }
-        await access(thePath)
-      } catch (err) {
-        throw new ValidationError('file exists', err.message, 'main')
-      }
+      await this.validateMain(params.main, original.url)
     }
 
     if (params.authors && original.type === 'content') {
@@ -1106,6 +1131,169 @@ class SDK {
   }
 
   /**
+   * getDat
+   *
+   * @description get dat from memory or swarm. Wrapper for calling dat.open and seeding.
+   * @private
+   * @param {(string|buffer)} key
+   * @param {number} [version]
+   * @returns {Object} dat archive
+   */
+  async getDat (key, version) {
+    const keyBuffer = DatEncoding.decode(key)
+    const dkey = DatEncoding.encode(crypto.discoveryKey(keyBuffer))
+    const cacheKey = version ? `${dkey}+${version}` : dkey
+
+    const archive = this.drives.get(cacheKey)
+    if (archive) {
+      debug(`getDat: module found in cache with cachekey ${cacheKey}`)
+      return archive
+    }
+
+    const drive = dat.open(this.store, keyBuffer, {
+      sparse: true,
+      sparseMetadata: true
+    })
+
+    debug(`getDat: Found archive key ${key}`)
+    debug('getDat: Waiting for archive to be ready')
+    await drive.ready()
+
+    await this._seed(drive, { announce: true, lookup: true })
+
+    return drive
+  }
+
+  /**
+   * getFromSwarm
+   *
+   * @description if module isn't found locally, then fetch it from swarm
+   * @private
+   * @param {(string|buffer)} key - module url
+   * @param {number} [version] - module version
+   * @param {boolean} [download=true] - indicates if modules files should be downloaded or not
+   * @returns {{
+   *   Module,
+   *   dwldHandle
+   * }}
+   */
+  async getFromSwarm (key, version, download = true) {
+    // if module isn't found locally, then fetch from swarm
+    // something like:
+    debug('clone: Module was not found in localdb.')
+    const mKeyString = DatEncoding.encode(key)
+    let moduleVersion, module, dwldHandle
+
+    const moduleDat = await this.getDat(mKeyString, version)
+
+    version = version || moduleDat.version
+    debug('clone: Module version', version)
+
+    try {
+      // 3 - after fetching module we still need to read the dat.json file
+      if (version !== 0) {
+        moduleVersion = moduleDat.checkout(version)
+      } else {
+        moduleVersion = moduleDat
+      }
+      debug('clone: Reading modules dat.json...')
+
+      const getFile = async () => {
+        try {
+          return moduleVersion.readFile('dat.json', 'utf-8')
+        } catch (_) {}
+      }
+
+      const content = await pRetry(getFile, {
+        onFailedAttempt: error => {
+          this._log(
+            `Failed attempt fetching dat.json. ${error.attemptNumber}/${
+              error.retriesLeft
+            }`
+          )
+        },
+        retries: 3,
+        minTimeout: 500
+      })
+
+      module = JSON.parse(content)
+      // NOTE (dk): we can consider have another map for checkouts only
+      const dkey = DatEncoding.encode(moduleVersion.discoveryKey)
+      this.drives.set(version ? `${dkey}+${version}` : dkey, moduleVersion)
+    } catch (err) {
+      this._log(err.message, 'error')
+      throw new Error('clone: Problems fetching external module')
+    }
+    // 4 - clone new module (move into its own method)
+    const modulePath = version ? `${mKeyString}+${version}` : `${mKeyString}`
+    const folderPath = join(this.baseDir, modulePath)
+    await ensureDir(folderPath)
+    await writeFile(join(folderPath, 'dat.json'), JSON.stringify(module))
+    const stat = await moduleDat.stat('dat.json')
+
+    if (download) {
+      dwldHandle = dat.downloadFiles(moduleVersion, folderPath)
+    }
+
+    let lastMeta
+    try {
+      const { metadata } = await this.get(mKeyString)
+      lastMeta = metadata
+    } catch (_) {}
+
+    // Note(dk): only update localdb if fetched module is more recent
+    if (
+      !lastMeta ||
+      stat[0].mtime.getTime() > lastMeta.lastModified.getTime()
+    ) {
+      await this.localdb.put(DatEncoding.encode(module.url), {
+        isWritable: moduleVersion.writable,
+        lastModified: stat[0].mtime,
+        version: Number(moduleVersion.version),
+        rawJSON: module,
+        avroType: this._getAvroType(module.p2pcommons.type).name
+      })
+    }
+
+    return {
+      rawJSON: module,
+      metadata: {
+        isWritable: moduleVersion.writable,
+        lastModified: stat[0].mtime,
+        version: Number(moduleVersion.version)
+      },
+      dwldHandle
+    }
+  }
+
+  /**
+   * getModule
+   *
+   * @description get module from local db, if its not found, module.rawJSON will be **undefined**
+   * @private
+   * @param {(string|buffer)} url - module dat url
+   * @returns {Module}
+   */
+  async getModule (url) {
+    const mKeyString = DatEncoding.encode(url)
+    let rawJSON, metadata
+    try {
+      // 1 - try to get content from localdb
+      debug('clone: Fetching module from localdb')
+      const out = await this.get(mKeyString)
+      rawJSON = out.rawJSON
+      metadata = out.metadata
+    } catch (err) {
+      this._log('module not found in local db', 'warn')
+    }
+
+    return {
+      rawJSON,
+      metadata
+    }
+  }
+
+  /**
    * clone a module
    *
    * @public
@@ -1113,10 +1301,10 @@ class SDK {
    * @param {(String|Buffer) }mKey - a dat url
    * @param {Number} [mVersion] - a module version
    * @returns {{
-   *   module: Object,
-   *   version: Number,
+   *   rawJSON: Object,
+   *   metadata: Object,
    *   versionedKey: String,
-   *   metadata: Object
+   *   dwldHandle: Object
    * }}
    */
   async clone (mKey, mVersion, download = true, onCancel) {
@@ -1144,128 +1332,27 @@ class SDK {
     let module
     let version
     let meta
-    let stat
     let dwldHandle
-    let moduleVersion
 
     const mKeyString = DatEncoding.encode(mKey)
-    try {
-      // 1 - try to get content from localdb
-      debug('clone: Fetching module from localdb')
-      const { rawJSON, metadata } = await this.get(mKeyString)
-      module = rawJSON
-      version = metadata.version
-      meta = metadata
-    } catch (_) {
-      // 2 - if no module is found on localdb, then fetch from hyperdrive
-      // something like:
-      debug('clone: Module was not found in localdb.')
 
-      const _getDat = async (key, version) => {
-        const keyBuffer = DatEncoding.decode(key)
-        const dkey = DatEncoding.encode(crypto.discoveryKey(keyBuffer))
-        const cacheKey = version ? `${dkey}+${version}` : dkey
+    if (!mVersion) {
+      const out = await this.getModule(mKeyString)
+      module = out.rawJSON
+      meta = out.metadata
+    }
 
-        const archive = this.drives.get(cacheKey)
-        if (archive) {
-          debug(`clone: module found in cache with cachekey ${cacheKey}`)
-          return archive
-        }
-
-        const drive = dat.open(this.store, keyBuffer, {
-          sparse: true,
-          sparseMetadata: true
-        })
-
-        debug(`clone: Found archive key ${mKeyString}`)
-        debug('clone: Waiting for archive ready')
-        await drive.ready()
-
-        await this._seed(drive, { announce: true, lookup: true })
-
-        return drive
-      }
-
-      const moduleDat = await _getDat(mKeyString, mVersion)
-
-      version = mVersion || moduleDat.version
-      debug('clone: Module version', version)
-
-      try {
-        // 3 - after fetching module we still need to read the dat.json file
-        if (version !== 0) {
-          moduleVersion = moduleDat.checkout(version)
-        } else {
-          moduleVersion = moduleDat
-        }
-        debug('clone: Reading modules dat.json...')
-
-        const getFile = async () => {
-          try {
-            return moduleVersion.readFile('dat.json', 'utf-8')
-          } catch (_) {}
-        }
-
-        const content = await pRetry(getFile, {
-          onFailedAttempt: error => {
-            this._log(
-              `Failed attempt fetching dat.json. ${error.attemptNumber}/${
-                error.retriesLeft
-              }`
-            )
-          },
-          retries: 3,
-          minTimeout: 500
-        })
-
-        module = JSON.parse(content)
-        // NOTE (dk): we can consider have another map for checkouts only
-        const dkey = DatEncoding.encode(moduleVersion.discoveryKey)
-        this.drives.set(version ? `${dkey}+${version}` : dkey, moduleVersion)
-      } catch (err) {
-        this._log(err.message, 'error')
-        throw new Error('clone: Problems fetching external module')
-      }
-      // 4 - clone new module (move into its own method)
-      const modulePath = version ? `${mKeyString}+${version}` : `${mKeyString}`
-      const folderPath = join(this.baseDir, modulePath)
-      await ensureDir(folderPath)
-      await writeFile(join(folderPath, 'dat.json'), JSON.stringify(module))
-      stat = await moduleDat.stat('dat.json')
-      if (download) {
-        dwldHandle = dat.downloadFiles(moduleVersion, folderPath)
-      }
-
-      let lastMeta
-      try {
-        const { metadata } = await this.get(mKeyString)
-        lastMeta = metadata
-      } catch (_) {}
-
-      // Note(dk): only update localdb if fetched module is more recent
-      if (
-        !lastMeta ||
-        stat.lastModified.getTime() > lastMeta.lastModified.getTime()
-      ) {
-        await this.localdb.put(DatEncoding.encode(module.url), {
-          isWritable: moduleVersion.writable,
-          lastModified: stat[0].mtime,
-          version: Number(moduleVersion.version),
-          rawJSON: module,
-          avroType: this._getAvroType(module.p2pcommons.type).name
-        })
-      }
+    if (!module) {
+      const out = await this.getFromSwarm(mKey, mVersion, download)
+      module = out.rawJSON
+      meta = out.metadata
+      dwldHandle = out.dwldHandle
     }
 
     return {
       rawJSON: this._flatten(module),
-      version,
       versionedKey: `dat://${mKeyString}+${version}`,
-      metadata: meta || {
-        isWritable: module.writable,
-        lastModified: stat[0].mtime,
-        version: module.version
-      },
+      metadata: meta,
       dwldHandle
     }
   }
@@ -1296,11 +1383,15 @@ class SDK {
       )
     }
     // fetch content and profile
-    const { rawJSON: content, versionedKey: cKeyVersion } = await this.clone(
-      cKey,
-      contentVersion,
-      false
-    )
+    const {
+      rawJSON: content,
+      versionedKey: cKeyVersion,
+      dwldHandle
+    } = await this.clone(cKey, contentVersion, true)
+
+    if (dwldHandle) {
+      await once(dwldHandle, 'end')
+    }
 
     const { rawJSON: profile } = await this.clone(pKey, profileVersion, false)
 
@@ -1330,6 +1421,9 @@ class SDK {
     if (!contentValid) {
       throw new Error('Invalid content module')
     }
+
+    // validate content's main file exists
+    await this.validateMain(content.main, content.url, contentVersion)
 
     // Note(dk): at this point is safe to save the new modules if necessary
     if (content.authors.length === 0) {
@@ -1394,6 +1488,7 @@ class SDK {
       throw new Error('Module can not be verified: unversioned content')
     }
     await this.ready()
+
     const { rawJSON: module } = await this.clone(url, version, false)
 
     assert(

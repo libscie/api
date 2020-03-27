@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - new deleteFiles option to delete method #90
 - new check of modified times at ready #138
 
+### Fixed
+- add missing check on main field (publish) #141
+
 ## [0.5.6] - 2020-03-18
 ### Security
 - bump acorn dep #137
