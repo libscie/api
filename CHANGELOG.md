@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.5.7] - 2020-03-27
 ### Added
 - new deleteFiles option to delete method #90
 - new check of modified times at ready #138
@@ -58,7 +60,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ready method call is now implicit
 - extra params now throw validationError
 
-[Unreleased]: https://github.com/p2pcommons/sdk-js/compare/v0.5.6...HEAD
+[Unreleased]: https://github.com/p2pcommons/sdk-js/compare/v0.5.7...HEAD
+[0.5.7]: https://github.com/p2pcommons/sdk-js/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/p2pcommons/sdk-js/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/p2pcommons/sdk-js/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/p2pcommons/sdk-js/compare/v0.5.3...v0.5.4
