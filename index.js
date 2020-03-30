@@ -1778,6 +1778,13 @@ class SDK {
       return
     }
     try {
+      // unpublish from profiles
+      const profiles = await this.listProfiles()
+
+      for (const { rawJSON: prof } of profiles) {
+        await this.unpublish(key, prof.url)
+      }
+
       await this.localdb.del(keyString)
       await this.seeddb.del(dkeyString)
 
