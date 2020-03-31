@@ -14,7 +14,7 @@ Please note we adhere to a [Code of Conduct](https://github.com/hypergraph-xyz/c
 
 Feature requests and bug reports can be submitted through [GitHub issues](https://github.com/p2pcommons/sdk-js/issues). If the request concerns a proposal for a change to the module specifications, please submit it to our [specs repo](https://github.com/p2pcommons/specs/issues).
 
-Templates are offered for feature requests and bug reports. These are not mandatory, but preferred.
+We offer templates for feature requests and bug reports.
 
 ### Security vulnerabilities
 
