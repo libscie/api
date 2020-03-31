@@ -707,17 +707,25 @@ class SDK {
       archive
     )
 
+    const lastM =
+      mtime && mtime.getTime() >= lastModified.getTime() ? mtime : lastModified
     debug('saving item on local db')
     await this.localdb.put(DatEncoding.encode(datJSON.url), {
       isWritable,
-      lastModified:
-        mtime && mtime.getTime() >= lastModified.getTime()
-          ? mtime
-          : lastModified,
+      lastModified: lastM,
       version: version,
       rawJSON: datJSON,
       avroType: this._getAvroType(datJSON.p2pcommons.type).name
     })
+
+    return {
+      rawJSON: this._flatten(datJSON),
+      metadata: {
+        isWritable,
+        lastModified: lastM,
+        version
+      }
+    }
   }
 
   /**
@@ -924,7 +932,7 @@ class SDK {
     assertValid(avroType, finalJSON)
 
     debug('set: valid input')
-    await this.saveItem({
+    return this.saveItem({
       ...metadata,
       datJSON: finalJSON
     })
