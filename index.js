@@ -1772,12 +1772,20 @@ class SDK {
     const dkeyString = DatEncoding.encode(
       crypto.discoveryKey(DatEncoding.decode(key))
     )
-    const { metadata } = await this.get(key)
+    const { rawJSON: module, metadata } = await this.get(key)
     if (!metadata.isWritable) {
       this._log('delete: drive is not writable')
       return
     }
     try {
+      if (module.type === 'content') {
+        // unpublish from profiles
+        const profiles = await this.listProfiles()
+
+        for (const { rawJSON: prof } of profiles) {
+          await this.unpublish(key, prof.url)
+        }
+      }
       await this.localdb.del(keyString)
       await this.seeddb.del(dkeyString)
 

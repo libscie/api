@@ -1061,6 +1061,66 @@ test('delete a module from local db', async t => {
   t.end()
 })
 
+test('delete published module', async t => {
+  const dir = tempy.directory()
+  const p2p = new SDK({
+    disableSwarm: true,
+    watch: false,
+    baseDir: dir
+  })
+
+  const modules = await p2p.list()
+  t.equal(modules.length, 0, 'Modules list is empty')
+
+  // create content
+  const { rawJSON: content } = await p2p.init({
+    type: 'content',
+    title: 'demo',
+    description: 'lorem ipsum'
+  })
+
+  const { rawJSON: profile } = await p2p.init({
+    type: 'profile',
+    title: 'professor X',
+    description: 'd'
+  })
+
+  const contentModules = await p2p.listContent()
+  t.equal(contentModules.length, 1, '1 content module exists')
+
+  // publish
+  const authors = [profile.url]
+  // manually writing a dummy file
+  await writeFile(join(dir, encode(content.url), 'file.txt'), 'hola mundo')
+  await p2p.set({
+    url: content.url,
+    authors,
+    main: 'file.txt'
+  })
+  await p2p.publish(content.url, profile.url)
+  const { rawJSON: updatedProfile } = await p2p.get(profile.url)
+  t.same(updatedProfile.contents.length, 1, 'content published')
+
+  // hard delete
+  await p2p.delete(content.url, true)
+
+  const { rawJSON: finalProfile } = await p2p.get(profile.url)
+  t.same(finalProfile.contents.length, 0, 'content unpublished after delete')
+
+  const baseDir = await readdir(join(p2p.baseDir))
+
+  const contentModulesFinal = await p2p.listContent()
+  t.equal(contentModulesFinal.length, 0, '0 content module remains')
+
+  t.notok(
+    baseDir.includes(encode(content.url)),
+    'Module folder has been removed (deleteFiles)'
+  )
+
+  await p2p.destroy()
+  t.end()
+})
+
 test('unpublish content module from profile', async t => {
   const p2p = createDb()
   const sampleContent = {
