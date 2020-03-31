@@ -28,7 +28,7 @@ Our work is organized on our [GitHub Projects board](https://github.com/orgs/p2p
 
 The "PM Inbox" column and our [Roadmap](https://github.com/p2pcommons/sdk-js/wiki/Roadmap) contain issues that we are planning on working on further down the line. If you're enthusiastic about one of these features, come and discuss it with us on [Slack](https://libscie.slack.com/).
 
-Technical improvements, bug fixes, documentation and other non-feature work is also totally welcome. Please create an issue first, but feel free to start work right away.
+Technical improvements, bug fixes, documentation and other non-feature work is also totally welcome.
 
 ***Please note that we have [specs](https://github.com/p2pcommons/specs/issues) that the application must adhere to. If you believe these specs need amending, submit an issue to that repo.***
 
