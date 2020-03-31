@@ -4,7 +4,7 @@ Welcome! We *love* that you're interested in contributing to p2pcommons :purple_
 
 We recognize all our contributors following the [all-contributors](https://github.com/all-contributors/all-contributors) specification. Contributions of any kind welcome!
 
-Come and join us on [Slack](https://libscie.slack.com/) to chat with our team and stay up to date with all [Liberate Science](https://github.com/libscie) goings-on.
+Come and join us on [Slack](https://join.slack.com/t/libscie/shared_invite/zt-9l0ig1x1-Sxjun7D6056cOUQ2Ai_Bkw) to chat with our team and stay up to date with all [Liberate Science](https://libscie.org) goings-on.
 
 ## Code of conduct
 
