@@ -26,7 +26,7 @@ Please report security vulnerabilities directly to [@chartgerink](mailto:chris@l
 
 Our work is organized on our [GitHub Projects board](https://github.com/orgs/p2pcommons/projects/1). You can help us the most by contributing to issues in the "Backlog" column. These are issues that are already specified and considered ready to start work on.
 
-The "PM Inbox" column and our [Roadmap](https://github.com/p2pcommons/sdk-js/wiki/Roadmap) contain issues that we are planning on working on further down the line. If you're enthusiastic about one of these features, come and discuss it with us on [Slack](https://libscie.slack.com/).
+The "PM Inbox" column and our [Roadmap](https://github.com/p2pcommons/sdk-js/wiki/Roadmap) contain issues that we are planning on working on further down the line. If you're enthusiastic about one of these features, come and discuss it with us on [Slack](https://libscie.slack.com/) ([invite link](https://join.slack.com/t/libscie/shared_invite/zt-9l0ig1x1-Sxjun7D6056cOUQ2Ai_Bkw)).
 
 Technical improvements, bug fixes, documentation and other non-feature work is also totally welcome.
 
