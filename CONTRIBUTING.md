@@ -34,6 +34,68 @@ Technical improvements, bug fixes, documentation and other non-feature work is a
 
 When starting work on an issue, please comment to say you're working on it. Create a fork for your work and submit a pull request that closes the issue when done. If you'd like input along the way, a draft pull request is also fine. Please invite recent contributors to review (at least one, but preferably two or more). Project maintainers will take care of releases and labels, etc. Feel free to ask questions at any time.
 
+In general the ideal PR process looks like this (just for reference):
+
+#### Step 1: Fork
+
+Fork the project [on GitHub](https://github.com/p2pcommons/sdk-js) and check out your copy locally.
+
+```bash
+$ git clone git@github.com:username/sdk-js.git
+$ cd sdk-js
+$ npm install
+$ git remote add upstream git://github.com/p2pcommons/sdk-js.git
+```
+
+#### Step 2: Branch
+
+Create a feature branch and start hacking:
+
+```bash
+$ git checkout -b my-feature-branch -t origin/master
+```
+
+#### Step 3: Test
+
+Bug fixes and features **should come with tests**. 
+
+```bash
+$ npm test
+```
+
+#### Step 4: Lint
+
+Make sure the linter is happy and that all tests pass. Please, do not submit
+patches that fail either check.
+
+We use [standard](https://standardjs.com/)
+
+#### Step 5: Commit
+
+Make sure git knows your name and email address:
+
+```bash
+$ git config --global user.name "Bruce Wayne"
+$ git config --global user.email "bruce@batman.com"
+```
+
+Writing good commit logs is important. A commit log should describe what
+changed and why.
+
+#### Step 6: Changelog
+
+If your changes are really important for the project probably the users want to know about it.
+
+We use [chan](https://github.com/geut/chan/) to maintain a well readable changelog for our users.
+
+#### Step 7: Push
+
+```bash
+$ git push origin my-feature-branch
+```
+
+#### Step 8: Make a pull request ;)
+
 ### Documentation
 
 If your work adds functionality or changes the way existing functionality works, please document this in the [README.md](https://github.com/p2pcommons/sdk-js/blob/master/README.md). Always add changes to the [CHANGELOG.md](https://github.com/p2pcommons/sdk-js/blob/master/CHANGELOG.md).
