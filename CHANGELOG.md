@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - new deleteFiles option to delete method #90
 - new check of modified times at ready #138
+- new contributing doc
 
 ### Fixed
 - add missing check on main field (publish) #141
