@@ -193,9 +193,15 @@ test('set: update modules', async t => {
     description: 'desc'
   }
   await p2p.set({ url: contentKey, ...contentUpdate })
-  await p2p.set({ url: profileKey, ...profileUpdate })
+  const { rawJSON: getOnSet } = await p2p.set({
+    url: profileKey,
+    ...profileUpdate
+  })
+
   const { rawJSON: contentUpdated } = await p2p.get(contentKey)
   const { rawJSON: profileUpdated } = await p2p.get(profileKey)
+
+  t.same(getOnSet, profileUpdated, 'get on set')
   t.same(contentUpdated.description, contentUpdate.description)
   t.same(profileUpdated.title, profileUpdate.title)
   t.same(profileUpdated.description, profileUpdate.description)
