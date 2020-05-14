@@ -1,6 +1,6 @@
 ---
 name: User story
-about: For already specified user stories
+about: User stories created by the product team
 title: ''
 labels: feature
 assignees: ''
