@@ -1453,7 +1453,7 @@ test('check lastModified on ready', async t => {
   // update main.txt while sdk is off...
   await writeFile(join(dir, contentPath, 'main.txt'), 'hello world')
   rawJSON.description = 'what is this??'
-  await writeFile(join(dir, contentPath, 'dat.json'), JSON.stringify(rawJSON))
+  await writeFile(join(dir, contentPath, 'index.json'), JSON.stringify(rawJSON))
 
   const p2p2 = new SDK({
     disableSwarm: true,

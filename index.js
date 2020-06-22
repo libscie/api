@@ -28,7 +28,7 @@ const ValidationTypes = require('./schemas/validation') // avro related validati
 
 /**
  * @typedef {Object} Module
- * @property {object} rawJSON - Module's dat.json object
+ * @property {object} rawJSON - Module's index.json object
  * @property {object} metadata - Module's metadata, this can contain latest version and modification time.
  */
 
@@ -37,7 +37,7 @@ const {
   ValidationError,
   MissingParam
 } = require('./lib/errors')
-const { createDatJSON, collect } = require('./lib/utils')
+const { createIndexJSON, collect } = require('./lib/utils')
 
 // helper assert fn
 const assertValid = (type, val) => {
@@ -399,7 +399,7 @@ class SDK {
         const moduleDir = join(this.baseDir, urlString)
 
         const statDrive = await drive.stat('/')
-        const statDir = await statFn(join(moduleDir, 'dat.json'))
+        const statDir = await statFn(join(moduleDir, 'index.json'))
         const statDriveMtime = statDrive[0].mtime
         const statDirMtime = statDir.mtime
 
@@ -433,9 +433,9 @@ class SDK {
           if (dirFiles.length === files.length) continue
         }
 
-        // update dat.json file
-        const module = await drive.readFile('dat.json')
-        const datJSON = this._unflatten(JSON.parse(module))
+        // update index.json file
+        const module = await drive.readFile('index.json')
+        const indexJSON = this._unflatten(JSON.parse(module))
 
         // update metadata
         metadata.lastModified = mtime
@@ -443,8 +443,8 @@ class SDK {
         // update localdb
         await this.localdb.put(urlString, {
           ...metadata,
-          rawJSON: datJSON,
-          avroType: this._getAvroType(datJSON.p2pcommons.type).name
+          rawJSON: indexJSON,
+          avroType: this._getAvroType(indexJSON.p2pcommons.type).name
         })
       } catch (err) {
         this._log(`refreshMTimes: ${err.message}`, 'error')
@@ -544,7 +544,7 @@ class SDK {
     // follow module spec: https://github.com/p2pcommons/specs/pull/1/files?short_path=2d471ef#diff-2d471ef4e3a452b579a3367eb33ccfb9
     // 1. create folder with unique name (pk)
     // 2. initialize an hyperdrive inside
-    // 3. createDatJSON with the correct metadata and save it there
+    // 3. createIndexJSON with the correct metadata and save it there
     //
     assert(typeof type === 'string', ValidationError, 'string', type, 'type')
     assert(
@@ -585,8 +585,8 @@ class SDK {
     await ensureDir(moduleDir)
     debug(`ensure module dir: ${moduleDir}`)
 
-    // create dat.json metadata
-    const datJSON = createDatJSON({
+    // create index.json metadata
+    const indexJSON = createIndexJSON({
       type,
       title,
       subtype,
@@ -603,10 +603,10 @@ class SDK {
     // Note(dk): validate earlier
     const avroType = this._getAvroType(type)
 
-    assertValid(avroType, datJSON)
+    assertValid(avroType, indexJSON)
 
-    // write dat.json
-    await writeFile(join(moduleDir, 'dat.json'), JSON.stringify(datJSON))
+    // write index.json
+    await writeFile(join(moduleDir, 'index.json'), JSON.stringify(indexJSON))
 
     const driveWatch = await dat.importFiles(archive, moduleDir, {
       watch: this.watch
@@ -624,10 +624,10 @@ class SDK {
     }
 
     this._log(
-      `Initialized new ${datJSON.p2pcommons.type}, dat://${publicKeyString}`
+      `Initialized new ${indexJSON.p2pcommons.type}, dat://${publicKeyString}`
     )
 
-    debug('init datJSON', datJSON)
+    debug('init indexJSON', indexJSON)
 
     const stat = await archive.stat('/')
     const metadata = {
@@ -639,21 +639,21 @@ class SDK {
 
     await this.localdb.put(publicKeyString, {
       ...metadata,
-      rawJSON: datJSON,
+      rawJSON: indexJSON,
       avroType: avroType.name
     })
 
     await this._seed(archive)
 
     this._log(
-      `Saved new ${datJSON.p2pcommons.type}, with key: ${publicKeyString}`
+      `Saved new ${indexJSON.p2pcommons.type}, with key: ${publicKeyString}`
     )
     // Note(dk): flatten p2pcommons obj in order to have a more symmetrical API
-    return { rawJSON: this._flatten(datJSON), metadata, driveWatch }
+    return { rawJSON: this._flatten(indexJSON), metadata, driveWatch }
   }
 
-  async saveItem ({ isWritable, lastModified, version, datJSON }) {
-    debug('saveItem', datJSON)
+  async saveItem ({ isWritable, lastModified, version, indexJSON }) {
+    debug('saveItem', indexJSON)
     assert(
       typeof isWritable === 'boolean',
       ValidationError,
@@ -662,15 +662,15 @@ class SDK {
       'isWritable'
     )
     assert(
-      typeof datJSON === 'object',
+      typeof indexJSON === 'object',
       ValidationError,
       'object',
-      datJSON,
-      'datJSON'
+      indexJSON,
+      'indexJSON'
     )
 
-    const keyString = DatEncoding.encode(datJSON.url)
-    const datJSONDir = join(this.baseDir, keyString)
+    const keyString = DatEncoding.encode(indexJSON.url)
+    const indexJSONDir = join(this.baseDir, keyString)
 
     let archive
     debug(`saveItem: looking drive ${keyString} in local structure...`)
@@ -680,7 +680,7 @@ class SDK {
     archive = this.drives.get(version ? `${dkey}+${version}` : dkey)
     if (!archive) {
       debug(`saveItem: calling dat open ${keyString}`)
-      const drive = dat.open(this.store, DatEncoding.decode(datJSON.url), {
+      const drive = dat.open(this.store, DatEncoding.decode(indexJSON.url), {
         sparse: this.globalOptions.sparse,
         sparseMetadata: this.globalOptions.sparseMetadata
       })
@@ -690,18 +690,18 @@ class SDK {
 
     let stat, mtime
     if (isWritable) {
-      await writeFile(join(datJSONDir, 'dat.json'), JSON.stringify(datJSON))
-      await dat.importFiles(archive, datJSONDir)
+      await writeFile(join(indexJSONDir, 'index.json'), JSON.stringify(indexJSON))
+      await dat.importFiles(archive, indexJSONDir)
 
       version = archive.version
-      stat = await archive.stat('/dat.json')
+      stat = await archive.stat('/index.json')
       mtime = stat[0].mtime
     }
 
     debug('updating cache value')
     // Note(dk): we are almost all the time fetching profiles without indicating any specific version so this is more effective
     this.drives.set(
-      version && datJSON.p2pcommons.type !== 'profile'
+      version && indexJSON.p2pcommons.type !== 'profile'
         ? `${dkey}+${version}`
         : dkey,
       archive
@@ -710,16 +710,16 @@ class SDK {
     const lastM =
       mtime && mtime.getTime() >= lastModified.getTime() ? mtime : lastModified
     debug('saving item on local db')
-    await this.localdb.put(DatEncoding.encode(datJSON.url), {
+    await this.localdb.put(DatEncoding.encode(indexJSON.url), {
       isWritable,
       lastModified: lastM,
       version: version,
-      rawJSON: datJSON,
-      avroType: this._getAvroType(datJSON.p2pcommons.type).name
+      rawJSON: indexJSON,
+      avroType: this._getAvroType(indexJSON.p2pcommons.type).name
     })
 
     return {
-      rawJSON: this._flatten(datJSON),
+      rawJSON: this._flatten(indexJSON),
       metadata: {
         isWritable,
         lastModified: lastM,
@@ -934,7 +934,7 @@ class SDK {
     debug('set: valid input')
     return this.saveItem({
       ...metadata,
-      datJSON: finalJSON
+      indexJSON: finalJSON
     })
   }
 
@@ -1198,24 +1198,24 @@ class SDK {
     debug('clone: Module version', version)
 
     try {
-      // 3 - after fetching module we still need to read the dat.json file
+      // 3 - after fetching module we still need to read the index.json file
       if (version !== 0) {
         moduleVersion = moduleDat.checkout(version)
       } else {
         moduleVersion = moduleDat
       }
-      debug('clone: Reading modules dat.json...')
+      debug('clone: Reading modules index.json...')
 
       const getFile = async () => {
         try {
-          return moduleVersion.readFile('dat.json', 'utf-8')
+          return moduleVersion.readFile('index.json', 'utf-8')
         } catch (_) {}
       }
 
       const content = await pRetry(getFile, {
         onFailedAttempt: error => {
           this._log(
-            `Failed attempt fetching dat.json. ${error.attemptNumber}/${
+            `Failed attempt fetching index.json. ${error.attemptNumber}/${
               error.retriesLeft
             }`
           )
@@ -1236,8 +1236,8 @@ class SDK {
     const modulePath = version ? `${mKeyString}+${version}` : `${mKeyString}`
     const folderPath = join(this.baseDir, modulePath)
     await ensureDir(folderPath)
-    await writeFile(join(folderPath, 'dat.json'), JSON.stringify(module))
-    const stat = await moduleDat.stat('dat.json')
+    await writeFile(join(folderPath, 'index.json'), JSON.stringify(module))
+    const stat = await moduleDat.stat('index.json')
 
     if (download) {
       dwldHandle = dat.downloadFiles(moduleVersion, folderPath)

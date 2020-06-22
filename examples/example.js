@@ -10,7 +10,7 @@ process.once('SIGINT', () => commons.destroy())
   const { rawJSON: contentMetadata1 } = await commons.init({
     type: 'content',
     title: 'intro to lorem ipsum'
-  }) // ~/.p2pcommons/hash/dat.json --> type: content
+  }) // ~/.p2pcommons/hash/index.json --> type: content
   await commons.init({
     type: 'content',
     title: 'Sample Content 2',
@@ -23,7 +23,7 @@ process.once('SIGINT', () => commons.destroy())
   })
 
   // create a profile
-  await commons.init({ type: 'profile', title: 'Professor X' }) // ~/.p2pcommons/hash/dat.json --> type: profile
+  await commons.init({ type: 'profile', title: 'Professor X' }) // ~/.p2pcommons/hash/index.json --> type: profile
 
   // get and update a content module
   const key = contentMetadata1.url.toString('hex')
