@@ -724,7 +724,7 @@ test('multiple writes with persistance', async t => {
   }
 })
 
-test('publish - local contents', async t => {
+test('register - local contents', async t => {
   const p2p = createDb()
   const sampleData = [
     {
@@ -759,7 +759,7 @@ test('publish - local contents', async t => {
   const { metadata } = await p2p.get(content1.url)
   const contentKeyVersion = `${content1.url}+${metadata.version}`
 
-  await p2p.publish(contentKeyVersion, profile.url)
+  await p2p.register(contentKeyVersion, profile.url)
   const { rawJSON } = await p2p.get(profile.url)
   t.same(
     rawJSON.contents,
@@ -770,7 +770,7 @@ test('publish - local contents', async t => {
   t.end()
 })
 
-test('seed and publish', async t => {
+test('seed and register', async t => {
   const p2p = createDb({
     swarm: true,
     verbose: true,
@@ -822,8 +822,8 @@ test('seed and publish', async t => {
 
   await p2p2.destroy(true, false)
 
-  // call publish
-  await p2p.publish(contentKeyVersionPrefix, profile.url)
+  // call register
+  await p2p.register(contentKeyVersionPrefix, profile.url)
 
   const { rawJSON } = await p2p.get(profile.url)
   t.same(
@@ -837,13 +837,13 @@ test('seed and publish', async t => {
     'versioned content dir created successfully'
   )
 
-  // call publish again
+  // call register again
   try {
-    await p2p.publish(contentKeyVersionPrefix, profile.url)
+    await p2p.register(contentKeyVersionPrefix, profile.url)
   } catch (err) {
     t.ok(
       err instanceof SDK.errors.ValidationError,
-      'throws ValidationError with duplicated publish call'
+      'throws ValidationError with duplicated register call'
     )
   }
 
@@ -851,7 +851,7 @@ test('seed and publish', async t => {
   t.same(
     dirs,
     dirs2,
-    'repeated publish method call, created directories remains the same'
+    'repeated register method call, created directories remains the same'
   )
   await p2p2.destroy(false, true)
   await p2p.destroy()
@@ -898,7 +898,7 @@ test('verify', async t => {
 
   const { metadata: metadata2 } = await p2p.get(content1.url)
 
-  await p2p.publish(`${content1.url}+${metadata2.version}`, profile.url)
+  await p2p.register(`${content1.url}+${metadata2.version}`, profile.url)
 
   const result = await p2p.verify(`${content1.url}+${metadata2.version}`)
 
@@ -962,8 +962,8 @@ test('verify multiple authors', async t => {
   t.same(rawJSON.authors, authors, 'content authors contains two profiles')
   const versioned = `${content1.url}+${metadata.version}`
   // update content in authors profiles
-  await p2p.publish(versioned, profile.url)
-  await p2p2.publish(versioned, profileY.url)
+  await p2p.register(versioned, profile.url)
+  await p2p2.register(versioned, profileY.url)
 
   const { rawJSON: pUpdated } = await p2p.get(profile.url)
   const { rawJSON: pUpdatedY } = await p2p2.get(profileY.url)
@@ -1067,7 +1067,7 @@ test('delete a module from local db', async t => {
   t.end()
 })
 
-test('delete published module', async t => {
+test('delete registered module', async t => {
   const dir = tempy.directory()
   const p2p = new SDK({
     disableSwarm: true,
@@ -1094,7 +1094,7 @@ test('delete published module', async t => {
   const contentModules = await p2p.listContent()
   t.equal(contentModules.length, 1, '1 content module exists')
 
-  // publish
+  // register
   const authors = [profile.url]
   // manually writing a dummy file
   await writeFile(join(dir, encode(content.url), 'file.txt'), 'hola mundo')
@@ -1103,15 +1103,15 @@ test('delete published module', async t => {
     authors,
     main: 'file.txt'
   })
-  await p2p.publish(content.url, profile.url)
+  await p2p.register(content.url, profile.url)
   const { rawJSON: updatedProfile } = await p2p.get(profile.url)
-  t.same(updatedProfile.contents.length, 1, 'content published')
+  t.same(updatedProfile.contents.length, 1, 'content registered')
 
   // hard delete
   await p2p.delete(content.url, true)
 
   const { rawJSON: finalProfile } = await p2p.get(profile.url)
-  t.same(finalProfile.contents.length, 0, 'content unpublished after delete')
+  t.same(finalProfile.contents.length, 0, 'content deregistered after delete')
 
   const baseDir = await readdir(join(p2p.baseDir))
 
@@ -1127,7 +1127,7 @@ test('delete published module', async t => {
   t.end()
 })
 
-test('unpublish content module from profile', async t => {
+test('deregister content module from profile', async t => {
   const p2p = createDb()
   const sampleContent = {
     type: 'content',
@@ -1161,17 +1161,17 @@ test('unpublish content module from profile', async t => {
 
   const { metadata: contentMeta } = await p2p.get(content.url)
   const versioned = `${content.url}+${contentMeta.version}`
-  await p2p.publish(versioned, profile.url)
+  await p2p.register(versioned, profile.url)
 
   const { rawJSON: updatedProfile } = await p2p.get(profile.url)
 
   t.equal(updatedProfile.contents.length, 1)
 
-  await p2p.unpublish(versioned, profile.url)
+  await p2p.deregister(versioned, profile.url)
 
   const { rawJSON: deletedContent } = await p2p.get(profile.url)
 
-  t.equal(deletedContent.contents.length, 0, 'content unpublished successfully')
+  t.equal(deletedContent.contents.length, 0, 'content deregistered successfully')
 
   await p2p.destroy()
   t.end()

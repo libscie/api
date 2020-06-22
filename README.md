@@ -131,17 +131,17 @@ Used to obtain a file descriptor from the `main` file of a module.
 
 - key: represents the module key (`url`) to be looked for. It is the buffer archive key `.toString('hex')`
 
-### publish
+### register
 
-> _async_ `publish(contentKey: string or buffer, profileKey: string or buffer)`
+> _async_ `register(contentKey: string or buffer, profileKey: string or buffer)`
 
-Register new content into a profile. The new content is added to the profile's `p2pcommons.contents`.
+Register (add) new content into a profile. The new content is added to the profile's `p2pcommons.contents`.
 
-### unpublish
+### deregister
 
-> _async_ `unpublish(contentKey: string or buffer, profileKey: string or buffer)`
+> _async_ `deregister(contentKey: string or buffer, profileKey: string or buffer)`
 
-Remove content from a profile.
+Deregister (remove) content from a profile.
 
 ### follow
 

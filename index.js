@@ -828,7 +828,7 @@ class SDK {
 
     if (params.contents && original.type === 'profile') {
       for (const c of params.contents) {
-        await this.validatePublish(c, original.url)
+        await this.validateRegister(c, original.url)
         isUnique(original.contents, c, 'contents')
       }
     }
@@ -1365,7 +1365,7 @@ class SDK {
     }
   }
 
-  async validatePublish (contentKey, profileKey) {
+  async validateRegister (contentKey, profileKey) {
     assert(
       typeof contentKey === 'string' || Buffer.isBuffer(contentKey),
       ValidationError,
@@ -1386,7 +1386,7 @@ class SDK {
     const { host: pKey, version: profileVersion } = parse(profileKey)
     if (!contentVersion) {
       this._log(
-        'publish: Content version is not found. Using latest version.',
+        'register: Content version is not found. Using latest version.',
         'warn'
       )
     }
@@ -1403,7 +1403,7 @@ class SDK {
 
     const { rawJSON: profile } = await this.clone(pKey, profileVersion, false)
 
-    // TODO(dk): consider add custom errors for publish and verification
+    // TODO(dk): consider add custom errors for registration and verification
     assert(
       content.type === 'content',
       ValidationError,
@@ -1458,7 +1458,7 @@ class SDK {
   }
 
   /**
-   * publish a content module to a profile
+   * register a content module to a profile
    *
    * @public
    * @async
@@ -1466,9 +1466,9 @@ class SDK {
    * @param {(String|Buffer)} contentKey - a dat url
    * @param {(String|Buffer)} profileKey - a dat url
    */
-  async publish (contentKey, profileKey) {
-    debug(`publish contentKey: ${contentKey}`)
-    debug(`publish profileKey: ${profileKey}`)
+  async register (contentKey, profileKey) {
+    debug(`register contentKey: ${contentKey}`)
+    debug(`register profileKey: ${profileKey}`)
 
     // profile.p2pcommons.contents.push(cKeyVersion)
     // update profile
@@ -1477,7 +1477,7 @@ class SDK {
       contents: [contentKey]
     })
 
-    this._log('publish: profile updated successfully')
+    this._log('register: profile updated successfully')
   }
 
   /**
@@ -1516,12 +1516,12 @@ class SDK {
   }
 
   /**
-   * unpublish content from a user's profile
+   * deregister content from a user's profile
    *
    * @param {(String)} contentKey - contentKey should include the version
    * @param {(String|Buffer)} profileKey
    */
-  async unpublish (contentKey, profileKey) {
+  async deregister (contentKey, profileKey) {
     assert(
       typeof contentKey === 'string' || Buffer.isBuffer(contentKey),
       ValidationError,
@@ -1536,7 +1536,7 @@ class SDK {
       profileKey,
       'profileKey'
     )
-    debug('unpublish')
+    debug('deregister')
 
     await this.ready()
 
@@ -1787,11 +1787,11 @@ class SDK {
     }
     try {
       if (module.type === 'content') {
-        // unpublish from profiles
+        // deregister from profiles
         const profiles = await this.listProfiles()
 
         for (const { rawJSON: prof } of profiles) {
-          await this.unpublish(key, prof.url)
+          await this.deregister(key, prof.url)
         }
       }
       await this.localdb.del(keyString)
