@@ -37,9 +37,9 @@ const p2p = new P2PCommons()
 ;(async () => {
 
   // create a content module
-  await p2p.init({ type: 'content' }) // ~/.p2pcommons/hash/dat.json --> type: content
+  await p2p.init({ type: 'content' }) // ~/.p2pcommons/hash/index.json --> type: content
   // create a profile module
-  await p2p.init({ type: 'profile' }) // ~/.p2pcommons/hash/dat.json --> type: profile
+  await p2p.init({ type: 'profile' }) // ~/.p2pcommons/hash/index.json --> type: profile
 })()
 ```
 
@@ -78,12 +78,12 @@ Returns an object containing the **flattened** rawJSON and metadata (**version, 
 
 > _async_ `get(hash: string)`
 
-Retrieves raw datJSON item and metadata from the local db.
+Retrieves raw indexJSON item and metadata from the local db.
 
 - hash: represents the key (`url`) to be looked for. It is the buffer archive key `.toString('hex')`
 
 Returns an object with:
-- **rawJSON**: flattened datJSON data
+- **rawJSON**: flattened indexJSON data
 - **metadata**: Extra information like last modified time, latest archive version, etc
 
 ### set
@@ -166,7 +166,7 @@ Get a module from the local db or the swarm. If the module is not present on the
 - download: a boolean indicating if module directory needs to be saved on disk. [DEFAULT=TRUE]
 
 Returns a [cancelable promise](https://github.com/sindresorhus/p-cancelable). When fullfiled returns an object with multiple values:
-- **rawJSON**: the module `dat.json` content (**flattened**)
+- **rawJSON**: the module `index.json` content (**flattened**)
 - **metadata**: an object with modules metadata
 - **versionedKey**: an string indicating the full module url obtained. E.g: `dat://${mKey}+${version}`
 - **dwldHandle**: it contains a download event emitter, you can listen to `end` event to know when the download has been completed. It's defined only if `download === true`.
