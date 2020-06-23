@@ -106,6 +106,9 @@ class SDK {
     this.stores = new Map() // deprecated
     this.drivesToWatch = new Map()
 
+    this.dht = finalOpts.dht
+    this.bootstrap = finalOpts.bootstrap
+
     // start hyperswarm
     this.disableSwarm = !!finalOpts.disableSwarm
     if (!this.disableSwarm) {
@@ -464,7 +467,8 @@ class SDK {
   async startSwarm () {
     if (!this.disableSwarm) {
       this.networker = this.swarmFn(this.store, {
-        announceLocalAddress: true
+        announceLocalAddress: true,
+        bootstrap: this.bootstrap
       })
       this.networker.on('error', console.error)
       if (typeof this.networker.listen === 'function') {
@@ -618,9 +622,13 @@ class SDK {
         driveWatch
       )
 
-      // NOTE(dk): consider return the driveWatch EE.
-      // Note(dk): consider add a timeout
-      await once(driveWatch, 'put-end')
+      try {
+        await archive.readFile('index.json')
+      } catch (_) {
+        // NOTE(dk): consider return the driveWatch EE.
+        // Note(dk): consider add a timeout
+        await once(driveWatch, 'put-end')
+      }
     }
 
     this._log(
@@ -690,7 +698,10 @@ class SDK {
 
     let stat, mtime
     if (isWritable) {
-      await writeFile(join(indexJSONDir, 'index.json'), JSON.stringify(indexJSON))
+      await writeFile(
+        join(indexJSONDir, 'index.json'),
+        JSON.stringify(indexJSON)
+      )
       await dat.importFiles(archive, indexJSONDir)
 
       version = archive.version
@@ -1840,6 +1851,7 @@ class SDK {
       if (this.db) await this.db.close()
       debug('db successfully closed')
     }
+
     if (swarm && this.networker) {
       debug('closing swarm...')
       try {
@@ -1847,8 +1859,10 @@ class SDK {
       } catch (err) {
         this._log(err.message, 'error')
       }
+
       debug('swarm successfully closed')
     }
+
     this.start = false
   }
 }
