@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Changed
 - renamed (un)publish to (de)register
+- renamed dat.json to index.json
+
 
 ## [0.5.8] - 2020-04-01
 ### Added
