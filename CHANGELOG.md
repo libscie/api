@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - renamed (un)publish to (de)register
 - renamed dat.json to index.json
-
+- bump hypercore-crypto dep to version 2
 
 ## [0.5.8] - 2020-04-01
 ### Added
