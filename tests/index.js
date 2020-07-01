@@ -781,7 +781,6 @@ test('register - local contents', async t => {
   t.end()
 })
 
-
 test('seed and register', async t => {
   await localDHT()
 
@@ -1216,7 +1215,11 @@ test('deregister content module from profile', async t => {
 
   const { rawJSON: deletedContent } = await p2p.get(profile.url)
 
-  t.equal(deletedContent.contents.length, 0, 'content deregistered successfully')
+  t.equal(
+    deletedContent.contents.length,
+    0,
+    'content deregistered successfully'
+  )
 
   await p2p.destroy()
   t.end()
@@ -1539,6 +1542,32 @@ test('check lastModified on ready', async t => {
   )
 
   await p2p2.destroy()
+  t.end()
+})
+
+test.only('multiples sdks', async t => {
+  const dir = tempy.directory()
+  // const dir2 = tempy.directory()
+
+  const commons = new SDK({
+    disableSwarm: true,
+    watch: true,
+    persist: true,
+    baseDir: dir
+  })
+
+  await commons.init({
+    type: 'profile',
+    title: 'title'
+  })
+
+  // another sdk instance will update the content
+  const code = join(__dirname, 'childProcess2.js')
+  await execa.node(code, [dir])
+
+  const modules = await commons.listProfiles()
+  t.ok(modules.length === 2, '2 modules created')
+  await commons.destroy()
   t.end()
 })
 
