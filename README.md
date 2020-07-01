@@ -18,7 +18,7 @@ The specifications for `sdk-js` are available from [`@p2pcommons/specs`](https:/
 ## Install
 
 ```
-npm install --save @p2pcommons/sdk-js
+npm install @p2pcommons/sdk-js
 ```
 
 ## Usage
