@@ -84,7 +84,7 @@ class Path extends LogicalType {
 class DatUrl extends LogicalType {
   constructor (attrs, opts) {
     super(attrs, opts)
-    this._pattern = new RegExp(/^(dat:\/\/)(\w{64})$/)
+    this._pattern = new RegExp(/^(hyper:\/\/)(\w{64})$/)
   }
 
   _fromValue (val) {
@@ -92,7 +92,7 @@ class DatUrl extends LogicalType {
       throw new ValidationError('non empty string', val)
     }
     if (!this._pattern.test(val)) {
-      throw new ValidationError('valid dat url', val)
+      throw new ValidationError('valid hyper url', val)
     }
     return val
   }
@@ -102,7 +102,7 @@ class DatUrl extends LogicalType {
       throw new ValidationError('non empty string', val)
     }
     if (!this._pattern.test(val)) {
-      throw new ValidationError('valid dat url', val)
+      throw new ValidationError('valid hyper url', val)
     }
     return val
   }
@@ -111,9 +111,9 @@ class DatUrl extends LogicalType {
 class DatUrlVersion extends LogicalType {
   constructor (attrs, opts) {
     super(attrs, opts)
-    let pattern = /^(dat:\/\/)(\w{64})(\+\d+)?$/
+    let pattern = /^(hyper:\/\/)(\w{64})(\+\d+)?$/
     if (attrs.strict) {
-      pattern = /^(dat:\/\/)(\w{64})(\+\d+)$/
+      pattern = /^(hyper:\/\/)(\w{64})(\+\d+)$/
     }
     this._pattern = new RegExp(pattern)
   }
@@ -123,7 +123,7 @@ class DatUrlVersion extends LogicalType {
       throw new ValidationError('non empty string', val)
     }
     if (!this._pattern.test(val)) {
-      throw new ValidationError('valid dat url', val)
+      throw new ValidationError('valid hyper url', val)
     }
     return val
   }
@@ -133,7 +133,7 @@ class DatUrlVersion extends LogicalType {
       throw new ValidationError('non empty string', val)
     }
     if (!this._pattern.test(val)) {
-      throw new ValidationError('valid dat url', val)
+      throw new ValidationError('valid hyper url', val)
     }
     return val
   }
