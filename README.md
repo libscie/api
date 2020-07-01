@@ -169,7 +169,7 @@ Get a module from the local db or the swarm. If the module is not present on the
 Returns a [cancelable promise](https://github.com/sindresorhus/p-cancelable). When fullfiled returns an object with multiple values:
 - **rawJSON**: the module `index.json` content (**flattened**)
 - **metadata**: an object with modules metadata
-- **versionedKey**: an string indicating the full module url obtained. E.g: `dat://${mKey}+${version}`
+- **versionedKey**: an string indicating the full module url obtained. E.g: `hyper://${mKey}+${version}`
 - **dwldHandle**: it contains a download event emitter, you can listen to `end` event to know when the download has been completed. It's defined only if `download === true`.
 
 

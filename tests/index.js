@@ -58,10 +58,10 @@ test('init: create content module', async t => {
     title: 'demo',
     description: 'lorem ipsum',
     authors: [
-      'dat://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860e9d'
+      'hyper://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860e9d'
     ],
     parents: [
-      'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
+      'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
     ]
   }
   const { rawJSON: output, metadata } = await p2p.init(init)
@@ -279,7 +279,7 @@ test('set: should throw validation error with future parents', async t => {
     title: 'random',
     description: 'lorem ipsum',
     parents: [
-      'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+3'
+      'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+3'
     ]
   }
   const { rawJSON: metadata } = await p2p.init(sampleData)
@@ -289,7 +289,7 @@ test('set: should throw validation error with future parents', async t => {
     await p2p.set({
       url: key,
       parents: [
-        'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
+        'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
       ]
     })
   } catch (err) {
@@ -302,7 +302,7 @@ test('set: should throw validation error with future parents', async t => {
   await p2p.set({
     url: key,
     parents: [
-      'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+2'
+      'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+2'
     ]
   })
 
@@ -311,8 +311,8 @@ test('set: should throw validation error with future parents', async t => {
   t.same(
     rawJSON.parents,
     [
-      'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+3',
-      'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+2'
+      'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+3',
+      'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+2'
     ],
     'parents updated successfully'
   )
@@ -445,10 +445,10 @@ test('set: content and profile idempotent with repeated values', async t => {
     title: 'demo',
     description: 'lorem ipsum',
     authors: [
-      'dat://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860e9d'
+      'hyper://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860e9d'
     ],
     parents: [
-      'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
+      'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
     ]
   }
 
@@ -458,10 +458,10 @@ test('set: content and profile idempotent with repeated values', async t => {
     subtype: '',
     avatar: './test.png',
     follows: [
-      'dat://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4'
+      'hyper://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4'
     ],
     contents: [
-      'dat://00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23+12'
+      'hyper://00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23+12'
     ]
   }
 
@@ -472,7 +472,7 @@ test('set: content and profile idempotent with repeated values', async t => {
   const pkey = profile.url
 
   const authors = sampleData.authors.concat(
-    'dat://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860e9d'
+    'hyper://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860e9d'
   )
 
   try {
@@ -495,12 +495,12 @@ test('set: content and profile idempotent with repeated values', async t => {
 
   // update profile with repeated values
   const contents = [
-    'dat://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860alf',
-    'dat://00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23+12' // repeated value
+    'hyper://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860alf',
+    'hyper://00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23+12' // repeated value
   ]
   const follows = [
-    'dat://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4', // repeated value
-    'dat://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c208062123'
+    'hyper://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4', // repeated value
+    'hyper://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c208062123'
   ]
 
   try {
@@ -537,10 +537,10 @@ test('follows: must not self-reference', async t => {
     subtype: '',
     avatar: './test.png',
     follows: [
-      'dat://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4'
+      'hyper://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4'
     ],
     contents: [
-      'dat://00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23+12'
+      'hyper://00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23+12'
     ]
   }
 
@@ -566,7 +566,7 @@ test('set: dont allow future parents versions nor self-reference', async t => {
     title: 'sample content',
     description: 'lorem ipsum',
     parents: [
-      'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
+      'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
     ]
   }
   const { rawJSON } = await p2p.init(sampleData)
@@ -576,9 +576,9 @@ test('set: dont allow future parents versions nor self-reference', async t => {
     await p2p.set({
       url: ckey,
       parents: [
-        'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4',
-        'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4',
-        'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
+        'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4',
+        'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4',
+        'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
       ]
     })
   } catch (err) {
@@ -830,7 +830,7 @@ test('seed and register', async t => {
   const contentKeyVersion = `${content1.url.replace(/dat:\/\//, '')}+${
     contentMetadata.version
   }`
-  const contentKeyVersionPrefix = `dat://${contentKeyVersion}`
+  const contentKeyVersionPrefix = `hyper://${contentKeyVersion}`
 
   await p2p2.destroy(true, false)
 
@@ -1242,7 +1242,7 @@ test('follow and unfollow a profile', async t => {
   try {
     await p2p.follow(
       profileX.url,
-      'dat://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a'
+      'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a'
     )
   } catch (err) {
     t.same(
@@ -1347,7 +1347,7 @@ test('clone a module', async t => {
   }
 
   const { rawJSON, driveWatch } = await p2p.init(content)
-  const rawJSONpath = rawJSON.url.replace('dat://', '')
+  const rawJSONpath = rawJSON.url.replace('hyper://', '')
 
   // write main.txt
   await writeFile(join(dir, rawJSONpath, 'main.txt'), 'hello')
@@ -1404,7 +1404,7 @@ test('cancel clone', async t => {
   }
 
   const { rawJSON, driveWatch } = await p2p.init(content)
-  const rawJSONpath = rawJSON.url.replace('dat://', '')
+  const rawJSONpath = rawJSON.url.replace('hyper://', '')
 
   // write main.txt
   await writeFile(join(dir, rawJSONpath, 'main.txt'), 'hello')

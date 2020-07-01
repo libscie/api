@@ -611,7 +611,7 @@ class SDK {
       parents,
       follows,
       contents,
-      url: `dat://${publicKeyString}`
+      url: `hyper://${publicKeyString}`
     })
 
     // Note(dk): validate earlier
@@ -648,7 +648,7 @@ class SDK {
     unwatch.destroy()
 
     this._log(
-      `Initialized new ${indexJSON.p2pcommons.type}, dat://${publicKeyString}`
+      `Initialized new ${indexJSON.p2pcommons.type}, hyper://${publicKeyString}`
     )
 
     debug('init indexJSON', indexJSON)
@@ -1386,7 +1386,7 @@ class SDK {
 
     return {
       rawJSON: this._flatten(module),
-      versionedKey: `dat://${mKeyString}+${version}`,
+      versionedKey: `hyper://${mKeyString}+${version}`,
       metadata: meta,
       dwldHandle
     }
@@ -1672,8 +1672,8 @@ class SDK {
     this.assertModule(targetProfile)
 
     const finalTargetProfileKey = targetProfileVersion
-      ? `dat://${targetProfileKey}+${targetProfileVersion}`
-      : `dat://${targetProfileKey}`
+      ? `hyper://${targetProfileKey}+${targetProfileVersion}`
+      : `hyper://${targetProfileKey}`
 
     if (localProfile.follows.includes(finalTargetProfileKey)) {
       throw new ValidationError(
@@ -1763,8 +1763,8 @@ class SDK {
 
     // everything is valid, removing profile
     const finalTargetProfileKey = targetProfileVersion
-      ? `dat://${targetProfileKey}+${targetProfileVersion}`
-      : `dat://${targetProfileKey}`
+      ? `hyper://${targetProfileKey}+${targetProfileVersion}`
+      : `hyper://${targetProfileKey}`
 
     const idx = localProfile.follows.indexOf(finalTargetProfileKey)
     if (idx !== -1) {
