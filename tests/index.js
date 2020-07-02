@@ -736,21 +736,17 @@ test('multiple writes with persistance', async t => {
 
 test('register - local contents', async t => {
   const p2p = createDb()
-  const sampleData = [
-    {
-      type: 'content',
-      title: 'demo',
-      description: 'lorem ipsum'
-    },
-    { type: 'profile', title: 'Professor X' }
-  ]
-  await Promise.all([].concat(sampleData).map(d => p2p.init(d)))
 
-  const profiles = await p2p.listProfiles()
-  const contents = await p2p.listContent()
+  const { rawJSON: profile } = await p2p.init({
+    type: 'profile',
+    title: 'Professor X'
+  })
+  const { rawJSON: content1, driveWatch } = await p2p.init({
+    type: 'content',
+    title: 'demo',
+    description: 'lorem ipsum'
+  })
 
-  const { rawJSON: profile } = profiles[0]
-  const { rawJSON: content1 } = contents[0]
   const authors = [profile.url]
 
   // update author on content module
@@ -761,6 +757,14 @@ test('register - local contents', async t => {
     join(p2p.baseDir, encode(content1.url), 'file.txt'),
     'hola mundo'
   )
+
+  await new Promise(resolve => {
+    driveWatch.on('put-end', src => {
+      if (src.name.includes('file.txt')) {
+        return resolve()
+      }
+    })
+  })
   await p2p.set({
     url: content1.url,
     main: 'file.txt'
