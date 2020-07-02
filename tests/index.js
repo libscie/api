@@ -1545,29 +1545,13 @@ test('check lastModified on ready', async t => {
   t.end()
 })
 
-test.only('multiples sdks', async t => {
+test.only('multiple sdks', async t => {
   const dir = tempy.directory()
-  // const dir2 = tempy.directory()
-
-  const commons = new SDK({
-    disableSwarm: true,
-    watch: true,
-    persist: true,
-    baseDir: dir
-  })
-
-  await commons.init({
-    type: 'profile',
-    title: 'title'
-  })
-
-  // another sdk instance will update the content
   const code = join(__dirname, 'childProcess2.js')
-  await execa.node(code, [dir])
 
-  const modules = await commons.listProfiles()
-  t.ok(modules.length === 2, '2 modules created')
-  await commons.destroy()
+  await execa.node(code, [dir])
+  await execa.node(code, [dir]) // this hangs
+
   t.end()
 })
 
