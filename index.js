@@ -130,6 +130,7 @@ class SDK {
     debug(`dbPath: ${this.dbPath}`)
     debug(`persist drives? ${!!this.persist}`)
     debug(`swarm enabled? ${!this.disableSwarm}`)
+    debug(`watch enabled? ${this.watch}`)
   }
 
   allowedProperties () {
@@ -402,7 +403,7 @@ class SDK {
         const moduleDir = join(this.baseDir, urlString)
 
         const statDrive = await drive.stat('/')
-        const statDir = await statFn(join(moduleDir, 'index.json'))
+        const statDir = await statFn(moduleDir)
         const statDriveMtime = statDrive[0].mtime
         const statDirMtime = statDir.mtime
 
@@ -413,19 +414,24 @@ class SDK {
 
         const driveWatch = await dat.importFiles(drive, moduleDir, {
           watch: this.watch,
-          keepExisting: true
+          keepExisting: false,
+          dereference: true
         })
 
         if (this.watch) {
           this.drivesToWatch.set(
-            DatEncoding.encode(drive.discoveryKey),
+            DatEncoding.encode(archive.discoveryKey),
             driveWatch
           )
-
-          // NOTE(dk): consider return the driveWatch EE.
-          // Note(dk): consider add a timeout
-          await once(driveWatch, 'put-end')
         }
+
+        let unwatch
+        await new Promise(resolve => {
+          unwatch = drive.watch('', () => {
+            return resolve()
+          })
+        })
+        if (unwatch) unwatch.destroy()
 
         if (metadata.lastModified.getTime() >= mtime.getTime()) continue
 
@@ -621,15 +627,16 @@ class SDK {
         DatEncoding.encode(archive.discoveryKey),
         driveWatch
       )
-
-      try {
-        await archive.readFile('index.json')
-      } catch (_) {
-        // NOTE(dk): consider return the driveWatch EE.
-        // Note(dk): consider add a timeout
-        await once(driveWatch, 'put-end')
-      }
     }
+
+    let unwatch
+    await new Promise(resolve => {
+      unwatch = archive.watch('index.json', () => {
+        return resolve()
+      })
+    })
+
+    if (unwatch) unwatch.destroy()
 
     this._log(
       `Initialized new ${indexJSON.p2pcommons.type}, dat://${publicKeyString}`
@@ -1844,6 +1851,7 @@ class SDK {
         mirror.destroy()
       }
     }
+
     if (db) {
       debug('closing db...')
       if (this.localdb) await this.localdb.close()
