@@ -25,8 +25,7 @@ const localDHT = async () => {
 
 const defaultOpts = () => ({
   swarm: false,
-  persist: false,
-  watch: false
+  persist: false
 })
 
 const createDb = opts => {
@@ -828,6 +827,7 @@ test('seed and register', async t => {
       }
     })
   })
+
   await p2p2.set({
     url: content1.url,
     main: 'file.txt'
@@ -1545,13 +1545,14 @@ test('check lastModified on ready', async t => {
   t.end()
 })
 
-test.only('multiple sdks', async t => {
+test('multiple sdks with child process', async t => {
   const dir = tempy.directory()
   const code = join(__dirname, 'childProcess2.js')
 
   await execa.node(code, [dir])
-  await execa.node(code, [dir]) // this hangs
+  await execa.node(code, [dir])
 
+  t.pass('all good')
   t.end()
 })
 
