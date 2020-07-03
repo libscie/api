@@ -13,8 +13,6 @@ const main = async () => {
     watch: true
   })
 
-  await commons.ready()
-
   await commons.init({
     type: 'profile',
     title: 'title'
