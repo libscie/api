@@ -758,13 +758,8 @@ test('register - local contents', async t => {
     'hola mundo'
   )
 
-  await new Promise(resolve => {
-    driveWatch.on('put-end', src => {
-      if (src.name.includes('file.txt')) {
-        return resolve()
-      }
-    })
-  })
+  await once(driveWatch, 'put-end')
+
   await p2p.set({
     url: content1.url,
     main: 'file.txt'
@@ -824,13 +819,8 @@ test('seed and register', async t => {
     join(p2p2.baseDir, encode(content1.url), 'file.txt'),
     'hola mundo'
   )
-  await new Promise(resolve => {
-    driveWatch.on('put-end', src => {
-      if (src.name.includes('file.txt')) {
-        return resolve()
-      }
-    })
-  })
+
+  await once(driveWatch, 'put-end')
 
   await p2p2.set({
     url: content1.url,
@@ -907,13 +897,8 @@ test('verify', async t => {
     join(p2p.baseDir, encode(content1.url), 'file.txt'),
     'hola mundo'
   )
-  await new Promise(resolve => {
-    driveWatch.on('put-end', src => {
-      if (src.name.includes('file.txt')) {
-        return resolve()
-      }
-    })
-  })
+
+  await once(driveWatch, 'put-end')
 
   await p2p.set({
     url: content1.url,
@@ -984,13 +969,7 @@ test('verify multiple authors', async t => {
     join(p2p.baseDir, encode(content1.url), 'file.txt'),
     'hola mundo'
   )
-  await new Promise(resolve => {
-    driveWatch.on('put-end', src => {
-      if (src.name.includes('file.txt')) {
-        return resolve()
-      }
-    })
-  })
+  await once(driveWatch, 'put-end')
   await p2p.set({
     url: content1.url,
     main: 'file.txt'
@@ -1117,7 +1096,7 @@ test('delete registered module', async t => {
   t.equal(modules.length, 0, 'Modules list is empty')
 
   // create content
-  const { rawJSON: content, driveWatch } = await p2p.init({
+  const { rawJSON: content } = await p2p.init({
     type: 'content',
     title: 'demo',
     description: 'lorem ipsum'
@@ -1194,13 +1173,7 @@ test('deregister content module from profile', async t => {
     'hola mundo'
   )
 
-  await new Promise(resolve => {
-    driveWatch.on('put-end', src => {
-      if (src.name.includes('file.txt')) {
-        return resolve()
-      }
-    })
-  })
+  await once(driveWatch, 'put-end')
 
   await p2p.set({
     url: content.url,
