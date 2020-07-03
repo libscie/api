@@ -430,7 +430,7 @@ class SDK {
             resolve(unwatch)
           })
         })
-        if (unwatch) unwatch.destroy()
+        unwatch.destroy()
 
         if (metadata.lastModified.getTime() >= mtime.getTime()) continue
 
@@ -633,7 +633,7 @@ class SDK {
         resolve(unwatch)
       })
     })
-    if (unwatch) unwatch.destroy()
+    unwatch.destroy()
 
     this._log(
       `Initialized new ${indexJSON.p2pcommons.type}, dat://${publicKeyString}`
