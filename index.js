@@ -425,10 +425,9 @@ class SDK {
           )
         }
 
-        let unwatch
-        await new Promise(resolve => {
-          unwatch = drive.watch('', () => {
-            return resolve()
+        const unwatch = await new Promise(resolve => {
+          let unwatch = drive.watch('', () => {
+            resolve(unwatch)
           })
         })
         if (unwatch) unwatch.destroy()
@@ -629,13 +628,11 @@ class SDK {
       )
     }
 
-    let unwatch
-    await new Promise(resolve => {
-      unwatch = archive.watch('index.json', () => {
-        return resolve()
+    const unwatch = await new Promise(resolve => {
+      let unwatch = archive.watch('index.json', () => {
+        resolve(unwatch)
       })
     })
-
     if (unwatch) unwatch.destroy()
 
     this._log(
