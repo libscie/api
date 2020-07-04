@@ -420,7 +420,7 @@ class SDK {
 
         if (this.watch) {
           this.drivesToWatch.set(
-            DatEncoding.encode(archive.discoveryKey),
+            DatEncoding.encode(drive.discoveryKey),
             driveWatch
           )
         }
@@ -618,7 +618,9 @@ class SDK {
     await writeFile(join(moduleDir, 'index.json'), JSON.stringify(indexJSON))
 
     const driveWatch = await dat.importFiles(archive, moduleDir, {
-      watch: this.watch
+      watch: this.watch,
+      keepExisting: false,
+      dereference: true
     })
 
     if (this.watch) {
@@ -1851,13 +1853,22 @@ class SDK {
 
     if (db) {
       debug('closing db...')
-      if (this.localdb) await this.localdb.close()
-      if (this.seeddb) await this.seeddb.close()
-      if (this.db) await this.db.close()
+      try {
+        if (this.localdb) await this.localdb.close()
+        if (this.seeddb) await this.seeddb.close()
+        if (this.db) await this.db.close()
+      } catch (err) {
+        this._log(err.message, 'error')
+      }
       debug('db successfully closed')
     }
 
     if (swarm && this.networker) {
+      for (const drive of this.drives.values()) {
+        if (!drive.closed) {
+          await drive.close()
+        }
+      }
       debug('closing swarm...')
       try {
         await this.networker.close()
