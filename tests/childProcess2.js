@@ -19,7 +19,6 @@ const main = async () => {
   })
 
   await commons.destroy()
-  process.exit(0)
 }
 
 main().catch(err => {
