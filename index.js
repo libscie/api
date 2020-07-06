@@ -280,7 +280,7 @@ class SDK {
 
   async getOptionsOrCreate () {
     // read global settings or create with default values according to:
-    // https://github.com/p2pcommons/specs/blob/master/interoperability.md#global-settings
+    // https://github.com/p2pcommons/specs/blob/main/interoperability.md#global-settings
     let options = { ...DEFAULT_GLOBAL_SETTINGS }
     try {
       const optionsFile = await readFile(
@@ -858,7 +858,7 @@ class SDK {
    *
    * @public
    * @async
-   * @link https://github.com/p2pcommons/specs/blob/master/module.md
+   * @link https://github.com/p2pcommons/specs/blob/main/module.md
    * @param {Object} module - Object containing field to update
    * @param {(String|Buffer)} module.url - module dat url REQUIRED
    * @param {String} [module.title]
@@ -1479,7 +1479,7 @@ class SDK {
    *
    * @public
    * @async
-   * @link https://github.com/p2pcommons/specs/blob/master/module.md#registration
+   * @link https://github.com/p2pcommons/specs/blob/main/module.md#registration
    * @param {(String|Buffer)} contentKey - a dat url
    * @param {(String|Buffer)} profileKey - a dat url
    */
@@ -1502,7 +1502,7 @@ class SDK {
    *
    * @public
    * @async
-   * @link https://github.com/p2pcommons/specs/blob/master/module.md#verification
+   * @link https://github.com/p2pcommons/specs/blob/main/module.md#verification
    * @param {String} datUrl - a versioned dat url
    * @returns {Boolean} - true if module is verified, false otherwise
    */
