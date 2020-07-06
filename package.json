@@ -28,7 +28,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "author": "Liberate Science",
+  "author": "Liberate Science GmbH",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/p2pcommons/sdk-js/issues"
