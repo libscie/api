@@ -2,11 +2,10 @@
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
 [![All Contributors](https://img.shields.io/badge/all_contributors-3-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
-
 ![npm version](https://img.shields.io/npm/v/@p2pcommons/sdk-js?color=4F2D84)
 ![ci](https://github.com/p2pcommons/sdk-js/workflows/ci/badge.svg)
 
-The base Software Development Kit in JavaScript (`sdk-js`) for a p2p communication infrastructure. More
+NodeJS development kit (`sdk-js`) for the peer-to-peer commons (p2pcommons). More
 information on this infrastructure is available in this [conceptual
 publication](https://doi.org/10.3390/publications6020021) and this
 [technical publication](https://chartgerink.github.io/2018dat-com/)
@@ -18,7 +17,9 @@ The specifications for `sdk-js` are available from [`@p2pcommons/specs`](https:/
 
 ## Install
 
-`npm install @p2pcommons/sdk-js`
+```
+npm install @p2pcommons/sdk-js
+```
 
 ## Usage
 
@@ -70,7 +71,7 @@ Returns a new instance of the sdk.
 
 Creates a new folder for 'content' or 'profile' according to the received `data.type` value.
 
-- `data` object following the [p2pcommons module spec](https://github.com/p2pcommons/specs/blob/master/module.md). The only required field is `type`.
+- `data` object following the [p2pcommons module spec](https://github.com/p2pcommons/specs/blob/main/module.md). The only required field is `type`.
 
 Returns an object containing the **flattened** rawJSON and metadata (**version, lastModified, isWritable**) for the newly created module.
 

@@ -8,7 +8,7 @@ Come and join us on [Slack](https://join.slack.com/t/libscie/shared_invite/zt-9l
 
 ## Code of conduct
 
-Please note we adhere to a [Code of Conduct](https://github.com/hypergraph-xyz/cli/blob/master/CODE_OF_CONDUCT.md) and any contributions not in line with it (*tl;dr* be an empathetic, considerate person) will not be accepted. Please notify [@chartgerink](mailto:chris@libscie.org) if anything happens.
+Please note we adhere to a [Code of Conduct](https://github.com/hypergraph-xyz/cli/blob/main/CODE_OF_CONDUCT.md) and any contributions not in line with it (*tl;dr* be an empathetic, considerate person) will not be accepted. Please notify [@chartgerink](mailto:chris@libscie.org) if anything happens.
 
 ## Feature requests & bug reports
 
@@ -98,9 +98,9 @@ $ git push origin my-feature-branch
 
 ### Documentation
 
-If your work adds functionality or changes the way existing functionality works, please document this in the [README.md](https://github.com/p2pcommons/sdk-js/blob/master/README.md). Always add changes to the [CHANGELOG.md](https://github.com/p2pcommons/sdk-js/blob/master/CHANGELOG.md).
+If your work adds functionality or changes the way existing functionality works, please document this in the [README.md](https://github.com/p2pcommons/sdk-js/blob/main/README.md). Always add changes to the [CHANGELOG.md](https://github.com/p2pcommons/sdk-js/blob/main/CHANGELOG.md).
 
-**Tip**: We are using [`chan`](https://github.com/geut/chan/tree/master/packages/chan) to easily modify and manage the changelog.
+**Tip**: We are using [`chan`](https://github.com/geut/chan/tree/main/packages/chan) to easily modify and manage the changelog.
 
 ### Style guide
 
