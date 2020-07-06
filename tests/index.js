@@ -25,8 +25,7 @@ const localDHT = async () => {
 
 const defaultOpts = () => ({
   swarm: false,
-  persist: false,
-  watch: false
+  persist: false
 })
 
 const createDb = opts => {
@@ -737,21 +736,17 @@ test('multiple writes with persistance', async t => {
 
 test('register - local contents', async t => {
   const p2p = createDb()
-  const sampleData = [
-    {
-      type: 'content',
-      title: 'demo',
-      description: 'lorem ipsum'
-    },
-    { type: 'profile', title: 'Professor X' }
-  ]
-  await Promise.all([].concat(sampleData).map(d => p2p.init(d)))
 
-  const profiles = await p2p.listProfiles()
-  const contents = await p2p.listContent()
+  const { rawJSON: profile } = await p2p.init({
+    type: 'profile',
+    title: 'Professor X'
+  })
+  const { rawJSON: content1, driveWatch } = await p2p.init({
+    type: 'content',
+    title: 'demo',
+    description: 'lorem ipsum'
+  })
 
-  const { rawJSON: profile } = profiles[0]
-  const { rawJSON: content1 } = contents[0]
   const authors = [profile.url]
 
   // update author on content module
@@ -762,6 +757,9 @@ test('register - local contents', async t => {
     join(p2p.baseDir, encode(content1.url), 'file.txt'),
     'hola mundo'
   )
+
+  await once(driveWatch, 'put-end')
+
   await p2p.set({
     url: content1.url,
     main: 'file.txt'
@@ -780,7 +778,6 @@ test('register - local contents', async t => {
   await p2p.destroy()
   t.end()
 })
-
 
 test('seed and register', async t => {
   await localDHT()
@@ -822,13 +819,9 @@ test('seed and register', async t => {
     join(p2p2.baseDir, encode(content1.url), 'file.txt'),
     'hola mundo'
   )
-  await new Promise(resolve => {
-    driveWatch.on('put-end', src => {
-      if (src.name.includes('file.txt')) {
-        return resolve()
-      }
-    })
-  })
+
+  await once(driveWatch, 'put-end')
+
   await p2p2.set({
     url: content1.url,
     main: 'file.txt'
@@ -904,13 +897,8 @@ test('verify', async t => {
     join(p2p.baseDir, encode(content1.url), 'file.txt'),
     'hola mundo'
   )
-  await new Promise(resolve => {
-    driveWatch.on('put-end', src => {
-      if (src.name.includes('file.txt')) {
-        return resolve()
-      }
-    })
-  })
+
+  await once(driveWatch, 'put-end')
 
   await p2p.set({
     url: content1.url,
@@ -981,13 +969,7 @@ test('verify multiple authors', async t => {
     join(p2p.baseDir, encode(content1.url), 'file.txt'),
     'hola mundo'
   )
-  await new Promise(resolve => {
-    driveWatch.on('put-end', src => {
-      if (src.name.includes('file.txt')) {
-        return resolve()
-      }
-    })
-  })
+  await once(driveWatch, 'put-end')
   await p2p.set({
     url: content1.url,
     main: 'file.txt'
@@ -1114,7 +1096,7 @@ test('delete registered module', async t => {
   t.equal(modules.length, 0, 'Modules list is empty')
 
   // create content
-  const { rawJSON: content, driveWatch } = await p2p.init({
+  const { rawJSON: content } = await p2p.init({
     type: 'content',
     title: 'demo',
     description: 'lorem ipsum'
@@ -1191,13 +1173,7 @@ test('deregister content module from profile', async t => {
     'hola mundo'
   )
 
-  await new Promise(resolve => {
-    driveWatch.on('put-end', src => {
-      if (src.name.includes('file.txt')) {
-        return resolve()
-      }
-    })
-  })
+  await once(driveWatch, 'put-end')
 
   await p2p.set({
     url: content.url,
@@ -1216,7 +1192,11 @@ test('deregister content module from profile', async t => {
 
   const { rawJSON: deletedContent } = await p2p.get(profile.url)
 
-  t.equal(deletedContent.contents.length, 0, 'content deregistered successfully')
+  t.equal(
+    deletedContent.contents.length,
+    0,
+    'content deregistered successfully'
+  )
 
   await p2p.destroy()
   t.end()
@@ -1539,6 +1519,17 @@ test('check lastModified on ready', async t => {
   )
 
   await p2p2.destroy()
+  t.end()
+})
+
+test('multiple sdks with child process', async t => {
+  const dir = tempy.directory()
+  const code = join(__dirname, 'childProcess2.js')
+
+  await execa.node(code, [dir])
+  await execa.node(code, [dir])
+
+  t.pass('all good')
   t.end()
 })
 

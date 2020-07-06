@@ -130,6 +130,7 @@ class SDK {
     debug(`dbPath: ${this.dbPath}`)
     debug(`persist drives? ${!!this.persist}`)
     debug(`swarm enabled? ${!this.disableSwarm}`)
+    debug(`watch enabled? ${this.watch}`)
   }
 
   allowedProperties () {
@@ -402,7 +403,7 @@ class SDK {
         const moduleDir = join(this.baseDir, urlString)
 
         const statDrive = await drive.stat('/')
-        const statDir = await statFn(join(moduleDir, 'index.json'))
+        const statDir = await statFn(moduleDir)
         const statDriveMtime = statDrive[0].mtime
         const statDirMtime = statDir.mtime
 
@@ -413,7 +414,8 @@ class SDK {
 
         const driveWatch = await dat.importFiles(drive, moduleDir, {
           watch: this.watch,
-          keepExisting: true
+          keepExisting: false,
+          dereference: true
         })
 
         if (this.watch) {
@@ -421,11 +423,14 @@ class SDK {
             DatEncoding.encode(drive.discoveryKey),
             driveWatch
           )
-
-          // NOTE(dk): consider return the driveWatch EE.
-          // Note(dk): consider add a timeout
-          await once(driveWatch, 'put-end')
         }
+
+        const unwatch = await new Promise(resolve => {
+          let unwatch = drive.watch('', () => {
+            resolve(unwatch)
+          })
+        })
+        unwatch.destroy()
 
         if (metadata.lastModified.getTime() >= mtime.getTime()) continue
 
@@ -613,7 +618,9 @@ class SDK {
     await writeFile(join(moduleDir, 'index.json'), JSON.stringify(indexJSON))
 
     const driveWatch = await dat.importFiles(archive, moduleDir, {
-      watch: this.watch
+      watch: this.watch,
+      keepExisting: false,
+      dereference: true
     })
 
     if (this.watch) {
@@ -621,15 +628,14 @@ class SDK {
         DatEncoding.encode(archive.discoveryKey),
         driveWatch
       )
-
-      try {
-        await archive.readFile('index.json')
-      } catch (_) {
-        // NOTE(dk): consider return the driveWatch EE.
-        // Note(dk): consider add a timeout
-        await once(driveWatch, 'put-end')
-      }
     }
+
+    const unwatch = await new Promise(resolve => {
+      let unwatch = archive.watch('index.json', () => {
+        resolve(unwatch)
+      })
+    })
+    unwatch.destroy()
 
     this._log(
       `Initialized new ${indexJSON.p2pcommons.type}, dat://${publicKeyString}`
@@ -1844,15 +1850,25 @@ class SDK {
         mirror.destroy()
       }
     }
+
     if (db) {
       debug('closing db...')
-      if (this.localdb) await this.localdb.close()
-      if (this.seeddb) await this.seeddb.close()
-      if (this.db) await this.db.close()
+      try {
+        if (this.localdb) await this.localdb.close()
+        if (this.seeddb) await this.seeddb.close()
+        if (this.db) await this.db.close()
+      } catch (err) {
+        this._log(err.message, 'error')
+      }
       debug('db successfully closed')
     }
 
     if (swarm && this.networker) {
+      for (const drive of this.drives.values()) {
+        if (!drive.closed) {
+          await drive.close()
+        }
+      }
       debug('closing swarm...')
       try {
         await this.networker.close()
