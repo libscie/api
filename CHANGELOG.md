@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - loading issue
 - broken links #170
+- check closing status before close drive on destroy #175
 
 ## [0.6.0] - 2020-06-30
 ### Changed
