@@ -1387,7 +1387,8 @@ test('cancel clone', async t => {
     baseDir: dir,
     swarm: testSwarmCreator,
     dht,
-    dhtBootstrap
+    dhtBootstrap,
+    verbose: true
   })
 
   const p2p2 = new SDK({
@@ -1396,7 +1397,8 @@ test('cancel clone', async t => {
     baseDir: dir2,
     swarm: testSwarmCreator,
     dht,
-    dhtBootstrap
+    dhtBootstrap,
+    verbose: true
   })
 
   const content = {

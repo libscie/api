@@ -468,6 +468,10 @@ class SDK {
       storageOpts: { storageLocation: this.baseDir },
       corestoreOpts: {}
     })
+
+    this.store.on('error', err => {
+      this._log(err.message, 'error')
+    })
   }
 
   async startSwarm () {
