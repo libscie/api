@@ -35,7 +35,8 @@ const ValidationTypes = require('./schemas/validation') // avro related validati
 const {
   InvalidKeyError,
   ValidationError,
-  MissingParam
+  MissingParam,
+  EBUSYError
 } = require('./lib/errors')
 const { createIndexJSON, collect } = require('./lib/utils')
 
@@ -624,6 +625,11 @@ class SDK {
     })
 
     if (this.watch) {
+      driveWatch.on('error', err => {
+        if (err.code === 'EBUSY') {
+          throw new EBUSYError(err.message, publicKeyString)
+        }
+      })
       this.drivesToWatch.set(
         DatEncoding.encode(archive.discoveryKey),
         driveWatch
