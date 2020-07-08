@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [x.x.x] - 
+## Changed
+- Dynamic p2pcommons URLs
+
 ## [0.6.0] - 2020-06-30
 ### Changed
 - renamed (un)publish to (de)register
