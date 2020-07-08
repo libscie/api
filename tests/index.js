@@ -12,6 +12,7 @@ const SwarmNetwoker = require('corestore-swarm-networking')
 const { encode } = require('dat-encoding')
 const SDK = require('../')
 const createDHT = require('./utils/dht')
+const vers = require('../lib/spec')
 
 const testSwarmCreator = (store, opts) => new SwarmNetwoker(store, opts)
 
@@ -74,7 +75,7 @@ test('init: create content module', async t => {
     output.links.license[0].href,
     'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
   )
-  t.same(output.links.spec[0].href, 'https://p2pcommons.com/specs/module/0.2.0')
+  t.same(output.links.spec[0].href, `https://p2pcommons.com/specs/module/${vers.spec}`)
   t.same(
     output.main,
     '',
@@ -155,7 +156,7 @@ test('init: create profile module', async t => {
     output.links.license[0].href,
     'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
   )
-  t.same(output.links.spec[0].href, 'https://p2pcommons.com/specs/module/0.2.0')
+  t.same(output.links.spec[0].href, `https://p2pcommons.com/specs/module/${vers.spec}`)
   t.same(output.follows, [])
   t.same(output.contents, [])
   await p2p.destroy()

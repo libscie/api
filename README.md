@@ -216,7 +216,7 @@ Error object contains some useful properties:
 
 ### EBUSYError
 
-A more general error, used to indicate if something is missing.
+Triggered usually when there are conflicts with other apps watching the FS.
 
 Error object contains some useful properties:
 - `description`: A string indicating the error message
