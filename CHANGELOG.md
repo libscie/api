@@ -8,15 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - New Error: EBUSYError #177
 
+### Changed
+- Dynamic p2pcommons URLs #178
+
 ## [0.6.1] - 2020-07-07
 ### Fixed
 - loading issue
 - broken links #170
 - check closing status before close drive on destroy #175
-
-## [x.x.x] - 
-## Changed
-- Dynamic p2pcommons URLs
 
 ## [0.6.0] - 2020-06-30
 ### Changed
