@@ -784,7 +784,6 @@ test('seed and register', async t => {
 
   const p2p = createDb({
     swarm: true,
-    verbose: true,
     persist: false,
     swarmFn: testSwarmCreator,
     dht,
@@ -792,7 +791,6 @@ test('seed and register', async t => {
   })
   const p2p2 = createDb({
     swarm: true,
-    verbose: true,
     persist: false,
     swarmFn: testSwarmCreator,
     dht,
@@ -1387,8 +1385,7 @@ test('cancel clone', async t => {
     baseDir: dir,
     swarm: testSwarmCreator,
     dht,
-    dhtBootstrap,
-    verbose: true
+    dhtBootstrap
   })
 
   const p2p2 = new SDK({
@@ -1397,8 +1394,7 @@ test('cancel clone', async t => {
     baseDir: dir2,
     swarm: testSwarmCreator,
     dht,
-    dhtBootstrap,
-    verbose: true
+    dhtBootstrap
   })
 
   const content = {

@@ -427,7 +427,7 @@ class SDK {
         }
 
         const unwatch = await new Promise(resolve => {
-          let unwatch = drive.watch('', () => {
+          const unwatch = drive.watch('', () => {
             resolve(unwatch)
           })
         })
@@ -641,7 +641,7 @@ class SDK {
     }
 
     const unwatch = await new Promise(resolve => {
-      let unwatch = archive.watch('index.json', () => {
+      const unwatch = archive.watch('index.json', () => {
         resolve(unwatch)
       })
     })
@@ -1893,6 +1893,6 @@ class SDK {
   }
 }
 
-SDK.errors = { ValidationError, InvalidKeyError, MissingParam }
+SDK.errors = { ValidationError, InvalidKeyError, MissingParam, EBUSYError }
 
 module.exports = SDK
