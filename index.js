@@ -35,7 +35,8 @@ const ValidationTypes = require('./schemas/validation') // avro related validati
 const {
   InvalidKeyError,
   ValidationError,
-  MissingParam
+  MissingParam,
+  EBUSYError
 } = require('./lib/errors')
 const { createIndexJSON, collect } = require('./lib/utils')
 
@@ -426,7 +427,7 @@ class SDK {
         }
 
         const unwatch = await new Promise(resolve => {
-          let unwatch = drive.watch('', () => {
+          const unwatch = drive.watch('', () => {
             resolve(unwatch)
           })
         })
@@ -466,6 +467,10 @@ class SDK {
       storageFn: this.storage,
       storageOpts: { storageLocation: this.baseDir },
       corestoreOpts: {}
+    })
+
+    this.store.on('error', err => {
+      this._log(err.message, 'error')
     })
   }
 
@@ -624,6 +629,11 @@ class SDK {
     })
 
     if (this.watch) {
+      driveWatch.on('error', err => {
+        if (err.code === 'EBUSY') {
+          throw new EBUSYError(err.message, publicKeyString)
+        }
+      })
       this.drivesToWatch.set(
         DatEncoding.encode(archive.discoveryKey),
         driveWatch
@@ -631,7 +641,7 @@ class SDK {
     }
 
     const unwatch = await new Promise(resolve => {
-      let unwatch = archive.watch('index.json', () => {
+      const unwatch = archive.watch('index.json', () => {
         resolve(unwatch)
       })
     })
@@ -1865,7 +1875,7 @@ class SDK {
 
     if (swarm && this.networker) {
       for (const drive of this.drives.values()) {
-        if (!drive.closing && !drive.closed) {
+        if (drive.closing && !drive.closed) {
           await drive.close()
         }
       }
@@ -1883,6 +1893,6 @@ class SDK {
   }
 }
 
-SDK.errors = { ValidationError, InvalidKeyError, MissingParam }
+SDK.errors = { ValidationError, InvalidKeyError, MissingParam, EBUSYError }
 
 module.exports = SDK

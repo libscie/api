@@ -784,7 +784,6 @@ test('seed and register', async t => {
 
   const p2p = createDb({
     swarm: true,
-    verbose: true,
     persist: false,
     swarmFn: testSwarmCreator,
     dht,
@@ -792,7 +791,6 @@ test('seed and register', async t => {
   })
   const p2p2 = createDb({
     swarm: true,
-    verbose: true,
     persist: false,
     swarmFn: testSwarmCreator,
     dht,
@@ -1414,15 +1412,16 @@ test('cancel clone', async t => {
 
   // clone can be canceled
   const cloning = p2p2.clone(rawJSON.url)
-  cloning.cancel()
-
-  t.ok(cloning.isCanceled, 'cloning promise is canceled')
-
+  process.nextTick(() => {
+    cloning.cancel()
+    t.ok(cloning.isCanceled, 'cloning promise is canceled')
+  })
   const clonedDir = existsSync(join(p2p2.baseDir, rawJSONpath))
   t.notOk(clonedDir, 'clone dir does not exists')
 
   await p2p.destroy()
   await p2p2.destroy()
+
   t.end()
 })
 

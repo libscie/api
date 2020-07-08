@@ -214,6 +214,14 @@ A more general error, used to indicate if something is missing.
 Error object contains some useful properties:
 - `key`: A string indicating the missing param
 
+### EBUSYError
+
+A more general error, used to indicate if something is missing.
+
+Error object contains some useful properties:
+- `description`: A string indicating the error message
+- `key`: A string indicating the hyperdrive involved
+
 ## Release
 
 `npm publish`
