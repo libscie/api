@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - broken links #170
 - check closing status before close drive on destroy #175
 
+## [x.x.x] - 
+## Changed
+- Dynamic p2pcommons URLs
+
 ## [0.6.0] - 2020-06-30
 ### Changed
 - renamed (un)publish to (de)register
