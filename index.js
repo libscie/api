@@ -1875,7 +1875,7 @@ class SDK {
 
     if (swarm && this.networker) {
       for (const drive of this.drives.values()) {
-        if (!drive.closing && !drive.closed) {
+        if (drive.closing && !drive.closed) {
           await drive.close()
         }
       }
