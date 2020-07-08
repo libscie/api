@@ -95,49 +95,70 @@ test('Description must be a string - is array', t => {
 
 test('URL - valid', t => {
     t.doesNotThrow(() => {
-        validateUrl({ url: "hyper://RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea" })
+        validateUrl({ 
+            url: "hyper://RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea" 
+        }, "RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea")
     })
     t.end()
 })
 
 test('URL is required - missing', t => {
     t.throws(() => {
-        validateUrl({})
+        validateUrl({}, "RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea")
     })
     t.end()
 })
 
 test('URL must be a string - is object', t => {
     t.throws(() => {
-        validateUrl({ url: {} })
+        validateUrl({ 
+            url: {} 
+        }, "RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea")
     })
     t.end()
 })
 
 test('URL must start with hyper:// protocol - no protocol', t => {
     t.throws(() => {
-        validateUrl({ url: "RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea" })
+        validateUrl({ 
+            url: "RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea" 
+        }, "RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea")
     })
     t.end()
 })
 
 test('URL must start with hyper:// protocol - dat protocol', t => {
     t.throws(() => {
-        validateUrl({ url: "dat://RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea" })
+        validateUrl({ 
+            url: "dat://RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea" 
+        }, "RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea")
     })
     t.end()
 })
 
 test('URL must contain a valid non-versioned Hyperdrive key - invalid key', t => {
     t.throws(() => {
-        validateUrl({ url: "hyper://RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea2" })
+        validateUrl({ 
+            url: "hyper://RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea2" 
+        }, "RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea")
     })
     t.end()
 })
 
 test('URL must contain a valid non-versioned Hyperdrive key - versioned key', t => {
     t.throws(() => {
-        validateUrl({ url: "hyper://RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea+5" })
+        validateUrl({ 
+            url: "hyper://RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea+5" 
+        }, "RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea")
+    })
+    t.end()
+})
+
+test('URL must refer to the module\'s own Hyperdrive key - other key', t => {
+    t.throws(() => {
+        validateUrl({ 
+            url: "hyper://RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea" 
+        }, "cca6eb69a3ad6104ca31b9fee7832d74068db16ef2169eaaab5b48096e128342")
     })
     t.end()
 })
@@ -1002,7 +1023,7 @@ test('Parents may not refer to current or future versions of itself - contains f
     t.end()
 })
 
-test.only('Parents must be registered by at least one author - 1 parent, 1 author, registered', async t => {
+test('Parents must be registered by at least one author - 1 parent, 1 author, registered', async t => {
     const p2p = createDb()
 
     const { rawJSON: profile } = await p2p.init({
@@ -1035,9 +1056,176 @@ test.only('Parents must be registered by at least one author - 1 parent, 1 autho
                 parents: [ parentContent.url.replace("dat://", "") ]
             }
         }, p2p)
-        t.pass()
+        t.pass('should not throw')
     } catch(err) {
         t.fail(err)
+    }
+
+    await p2p.destroy()
+    t.end()
+})
+
+test('Parents must be registered by at least one author - 2 parents, 2 authors, registered', async t => {
+    const p2p = createDb()
+
+    const { rawJSON: profile1 } = await p2p.init({
+        type: "profile",
+        title: "Author 1"
+    })
+
+    const { rawJSON: profile2 } = await p2p.init({
+        type: "profile",
+        title: "Author 2"
+    })
+
+    const { rawJSON: parentContent1 } = await p2p.init({
+        type: "content",
+        title: "Parent content 1"
+    })
+
+    const { rawJSON: parentContent2 } = await p2p.init({
+        type: "content",
+        title: "Parent content 2"
+    })
+
+    try {
+        await writeFile(join(p2p.baseDir, parentContent1.url.replace("dat://", ""), 'main.txt'), 'hello')
+        await writeFile(join(p2p.baseDir, parentContent2.url.replace("dat://", ""), 'main.txt'), 'hello')
+    } catch(err) {
+        console.log(err)
+    }
+
+    await p2p.set({
+        url: parentContent1.url,
+        main: "main.txt",
+        authors: [ profile1.url, profile2.url ]
+    })
+
+    await p2p.set({
+        url: parentContent2.url,
+        main: "main.txt",
+        authors: [ profile2.url ]
+    })
+
+    await p2p.publish(parentContent1.url, profile2.url)
+    await p2p.publish(parentContent2.url, profile2.url)
+
+    try {
+        await validateParentsRegistered({
+            p2pcommons: { 
+                parents: [
+                    parentContent1.url.replace("dat://", ""),
+                    parentContent2.url.replace("dat://", "")
+                ]
+            }
+        }, p2p)
+        t.pass('should not throw')
+    } catch(err) {
+        t.fail(err)
+    }
+
+    await p2p.destroy()
+    t.end()
+})
+
+test('Parents must be registered by at least one author - 1 parent, 1 author, not registered', async t => {
+    const p2p = createDb()
+
+    const { rawJSON: profile1 } = await p2p.init({
+        type: "profile",
+        title: "Author 1"
+    })
+
+    const { rawJSON: parentContent1 } = await p2p.init({
+        type: "content",
+        title: "Parent content 1"
+    })
+
+    try {
+        await writeFile(join(p2p.baseDir, parentContent1.url.replace("dat://", ""), 'main.txt'), 'hello')
+    } catch(err) {
+        console.log(err)
+    }
+
+    await p2p.set({
+        url: parentContent1.url,
+        main: "main.txt",
+        authors: [ profile1.url ]
+    })
+
+    try {
+        await validateParentsRegistered({
+            p2pcommons: { 
+                parents: [
+                    parentContent1.url.replace("dat://", "")
+                ]
+            }
+        }, p2p)
+        t.fail('should throw')
+    } catch(err) {
+        t.pass('should throw')
+    }
+
+    await p2p.destroy()
+    t.end()
+})
+
+test('Parents must be registered by at least one author - 2 parents, 2 authors, 1 not registered', async t => {
+    const p2p = createDb()
+
+    const { rawJSON: profile1 } = await p2p.init({
+        type: "profile",
+        title: "Author 1"
+    })
+
+    const { rawJSON: profile2 } = await p2p.init({
+        type: "profile",
+        title: "Author 2"
+    })
+
+    const { rawJSON: parentContent1 } = await p2p.init({
+        type: "content",
+        title: "Parent content 1"
+    })
+
+    const { rawJSON: parentContent2 } = await p2p.init({
+        type: "content",
+        title: "Parent content 2"
+    })
+
+    try {
+        await writeFile(join(p2p.baseDir, parentContent1.url.replace("dat://", ""), 'main.txt'), 'hello')
+        await writeFile(join(p2p.baseDir, parentContent2.url.replace("dat://", ""), 'main.txt'), 'hello')
+    } catch(err) {
+        console.log(err)
+    }
+
+    await p2p.set({
+        url: parentContent1.url,
+        main: "main.txt",
+        authors: [ profile1.url, profile2.url ]
+    })
+
+    await p2p.set({
+        url: parentContent2.url,
+        main: "main.txt",
+        authors: [ profile2.url ]
+    })
+
+    await p2p.publish(parentContent1.url, profile1.url)
+
+    try {
+        await validateParentsRegistered({
+            p2pcommons: { 
+                parents: [
+                    parentContent1.url.replace("dat://", ""),
+                    parentContent2.url.replace("dat://", "")
+                ]
+            }
+        }, p2p)
+        t.fail('should throw')
+    } catch(err) {
+        t.pass('should throw')
     }
 
     await p2p.destroy()
