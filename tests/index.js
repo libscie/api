@@ -827,7 +827,7 @@ test('seed and register', async t => {
   })
 
   const { metadata: contentMetadata } = await p2p2.get(content1.url)
-  const contentKeyVersion = `${content1.url.replace(/dat:\/\//, '')}+${
+  const contentKeyVersion = `${content1.url.replace(/hyper:\/\//, '')}+${
     contentMetadata.version
   }`
   const contentKeyVersionPrefix = `hyper://${contentKeyVersion}`
@@ -843,6 +843,7 @@ test('seed and register', async t => {
     [contentKeyVersionPrefix],
     'registration results in the addition of a dat key to the contents property of the target profile'
   )
+
   const dirs = await readdir(p2p.baseDir)
   t.ok(
     dirs.includes(contentKeyVersion),

@@ -161,7 +161,7 @@ class SDK {
     assert(typeof datUrl === 'string', ValidationError, 'string', 'datUrl')
     const { version } = parse(datUrl)
     if (version !== 0 && !version) {
-      throw new ValidationError('versioned dat url', datUrl, 'datUrl')
+      throw new ValidationError('versioned hyper url', datUrl, 'datUrl')
     }
     return true
   }
@@ -274,7 +274,7 @@ class SDK {
 
     const { versionedKey } = await this.clone(datUrl, null, false)
     if (!versionedKey) {
-      throw new Error(`Unable to found module with dat url: ${datUrl}`)
+      throw new Error(`Unable to found module with hyper url: ${datUrl}`)
     }
     return versionedKey
   }
@@ -703,7 +703,7 @@ class SDK {
     )
     archive = this.drives.get(version ? `${dkey}+${version}` : dkey)
     if (!archive) {
-      debug(`saveItem: calling dat open ${keyString}`)
+      debug(`saveItem: calling hyper open ${keyString}`)
       const drive = dat.open(this.store, DatEncoding.decode(indexJSON.url), {
         sparse: this.globalOptions.sparse,
         sparseMetadata: this.globalOptions.sparseMetadata
@@ -870,7 +870,7 @@ class SDK {
    * @async
    * @link https://github.com/p2pcommons/specs/blob/main/module.md
    * @param {Object} module - Object containing field to update
-   * @param {(String|Buffer)} module.url - module dat url REQUIRED
+   * @param {(String|Buffer)} module.url - module hyper url REQUIRED
    * @param {String} [module.title]
    * @param {String} [module.description]
    * @param {String} [module.main]
@@ -956,6 +956,7 @@ class SDK {
     debug('set', { finalJSON })
     // Check if keys values are valid (ie: non empty, etc)
     const avroType = this._getAvroType(rawJSONFlatten.type)
+
     assertValid(avroType, finalJSON)
 
     debug('set: valid input')
@@ -970,7 +971,7 @@ class SDK {
    *
    * @public
    * @async
-   * @param {(String|Buffer)} key - a valid dat url
+   * @param {(String|Buffer)} key - a valid hyper url
    * @returns {{ rawJSON:Object, metadata: Object }}
    */
   async get (key) {
@@ -1144,7 +1145,7 @@ class SDK {
    *
    * @public
    * @async
-   * @param {String|Buffer} key - a valid dat url
+   * @param {String|Buffer} key - a valid hyper url
    * @returns {Number} fd - a file descriptor
    */
   async openFile (key) {
@@ -1166,22 +1167,22 @@ class SDK {
   }
 
   /**
-   * getDat
+   * getDrive
    *
-   * @description get dat from memory or swarm. Wrapper for calling dat.open and seeding.
+   * @description get drive from memory or swarm. Wrapper for calling dat.open and seeding.
    * @private
    * @param {(string|buffer)} key
    * @param {number} [version]
-   * @returns {Object} dat archive
+   * @returns {Object} hyper archive
    */
-  async getDat (key, version) {
+  async getDrive (key, version) {
     const keyBuffer = DatEncoding.decode(key)
     const dkey = DatEncoding.encode(crypto.discoveryKey(keyBuffer))
     const cacheKey = version ? `${dkey}+${version}` : dkey
 
     const archive = this.drives.get(cacheKey)
     if (archive) {
-      debug(`getDat: module found in cache with cachekey ${cacheKey}`)
+      debug(`getDrive: module found in cache with cachekey ${cacheKey}`)
       return archive
     }
 
@@ -1190,8 +1191,8 @@ class SDK {
       sparseMetadata: true
     })
 
-    debug(`getDat: Found archive key ${key}`)
-    debug('getDat: Waiting for archive to be ready')
+    debug(`getDrive: Found archive key ${key}`)
+    debug('getDrive: Waiting for archive to be ready')
     await drive.ready()
 
     await this._seed(drive, { announce: true, lookup: true })
@@ -1219,17 +1220,17 @@ class SDK {
     const mKeyString = DatEncoding.encode(key)
     let moduleVersion, module, dwldHandle
 
-    const moduleDat = await this.getDat(mKeyString, version)
+    const moduleHyper = await this.getDrive(mKeyString, version)
 
-    version = version || moduleDat.version
+    version = version || moduleHyper.version
     debug('clone: Module version', version)
 
     try {
       // 3 - after fetching module we still need to read the index.json file
       if (version !== 0) {
-        moduleVersion = moduleDat.checkout(version)
+        moduleVersion = moduleHyper.checkout(version)
       } else {
-        moduleVersion = moduleDat
+        moduleVersion = moduleHyper
       }
       debug('clone: Reading modules index.json...')
 
@@ -1264,7 +1265,7 @@ class SDK {
     const folderPath = join(this.baseDir, modulePath)
     await ensureDir(folderPath)
     await writeFile(join(folderPath, 'index.json'), JSON.stringify(module))
-    const stat = await moduleDat.stat('index.json')
+    const stat = await moduleHyper.stat('index.json')
 
     if (download) {
       dwldHandle = dat.downloadFiles(moduleVersion, folderPath)
@@ -1306,7 +1307,7 @@ class SDK {
    *
    * @description get module from local db, if its not found, module.rawJSON will be **undefined**
    * @private
-   * @param {(string|buffer)} url - module dat url
+   * @param {(string|buffer)} url - module hyper url
    * @returns {Module}
    */
   async getModule (url) {
@@ -1333,7 +1334,7 @@ class SDK {
    *
    * @public
    * @async
-   * @param {(String|Buffer) }mKey - a dat url
+   * @param {(String|Buffer) }mKey - hyper url
    * @param {Number} [mVersion] - a module version
    * @returns {{
    *   rawJSON: Object,
@@ -1490,8 +1491,8 @@ class SDK {
    * @public
    * @async
    * @link https://github.com/p2pcommons/specs/blob/main/module.md#registration
-   * @param {(String|Buffer)} contentKey - a dat url
-   * @param {(String|Buffer)} profileKey - a dat url
+   * @param {(String|Buffer)} contentKey - hyper url
+   * @param {(String|Buffer)} profileKey - hyper url
    */
   async register (contentKey, profileKey) {
     debug(`register contentKey: ${contentKey}`)
@@ -1513,7 +1514,7 @@ class SDK {
    * @public
    * @async
    * @link https://github.com/p2pcommons/specs/blob/main/module.md#verification
-   * @param {String} datUrl - a versioned dat url
+   * @param {String} datUrl - a versioned hyper url
    * @returns {Boolean} - true if module is verified, false otherwise
    */
   async verify (datUrl) {
@@ -1690,8 +1691,8 @@ class SDK {
    * follow a profile
    * @public
    * @async
-   * @param {string} localProfileUrl - local profile dat url
-   * @param {string} targetProfileUrl - target profile dat url
+   * @param {string} localProfileUrl - local profile hyper url
+   * @param {string} targetProfileUrl - target profile hyper url
    */
   async follow (localProfileUrl, targetProfileUrl) {
     debug('follow')
@@ -1710,8 +1711,8 @@ class SDK {
    *
    * @public
    * @async
-   * @param {(string|buffer)} localProfileUrl - dat url
-   * @param {(string|buffer)} targetProfileUrl - dat url
+   * @param {(string|buffer)} localProfileUrl - hyper url
+   * @param {(string|buffer)} targetProfileUrl - hyper url
    */
   async unfollow (localProfileUrl, targetProfileUrl) {
     this.assertDatUrl(localProfileUrl)
@@ -1787,7 +1788,7 @@ class SDK {
    *
    * @public
    * @async
-   * @param {(String|Buffer)} key - a valid dat url
+   * @param {(String|Buffer)} key - a valid hyper url
    * @param {boolean} deleteFiles - if true, then moves the drive folder to the trash bin
    */
   async delete (key, deleteFiles = false) {
