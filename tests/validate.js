@@ -2,7 +2,7 @@ const test = require('tape')
 const tempy = require('tempy')
 const { promises: { writeFile } } = require('fs')
 const { join } = require('path')
-const { validate, validateBeforeInit, validateOnRegister, validateOnUpdateParents, validateTitle, validateDescription, validateUrl, validateLinks, validateP2pcommons, validateType, validateSubtype, validateMain, validateMainExists, validateAvatar, validateAuthors, validateParents, validateParentsRegistered, validateFollows, validateContents, unflattenIndexMetadata } = require('../lib/validate')
+const { validate, validateBeforeInit, validateOnRegister, validateOnUpdateParents, validateTitle, validateDescription, validateUrl, validateLinks, validateP2pcommons, validateType, validateSubtype, validateMain, validateMainExists, validateAvatar, validateAuthors, validateParents, validateParentsRegistered, validateFollows, validateContents } = require('../lib/validate')
 const SDK = require('../')
 
 const defaultOpts = () => ({
@@ -31,42 +31,42 @@ test('Title - valid', t => {
 test('Title is required - missing', t => {
     t.throws(() => {
         validateTitle({})
-    })
+    }, /title_required/)
     t.end()
 })
 
 test('Title must be a string - is number', t => {
     t.throws(() => {
         validateTitle({ title: 5 })
-    })
+    }, /title_type/)
     t.end()
 })
 
 test('Title must be between 1 and 300 characters long - is empty', t => {
     t.throws(() => {
         validateTitle({ title: "" })
-    })
+    }, /title_length/)
     t.end()
 })
 
 test('Title must be between 1 and 300 characters long - is 301 characters', t => {
     t.throws(() => {
         validateTitle({ title: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" })
-    })
+    }, /title_length/)
     t.end()
 })
 
 test('Title may not consist of only whitespace - is a single space', t => {
     t.throws(() => {
         validateTitle({ title: " " })
-    })
+    }, /title_whitespace/)
     t.end()
 })
 
 test('Title may not consist of only whitespace - is various whitespace characters', t => {
     t.throws(() => {
         validateTitle({ title: "    　" })
-    })
+    }, /title_whitespace/)
     t.end()
 })
 
@@ -80,14 +80,14 @@ test('Description - valid description', t => {
 test('Description is required - no description', t => {
     t.throws(() => {
         validateDescription({})
-    })
+    }, /description_required/)
     t.end()
 })
 
 test('Description must be a string - is array', t => {
     t.throws(() => {
         validateDescription({ description: ["string"] })
-    })
+    }, /description_type/)
     t.end()
 })
 
@@ -103,7 +103,7 @@ test('URL - valid', t => {
 test('URL is required - missing', t => {
     t.throws(() => {
         validateUrl({}, "RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea")
-    })
+    }, /url_required/)
     t.end()
 })
 
@@ -112,7 +112,7 @@ test('URL must be a string - is object', t => {
         validateUrl({ 
             url: {} 
         }, "RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea")
-    })
+    }, /url_type/)
     t.end()
 })
 
@@ -121,7 +121,7 @@ test('URL must start with hyper:// protocol - no protocol', t => {
         validateUrl({ 
             url: "RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea" 
         }, "RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea")
-    })
+    }, /url_protocol/)
     t.end()
 })
 
@@ -130,7 +130,7 @@ test('URL must start with hyper:// protocol - dat protocol', t => {
         validateUrl({ 
             url: "dat://RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea" 
         }, "RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea")
-    })
+    }, /url_protocol/)
     t.end()
 })
 
@@ -139,7 +139,7 @@ test('URL must contain a valid non-versioned Hyperdrive key - invalid key', t =>
         validateUrl({ 
             url: "hyper://RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea2" 
         }, "RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea")
-    })
+    }, /url_format/)
     t.end()
 })
 
@@ -148,7 +148,7 @@ test('URL must contain a valid non-versioned Hyperdrive key - versioned key', t 
         validateUrl({ 
             url: "hyper://RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea+5" 
         }, "RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea")
-    })
+    }, /url_format/)
     t.end()
 })
 
@@ -157,7 +157,7 @@ test('URL must refer to the module\'s own Hyperdrive key - other key', t => {
         validateUrl({ 
             url: "hyper://RSZwR4CdKPqCd3hCVtD2H0lPCozzuYvEMtHkQkCJgvugwXW4YJCAvDwLM5inWfea" 
         }, "cca6eb69a3ad6104ca31b9fee7832d74068db16ef2169eaaab5b48096e128342")
-    })
+    }, /url_key/)
     t.end()
 })
 
@@ -174,14 +174,14 @@ test('Links - valid', t => {
 test('Links is required - missing', t => {
     t.throws(() => {
         validateLinks({})
-    })
+    }, /links_required/)
     t.end()
 })
 
 test('Links must be an object - is string', t => {
     t.throws(() => {
         validateLinks({ links: "https://creativecommons.org/publicdomain/zero/1.0/legalcode" })
-    })
+    }, /links_type/)
     t.end()
 })
 
@@ -191,7 +191,7 @@ test('Links must be an object with array values - has object values', t => {
             license: { href: "https://creativecommons.org/publicdomain/zero/1.0/legalcode" },
             spec: { href: "https://p2pcommons.com/specs/module/1.0.0" }
         }})
-    })
+    }, /links_arrayvalues/)
     t.end()
 })
 
@@ -200,7 +200,7 @@ test('License is required - missing', t => {
         validateLinks({ links: {
             spec: [{ href: "https://p2pcommons.com/specs/module/1.0.0" }]
         }})
-    })
+    }, /links_license_required/)
     t.end()
 })
 
@@ -213,7 +213,7 @@ test('License must contain one object - multiple objects', t => {
             ],
             spec: [{ href: "https://p2pcommons.com/specs/module/1.0.0" }]
         }})
-    })
+    }, /links_license_format/)
     t.end()
 })
 
@@ -225,7 +225,7 @@ test('License must contain one object - one array', t => {
             ],
             spec: [{ href: "https://p2pcommons.com/specs/module/1.0.0" }]
         }})
-    })
+    }, /links_license_format/)
     t.end()
 })
 
@@ -235,7 +235,7 @@ test('License object must have an href key - link key', t => {
             license: [{ link: "https://creativecommons.org/publicdomain/zero/1.0/legalcode" }],
             spec: [{ href: "https://p2pcommons.com/specs/module/1.0.0" }]
         }})
-    })
+    }, /links_license_href/)
     t.end()
 })
 
@@ -245,7 +245,7 @@ test('License link must be equal to CC0 - CC4 link', t => {
             license: [{ href: "https://creativecommons.org/licenses/by/4.0/legalcode" }],
             spec: [{ href: "https://p2pcommons.com/specs/module/1.0.0" }]
         }})
-    })
+    }, /links_license_value/)
     t.end()
 })
 
@@ -254,7 +254,7 @@ test('Spec is required - missing', t => {
         validateLinks({ links: {
             license: [{ href: "https://creativecommons.org/publicdomain/zero/1.0/legalcode" }]
         }})
-    })
+    }, /links_spec_required/)
     t.end()
 })
 
@@ -267,7 +267,7 @@ test('Spec must contain one object - multiple objects', t => {
                 { href: "https://p2pcommons.com/specs/module/1.0.1" }
             ]
         }})
-    })
+    }, /links_spec_format/)
     t.end()
 })
 
@@ -277,7 +277,7 @@ test('Spec must contain one object - one array', t => {
             license: [{ href: "https://creativecommons.org/publicdomain/zero/1.0/legalcode" }],
             spec: ["https://p2pcommons.com/specs/module/1.0.0"]
         }})
-    })
+    }, /links_spec_format/)
     t.end()
 })
 
@@ -287,7 +287,7 @@ test('Spec object must have an href key - link key', t => {
             license: [{ href: "https://creativecommons.org/publicdomain/zero/1.0/legalcode" }],
             spec: [{ link: "https://p2pcommons.com/specs/module/1.0.0" }]
         }})
-    })
+    }, /links_spec_href/)
     t.end()
 })
 
@@ -297,7 +297,7 @@ test('Spec url must refer to a valid p2pcommons module spec - other link', t => 
             license: [{ href: "https://creativecommons.org/publicdomain/zero/1.0/legalcode" }],
             spec: [{ href: "https://notp2pcommons.fake/specs/module/1.0.0" }]
         }})
-    })
+    }, /links_spec_validurl/)
     t.end()
 })
 
@@ -329,8 +329,8 @@ test('p2pcommons is required - missing', t => {
     t.throws(() => {
         validateP2pcommons({}, {
             version: 10
-        }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
-    })
+        }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f", false)
+    }, /p2pcommons_required/)
     t.end()
 })
 
@@ -354,7 +354,7 @@ test('p2pcommons must be an object - is array', t => {
         }, {
             version: 10
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
-    })
+    }, /p2pcommons_type/)
     t.end()
 })
 
@@ -376,7 +376,7 @@ test('Type is required - missing', t => {
                 subtype: "Q123"
             }
         })
-    })
+    }, /type_required/)
     t.end()
 })
 
@@ -387,7 +387,7 @@ test('Type must be a string - is number', t => {
                 type: 1
             }
         })
-    })
+    }, /type_type/)
     t.end()
 })
 
@@ -398,7 +398,7 @@ test('Type must be equal to \'profile\' or \'content\' - other value', t => {
                 type: "Q123"
             }
         })
-    })
+    }, /type_value/)
     t.end()
 })
 
@@ -431,7 +431,7 @@ test('Subtype is required - missing', t => {
                 type: "content"
             }
         })
-    })
+    }, /subtype_required/)
     t.end()
 })
 
@@ -442,7 +442,7 @@ test('Subtype must be a string - is number', t => {
                 subtype: 123
             }
         })
-    })
+    }, /subtype_type/)
     t.end()
 })
 
@@ -453,7 +453,7 @@ test('Subtype may only include standard alphanumeric characters - contains space
                 subtype: "Literature review"
             }
         })
-    })
+    }, /subtype_format/)
     t.end()
 })
 
@@ -484,7 +484,7 @@ test('Main is required - missing', t => {
         validateMain({
             p2pcommons: {}
         })
-    })
+    }, /main_required/)
     t.end()
 })
 
@@ -495,7 +495,18 @@ test('Main must be a string - is number', t => {
                 main: 123
             }
         })
-    })
+    }, /main_type/)
+    t.end()
+})
+
+test('Main may not be a .dotfile - is dotfile', t => {
+    t.throws(() => {
+        validateMain({
+            p2pcommons: { 
+                main: "folder1/.example.json"
+            }
+        })
+    }, /main_nodotfile/)
     t.end()
 })
 
@@ -506,7 +517,7 @@ test('Main may only contain a relative path within the module - URL', t => {
                 main: "https://www.lovelywebsite.com/lovelyfile.html"
             }
         })
-    })
+    }, /main_relativepath/)
     t.end()
 })
 
@@ -517,7 +528,7 @@ test('Main may only contain a relative path within the module - windows absolute
                 main: "C:\lovelyfile.html"
             }
         })
-    })
+    }, /main_relativepath/)
     t.end()
 })
 
@@ -528,7 +539,7 @@ test('Main may only contain a relative path within the module - mac absolute pat
                 main: "/home/user/module/lovelyfile.html"
             }
         })
-    })
+    }, /main_relativepath/)
     t.end()
 })
 
@@ -539,7 +550,7 @@ test('Main may only contain a relative path within the module - relative path ou
                 main: "../lovelyfile.html"
             }
         })
-    })
+    }, /main_relativepath/)
     t.end()
 })
 
@@ -550,8 +561,8 @@ test('Main file must exist upon registration - empty', t => {
             p2pcommons: { 
                 main: ""
             }
-        }, hyperdriveKey, p2p.baseDir)
-    })
+        }, hyperdriveKey, "")
+    }, /main_empty/)
     t.end()
 })
 
@@ -594,17 +605,20 @@ test('Main file must exist upon registration - does not exist', async t => {
         console.log(err)
     }
 
-    t.throws(() => {
-        try {
-            validateMainExists({
-                p2pcommons: { 
-                    main: "main.txt"
-                }
-            }, hyperdriveKey, p2p.baseDir)
-        } catch (err) {
-            throw new Error(err)
+    try {
+        validateMainExists({
+            p2pcommons: { 
+                main: "main.txt"
+            }
+        }, hyperdriveKey, p2p.baseDir)
+        t.fail('should throw')
+    } catch (err) {
+        if (err.code === "main_exists") {
+            t.pass('should throw')
+        } else {
+            t.fail('should throw main_exists')
         }
-    })
+    }
     await p2p.destroy()
     t.end()
 })
@@ -652,7 +666,7 @@ test('Avatar may only exist for profiles - is content', t => {
                 avatar: "avatar.png"
             }
         })
-    })
+    }, /avatar_moduletype/)
     t.end()
 })
 
@@ -664,7 +678,7 @@ test('Avatar must be a string - is array', t => {
                 avatar: ["avatar.png", "images/profilepic.jpg"]
             }
         })
-    })
+    }, /avatar_type/)
     t.end()
 })
 
@@ -676,7 +690,7 @@ test('Avatar may only contain a relative path within the module - URL', t => {
                 avatar: "https://www.lovelywebsite.com/avatar.png"
             }
         })
-    })
+    }, /avatar_relativepath/)
     t.end()
 })
 
@@ -688,7 +702,7 @@ test('Avatar may only contain a relative path within the module - windows absolu
                 avatar: "C:\avatar.png"
             }
         })
-    })
+    }, /avatar_relativepath/)
     t.end()
 })
 
@@ -700,7 +714,7 @@ test('Avatar may only contain a relative path within the module - mac absolute p
                 avatar: "/home/user/module/avatar.png"
             }
         })
-    })
+    }, /avatar_relativepath/)
     t.end()
 })
 
@@ -712,7 +726,7 @@ test('Avatar may only contain a relative path within the module - relative path 
                 avatar: "../avatar.png"
             }
         })
-    })
+    }, /avatar_relativepath/)
     t.end()
 })
 
@@ -749,7 +763,7 @@ test('Authors is required for content - missing', t => {
                 type: "content"
             }
         })
-    })
+    }, /authors_required/)
     t.end()
 })
 
@@ -764,7 +778,7 @@ test('Authors may only exist for content - exists for profile', t => {
                 ]
             }
         })
-    })
+    }, /authors_moduletype/)
     t.end()
 })
 
@@ -776,7 +790,7 @@ test('Authors must be an array - is string', t => {
                 authors: "8af39eb4a3eb3252141718f876d29220b8d6f539a045e833e9556aff2a5eacd8"
             }
         })
-    })
+    }, /authors_type/)
     t.end()
 })
 
@@ -792,7 +806,7 @@ test('Authors must be unique - contains duplicates', t => {
                 ]
             }
         })
-    })
+    }, /authors_unique/)
     t.end()
 })
 
@@ -807,7 +821,7 @@ test('Authors may only contain non-versioned Hyperdrive keys - contains versione
                 ]
             }
         })
-    })
+    }, /authors_format/)
     t.end()
 })
 
@@ -822,7 +836,7 @@ test('Authors may only contain non-versioned Hyperdrive keys - contains names', 
                 ]
             }
         })
-    })
+    }, /authors_format/)
     t.end()
 })
 
@@ -865,7 +879,7 @@ test('Parents is required for content - missing', t => {
         }, {
             version: 10
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
-    })
+    }, /parents_required/)
     t.end()
 })
 
@@ -882,7 +896,7 @@ test('Parents may only exist for content - exists for profile', t => {
         }, {
             version: 10
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
-    })
+    }, /parents_moduletype/)
     t.end()
 })
 
@@ -896,7 +910,7 @@ test('Parents must be an array - is string', t => {
         }, {
             version: 10
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
-    })
+    }, /parents_type/)
     t.end()
 })
 
@@ -933,7 +947,7 @@ test('Parents must be unique - contains duplicates', t => {
         }, {
             version: 10
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
-    })
+    }, /parents_unique/)
     t.end()
 })
 
@@ -950,7 +964,7 @@ test('Parents may only contain versioned Hyperdrive keys - contains non-versione
         }, {
             version: 10
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
-    })
+    }, /parents_format/)
     t.end()
 })
 
@@ -1004,7 +1018,7 @@ test('Parents may not refer to current or future versions of itself - contains f
         }, {
             version: 10
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
-    })
+    }, /parents_noselfreference/)
     t.end()
 })
 
@@ -1152,7 +1166,11 @@ test('Parents must be registered by at least one author - 1 parent, 1 author, no
         }, p2p)
         t.fail('should throw')
     } catch(err) {
-        t.pass('should throw')
+        if (err.code === "parents_registered") {
+            t.pass('should throw')
+        } else {
+            t.pass('should throw parents_registered')
+        }
     }
 
     await p2p.destroy()
@@ -1216,7 +1234,11 @@ test('Parents must be registered by at least one author - 2 parents, 2 authors, 
         }, p2p)
         t.fail('should throw')
     } catch(err) {
-        t.pass('should throw')
+        if (err.code === "parents_registered") {
+            t.pass('should throw')
+        } else {
+            t.pass('should throw parents_registered')
+        }
     }
 
     await p2p.destroy()
@@ -1257,7 +1279,7 @@ test('Follows is required for profiles - missing', t => {
                 type: "profile"
             }
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
-    })
+    }, /follows_required/)
     t.end()
 })
 
@@ -1272,7 +1294,7 @@ test('Follows may only exist for profiles - exists for content', t => {
                 ]
             }
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
-    })
+    }, /follows_moduletype/)
     t.end()
 })
 
@@ -1284,7 +1306,7 @@ test('Follows must be an array - is string', t => {
                 follows: "8af39eb4a3eb3252141718f876d29220b8d6f539a045e833e9556aff2a5eacd8+5"
             }
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
-    })
+    }, /follows_type/)
     t.end()
 })
 
@@ -1317,7 +1339,7 @@ test('Follows must be unique - contains duplicates', t => {
                 ]
             }
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
-    })
+    }, /follows_unique/)
     t.end()
 })
 
@@ -1332,7 +1354,7 @@ test('Follows may only contain Hyperdrive keys (versioned or non-versioned) - co
                 ]
             }
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
-    })
+    }, /follows_format/)
     t.end()
 })
 
@@ -1348,7 +1370,7 @@ test('Follows may not refer to the profile\'s own Hyperdrive key - contains unve
                 ]
             }
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
-    })
+    }, /follows_noselfreference/)
     t.end()
 })
 
@@ -1364,7 +1386,7 @@ test('Follows may not refer to the profile\'s own Hyperdrive key - contains vers
                 ]
             }
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
-    })
+    }, /follows_noselfreference/)
     t.end()
 })
 
@@ -1402,7 +1424,7 @@ test('Contents is required for profiles - missing', t => {
                 type: "profile"
             }
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
-    })
+    }, /contents_required/)
     t.end()
 })
 
@@ -1417,7 +1439,7 @@ test('Contents may only exist for profiles - exists for content', t => {
                 ]
             }
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
-    })
+    }, /contents_moduletype/)
     t.end()
 })
 
@@ -1429,7 +1451,7 @@ test('Contents must be an array - is string', t => {
                 contents: "8af39eb4a3eb3252141718f876d29220b8d6f539a045e833e9556aff2a5eacd8+5"
             }
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
-    })
+    }, /contents_type/)
     t.end()
 })
 
@@ -1462,7 +1484,7 @@ test('Contents must be unique - contains duplicates', t => {
                 ]
             }
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
-    })
+    }, /contents_unique/)
     t.end()
 })
 
@@ -1477,7 +1499,7 @@ test('Contents may only contain Hyperdrive keys (versioned or non-versioned) - c
                 ]
             }
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
-    })
+    }, /contents_format/)
     t.end()
 })
 
@@ -1537,7 +1559,7 @@ test('Full validation - invalid content (future self-reference parent)', t => {
         }, {
             version: 50
         }, "00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23")
-    })
+    }, /parents_noselfreference/)
     t.end()
 })
 
@@ -1592,7 +1614,35 @@ test('Full validation - invalid profile (contents missing)', t => {
         }, {
             version: 50
         }, "cca6eb69a3ad6104ca31b9fee7832d74068db16ef2169eaaab5b48096e128342")
-    })
+    }, /contents_required/)
+    t.end()
+})
+
+test('Full validation - flattened json', t => {
+    t.throws(() => {
+        validate({
+            "title": "Content example",
+            "description": "",
+            "url": "hyper://00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23",
+            "links": {
+               "license": [{"href": "https://creativecommons.org/publicdomain/zero/1.0/legalcode"}],
+               "spec": [{"href": "https://p2pcommons.com/specs/module/1.0.0"}]
+            },
+            "type": "content",
+            "subtype": "",
+            "main": "test-content.html",
+            "authors": [
+                "cca6eb69a3ad6104ca31b9fee7832d74068db16ef2169eaaab5b48096e128342",
+                "f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4"
+            ],
+            "parents": [
+                "f0abcd6b1c4fc524e2d48da043b3d8399b96d9374d6606fca51182ee230b6b59+12",
+                "527f404aa77756b91cba4e3ba9fe30f72ee3eb5eef0f4da87172745f9389d1e5+4032"
+            ]
+        }, {
+            version: 50
+        }, "00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23", false)
+    }, /p2pcommons_required/)
     t.end()
 })
 
@@ -1651,7 +1701,8 @@ test('Validate on register - valid', async t => {
 
     let { rawJSON: content } = await p2p.init({
         type: "content",
-        title: "Validate on register - valid"
+        title: "Validate on register - valid",
+        authors: [ profile.url ]
     })
     const hyperdriveKey = content.url.replace("dat://", "")
 
@@ -1663,15 +1714,14 @@ test('Validate on register - valid', async t => {
 
     ;({ rawJSON: content, metadata } = await p2p.set({
         url: content.url,
-        main: "main.txt",
-        authors: [ profile.url ]
+        main: "main.txt"
     }))
 
     content.url = content.url.replace("dat://", "hyper://") // TEMP
     content.authors[0] = content.authors[0].replace("dat://", "")
 
     t.doesNotThrow(() => {
-        validateOnRegister(unflattenIndexMetadata(content), metadata, hyperdriveKey, p2p.baseDir)
+        validateOnRegister(content, metadata, hyperdriveKey, p2p.baseDir)
     })
     await p2p.destroy()
     t.end()
@@ -1708,8 +1758,8 @@ test('Validate on register - invalid (main file doesn\'t exist)', async t => {
     content.authors[0] = content.authors[0].replace("dat://", "")
 
     t.throws(() => {
-        validateOnRegister(unflattenIndexMetadata(content), metadata, hyperdriveKey, p2p.baseDir)
-    })
+        validateOnRegister(content, metadata, hyperdriveKey, p2p.baseDir)
+    }, /main_exists/)
     await p2p.destroy()
     t.end()
 })
@@ -1755,7 +1805,7 @@ test('Validate on update parents - valid', async t => {
     child.authors[0] = child.authors[0].replace("dat://", "")
 
     try {
-        await validateOnUpdateParents(unflattenIndexMetadata(child), childMetadata, childHyperdriveKey, p2p)
+        await validateOnUpdateParents(child, childMetadata, childHyperdriveKey, p2p)
         t.pass('should not throw')
     } catch(err) {
         t.fail(err)
@@ -1804,10 +1854,14 @@ test('Validate on update parents - invalid (parent not published)', async t => {
     child.authors[0] = child.authors[0].replace("dat://", "")
 
     try {
-        await validateOnUpdateParents(unflattenIndexMetadata(child), childMetadata, childHyperdriveKey, p2p)
+        await validateOnUpdateParents(child, childMetadata, childHyperdriveKey, p2p)
         t.fail('should throw')
     } catch(err) {
-        t.pass('should throw')
+        if (err.code === "parents_registered") {
+            t.pass('should throw')
+        } else {
+            t.pass('should throw parents_registered')
+        }
     }
 
     await p2p.destroy()
