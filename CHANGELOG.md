@@ -6,6 +6,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2020-07-08
+### Added
+- New Error: EBUSYError #177
+
+### Changed
+- Dynamic p2pcommons URLs #178
+
+## [0.6.1] - 2020-07-07
+### Fixed
+- loading issue
+- broken links #170
+- check closing status before close drive on destroy #175
+
+## [0.6.0] - 2020-06-30
+### Changed
+- renamed (un)publish to (de)register
+- renamed dat.json to index.json
+- bump hypercore-crypto dep to version 2
+
 ## [0.5.8] - 2020-04-01
 ### Added
 - unpublish on delete
@@ -66,7 +85,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ready method call is now implicit
 - extra params now throw validationError
 
-[Unreleased]: https://github.com/p2pcommons/sdk-js/compare/v0.5.8...HEAD
+[Unreleased]: https://github.com/p2pcommons/sdk-js/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/p2pcommons/sdk-js/compare/v0.6.1...v0.6.2
+[0.6.1]: https://github.com/p2pcommons/sdk-js/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/p2pcommons/sdk-js/compare/v0.5.8...v0.6.0
 [0.5.8]: https://github.com/p2pcommons/sdk-js/compare/v0.5.7...v0.5.8
 [0.5.7]: https://github.com/p2pcommons/sdk-js/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/p2pcommons/sdk-js/compare/v0.5.5...v0.5.6

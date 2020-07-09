@@ -2,11 +2,10 @@
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
 [![All Contributors](https://img.shields.io/badge/all_contributors-3-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
-
 ![npm version](https://img.shields.io/npm/v/@p2pcommons/sdk-js?color=4F2D84)
 ![ci](https://github.com/p2pcommons/sdk-js/workflows/ci/badge.svg)
 
-The base Software Development Kit in JavaScript (`sdk-js`) for a p2p communication infrastructure. More
+NodeJS development kit (`sdk-js`) for the peer-to-peer commons (p2pcommons). More
 information on this infrastructure is available in this [conceptual
 publication](https://doi.org/10.3390/publications6020021) and this
 [technical publication](https://chartgerink.github.io/2018dat-com/)
@@ -18,7 +17,9 @@ The specifications for `sdk-js` are available from [`@p2pcommons/specs`](https:/
 
 ## Install
 
-`npm install @p2pcommons/sdk-js`
+```
+npm install @p2pcommons/sdk-js
+```
 
 ## Usage
 
@@ -37,9 +38,9 @@ const p2p = new P2PCommons()
 ;(async () => {
 
   // create a content module
-  await p2p.init({ type: 'content' }) // ~/.p2pcommons/hash/dat.json --> type: content
+  await p2p.init({ type: 'content' }) // ~/.p2pcommons/hash/index.json --> type: content
   // create a profile module
-  await p2p.init({ type: 'profile' }) // ~/.p2pcommons/hash/dat.json --> type: profile
+  await p2p.init({ type: 'profile' }) // ~/.p2pcommons/hash/index.json --> type: profile
 })()
 ```
 
@@ -70,7 +71,7 @@ Returns a new instance of the sdk.
 
 Creates a new folder for 'content' or 'profile' according to the received `data.type` value.
 
-- `data` object following the [p2pcommons module spec](https://github.com/p2pcommons/specs/blob/master/module.md). The only required field is `type`.
+- `data` object following the [p2pcommons module spec](https://github.com/p2pcommons/specs/blob/main/module.md). The only required field is `type`.
 
 Returns an object containing the **flattened** rawJSON and metadata (**version, lastModified, isWritable**) for the newly created module.
 
@@ -78,12 +79,12 @@ Returns an object containing the **flattened** rawJSON and metadata (**version, 
 
 > _async_ `get(hash: string)`
 
-Retrieves raw datJSON item and metadata from the local db.
+Retrieves raw indexJSON item and metadata from the local db.
 
 - hash: represents the key (`url`) to be looked for. It is the buffer archive key `.toString('hex')`
 
 Returns an object with:
-- **rawJSON**: flattened datJSON data
+- **rawJSON**: flattened indexJSON data
 - **metadata**: Extra information like last modified time, latest archive version, etc
 
 ### set
@@ -131,17 +132,17 @@ Used to obtain a file descriptor from the `main` file of a module.
 
 - key: represents the module key (`url`) to be looked for. It is the buffer archive key `.toString('hex')`
 
-### publish
+### register
 
-> _async_ `publish(contentKey: string or buffer, profileKey: string or buffer)`
+> _async_ `register(contentKey: string or buffer, profileKey: string or buffer)`
 
-Register new content into a profile. The new content is added to the profile's `p2pcommons.contents`.
+Register (add) new content into a profile. The new content is added to the profile's `p2pcommons.contents`.
 
-### unpublish
+### deregister
 
-> _async_ `unpublish(contentKey: string or buffer, profileKey: string or buffer)`
+> _async_ `deregister(contentKey: string or buffer, profileKey: string or buffer)`
 
-Remove content from a profile.
+Deregister (remove) content from a profile.
 
 ### follow
 
@@ -166,7 +167,7 @@ Get a module from the local db or the swarm. If the module is not present on the
 - download: a boolean indicating if module directory needs to be saved on disk. [DEFAULT=TRUE]
 
 Returns a [cancelable promise](https://github.com/sindresorhus/p-cancelable). When fullfiled returns an object with multiple values:
-- **rawJSON**: the module `dat.json` content (**flattened**)
+- **rawJSON**: the module `index.json` content (**flattened**)
 - **metadata**: an object with modules metadata
 - **versionedKey**: an string indicating the full module url obtained. E.g: `dat://${mKey}+${version}`
 - **dwldHandle**: it contains a download event emitter, you can listen to `end` event to know when the download has been completed. It's defined only if `download === true`.
@@ -212,6 +213,14 @@ A more general error, used to indicate if something is missing.
 
 Error object contains some useful properties:
 - `key`: A string indicating the missing param
+
+### EBUSYError
+
+Triggered usually when there are conflicts with other apps watching the FS.
+
+Error object contains some useful properties:
+- `description`: A string indicating the error message
+- `key`: A string indicating the hyperdrive involved
 
 ## Release
 

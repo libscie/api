@@ -10,7 +10,7 @@ process.once('SIGINT', () => commons.destroy())
   const { rawJSON: contentMetadata1 } = await commons.init({
     type: 'content',
     title: 'intro to lorem ipsum'
-  }) // ~/.p2pcommons/hash/dat.json --> type: content
+  }) // ~/.p2pcommons/hash/index.json --> type: content
   await commons.init({
     type: 'content',
     title: 'Sample Content 2',
@@ -23,7 +23,7 @@ process.once('SIGINT', () => commons.destroy())
   })
 
   // create a profile
-  await commons.init({ type: 'profile', title: 'Professor X' }) // ~/.p2pcommons/hash/dat.json --> type: profile
+  await commons.init({ type: 'profile', title: 'Professor X' }) // ~/.p2pcommons/hash/index.json --> type: profile
 
   // get and update a content module
   const key = contentMetadata1.url.toString('hex')
@@ -53,12 +53,12 @@ process.once('SIGINT', () => commons.destroy())
   console.log('Profiles length', allProfiles.length)
 
   const prof = allProfiles[0].rawJSON
-  // publish external dat to a local profile
+  // register external dat to a local profile
   const externalContentUrl = process.argv[2]
   if (externalContentUrl) {
-    console.log('Publishing content...', externalContentUrl)
-    await commons.publish(externalContentUrl, prof.url)
-    console.log('content published successfully')
+    console.log('Registering content...', externalContentUrl)
+    await commons.register(externalContentUrl, prof.url)
+    console.log('content registered successfully')
   }
 
   const { rawJSON: profileUpdated } = await commons.get(prof.url)
