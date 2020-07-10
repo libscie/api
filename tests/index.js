@@ -75,7 +75,7 @@ test('init: create content module', async t => {
     output.links.license[0].href,
     'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
   )
-  t.same(output.links.spec[0].href, `https://p2pcommons.com/specs/module/${vers.spec}`)
+  t.same(output.links.spec[0].href, `https://p2pcommons.com/specs/module/${vers.module}`)
   t.same(
     output.main,
     '',
@@ -156,7 +156,7 @@ test('init: create profile module', async t => {
     output.links.license[0].href,
     'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
   )
-  t.same(output.links.spec[0].href, `https://p2pcommons.com/specs/module/${vers.spec}`)
+  t.same(output.links.spec[0].href, `https://p2pcommons.com/specs/module/${vers.module}`)
   t.same(output.follows, [])
   t.same(output.contents, [])
   await p2p.destroy()
