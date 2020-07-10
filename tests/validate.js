@@ -2,7 +2,7 @@ const test = require('tape')
 const tempy = require('tempy')
 const { promises: { writeFile } } = require('fs')
 const { join } = require('path')
-const { validate, validateBeforeInit, validateOnRegister, validateOnUpdateParents, validateTitle, validateDescription, validateUrl, validateLinks, validateP2pcommons, validateType, validateSubtype, validateMain, validateMainExists, validateAvatar, validateAuthors, validateParents, validateParentsRegistered, validateFollows, validateContents } = require('../lib/validate')
+const { validate, validateDraft, validateBeforeInit, validateOnUpdateParents, validateTitle, validateDescription, validateUrl, validateLinks, validateP2pcommons, validateType, validateSubtype, validateMain, validateMainDraft, validateAvatar, validateAuthors, validateParents, validateParentsRegistered, validateFollows, validateContents } = require('../lib/validate')
 const SDK = require('../')
 
 const defaultOpts = () => ({
@@ -304,7 +304,7 @@ test('Spec url must refer to a valid p2pcommons module spec - other link', t => 
 test('p2pcommons - valid', t => {
     t.doesNotThrow(() => {
         validateP2pcommons({
-            url: "dat://4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f",
+            url: "hyper://4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f",
             p2pcommons: {
                 "type": "content",
                 "subtype": "",
@@ -318,18 +318,14 @@ test('p2pcommons - valid', t => {
                     "527f404aa77756b91cba4e3ba9fe30f72ee3eb5eef0f4da87172745f9389d1e5+4032"
                 ]
             }
-        }, {
-            version: 10
-        }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
+        })
     })
     t.end()
 })
 
 test('p2pcommons is required - missing', t => {
     t.throws(() => {
-        validateP2pcommons({}, {
-            version: 10
-        }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f", false)
+        validateP2pcommons({}, false)
     }, /p2pcommons_required/)
     t.end()
 })
@@ -337,7 +333,7 @@ test('p2pcommons is required - missing', t => {
 test('p2pcommons must be an object - is array', t => {
     t.throws(() => {
         validateP2pcommons({
-            url: "dat://4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f",
+            url: "hyper://4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f",
             p2pcommons: [{
                 "type": "content",
                 "subtype": "",
@@ -351,9 +347,7 @@ test('p2pcommons must be an object - is array', t => {
                     "527f404aa77756b91cba4e3ba9fe30f72ee3eb5eef0f4da87172745f9389d1e5+4032"
                 ]
             }]
-        }, {
-            version: 10
-        }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
+        })
     }, /p2pcommons_type/)
     t.end()
 })
@@ -459,7 +453,7 @@ test('Subtype may only include standard alphanumeric characters - contains space
 
 test('Main - valid', t => {
     t.doesNotThrow(() => {
-        validateMain({ 
+        validateMainDraft({ 
             p2pcommons: { 
                 main: "folder1/test-content.html"
             }
@@ -470,7 +464,7 @@ test('Main - valid', t => {
 
 test('Main - empty', t => {
     t.doesNotThrow(() => {
-        validateMain({ 
+        validateMainDraft({ 
             p2pcommons: { 
                 main: ""
             }
@@ -481,7 +475,7 @@ test('Main - empty', t => {
 
 test('Main is required - missing', t => {
     t.throws(() => {
-        validateMain({
+        validateMainDraft({
             p2pcommons: {}
         })
     }, /main_required/)
@@ -490,7 +484,7 @@ test('Main is required - missing', t => {
 
 test('Main must be a string - is number', t => {
     t.throws(() => {
-        validateMain({
+        validateMainDraft({
             p2pcommons: { 
                 main: 123
             }
@@ -501,7 +495,7 @@ test('Main must be a string - is number', t => {
 
 test('Main may not be a .dotfile - is dotfile', t => {
     t.throws(() => {
-        validateMain({
+        validateMainDraft({
             p2pcommons: { 
                 main: "folder1/.example.json"
             }
@@ -512,7 +506,7 @@ test('Main may not be a .dotfile - is dotfile', t => {
 
 test('Main may only contain a relative path within the module - URL', t => {
     t.throws(() => {
-        validateMain({
+        validateMainDraft({
             p2pcommons: { 
                 main: "https://www.lovelywebsite.com/lovelyfile.html"
             }
@@ -523,7 +517,7 @@ test('Main may only contain a relative path within the module - URL', t => {
 
 test('Main may only contain a relative path within the module - windows absolute path', t => {
     t.throws(() => {
-        validateMain({
+        validateMainDraft({
             p2pcommons: { 
                 main: "C:\lovelyfile.html"
             }
@@ -534,7 +528,7 @@ test('Main may only contain a relative path within the module - windows absolute
 
 test('Main may only contain a relative path within the module - mac absolute path', t => {
     t.throws(() => {
-        validateMain({
+        validateMainDraft({
             p2pcommons: { 
                 main: "/home/user/module/lovelyfile.html"
             }
@@ -545,7 +539,7 @@ test('Main may only contain a relative path within the module - mac absolute pat
 
 test('Main may only contain a relative path within the module - relative path outside module', t => {
     t.throws(() => {
-        validateMain({
+        validateMainDraft({
             p2pcommons: { 
                 main: "../lovelyfile.html"
             }
@@ -554,25 +548,39 @@ test('Main may only contain a relative path within the module - relative path ou
     t.end()
 })
 
-test('Main file must exist upon registration - empty', t => {
+test('Main may only be empty for profiles - empty for content', t => {
     const hyperdriveKey = "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f"
     t.throws(() => {
-        validateMainExists({
-            p2pcommons: { 
+        validateMain({
+            p2pcommons: {
+                type: "content",
                 main: ""
             }
         }, hyperdriveKey, "")
-    }, /main_empty/)
+    }, /main_notempty/)
     t.end()
 })
 
-test('Main file must exist upon registration - exists', async t => {
+test('Main may only be empty for profiles - empty for profile', t => {
+    const hyperdriveKey = "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f"
+    t.doesNotThrow(() => {
+        validateMain({
+            p2pcommons: {
+                type: "profile",
+                main: ""
+            }
+        }, hyperdriveKey, "")
+    })
+    t.end()
+})
+
+test('Main must refer to an existing file - exists', async t => {
     const p2p = createDb()
     const { rawJSON: content } = await p2p.init({
         type: "content",
         title: "Test main file - exists"
     })
-    const hyperdriveKey = content.url.replace("dat://", "")
+    const hyperdriveKey = content.url.replace("hyper://", "")
 
     try {
         await writeFile(join(p2p.baseDir, hyperdriveKey, 'main.txt'), 'hello')
@@ -581,7 +589,7 @@ test('Main file must exist upon registration - exists', async t => {
     }
 
     t.doesNotThrow(() => {
-        validateMainExists({
+        validateMain({
             p2pcommons: { 
                 main: "main.txt"
             }
@@ -591,13 +599,13 @@ test('Main file must exist upon registration - exists', async t => {
     t.end()
 })
 
-test('Main file must exist upon registration - does not exist', async t => {
+test('Main must refer to an existing file - does not exist', async t => {
     const p2p = createDb()
     const { rawJSON: content } = await p2p.init({
         type: "content",
         title: "Test main file - exists"
     })
-    const hyperdriveKey = content.url.replace("dat://", "")
+    const hyperdriveKey = content.url.replace("hyper://", "")
 
     try {
         await writeFile(join(p2p.baseDir, hyperdriveKey, 'main2.txt'), 'hello')
@@ -606,7 +614,7 @@ test('Main file must exist upon registration - does not exist', async t => {
     }
 
     try {
-        validateMainExists({
+        validateMain({
             p2pcommons: { 
                 main: "main.txt"
             }
@@ -1034,7 +1042,7 @@ test('Parents must be registered by at least one author - 1 parent, 1 author, re
         type: "content",
         title: "Parent content 1"
     })
-    const parentHyperdriveKey = parent.url.replace("dat://", "")
+    const parentHyperdriveKey = parent.url.replace("hyper://", "")
 
     try {
         await writeFile(join(p2p.baseDir, parentHyperdriveKey, 'main.txt'), 'hello')
@@ -1048,7 +1056,7 @@ test('Parents must be registered by at least one author - 1 parent, 1 author, re
         authors: [ profile.url ]
     }))
 
-    await p2p.publish(`${parent.url}+${parentMetadata.version}`, profile.url)
+    await p2p.register(`${parent.url}+${parentMetadata.version}`, profile.url)
 
     try {
         await validateParentsRegistered({
@@ -1082,13 +1090,13 @@ test('Parents must be registered by at least one author - 2 parents, 2 authors, 
         type: "content",
         title: "Parent content 1"
     })
-    const parent1HyperdriveKey = parent1.url.replace("dat://", "")
+    const parent1HyperdriveKey = parent1.url.replace("hyper://", "")
 
     let { rawJSON: parent2, metadata: parent2Metadata } = await p2p.init({
         type: "content",
         title: "Parent content 2"
     })
-    const parent2HyperdriveKey = parent2.url.replace("dat://", "")
+    const parent2HyperdriveKey = parent2.url.replace("hyper://", "")
 
     try {
         await writeFile(join(p2p.baseDir, parent1HyperdriveKey, 'main.txt'), 'hello')
@@ -1109,8 +1117,8 @@ test('Parents must be registered by at least one author - 2 parents, 2 authors, 
         authors: [ profile2.url ]
     }))
 
-    await p2p.publish(`${parent1.url}+${parent1Metadata.version}`, profile2.url)
-    await p2p.publish(`${parent2.url}+${parent2Metadata.version}`, profile2.url)
+    await p2p.register(`${parent1.url}+${parent1Metadata.version}`, profile2.url)
+    await p2p.register(`${parent2.url}+${parent2Metadata.version}`, profile2.url)
 
     try {
         await validateParentsRegistered({
@@ -1142,7 +1150,7 @@ test('Parents must be registered by at least one author - 1 parent, 1 author, no
         type: "content",
         title: "Parent content 1"
     })
-    const parent1HyperdriveKey = parent1.url.replace("dat://", "")
+    const parent1HyperdriveKey = parent1.url.replace("hyper://", "")
 
     try {
         await writeFile(join(p2p.baseDir, parent1HyperdriveKey, 'main.txt'), 'hello')
@@ -1194,13 +1202,13 @@ test('Parents must be registered by at least one author - 2 parents, 2 authors, 
         type: "content",
         title: "Parent content 1"
     })
-    const parent1HyperdriveKey = parent1.url.replace("dat://", "")
+    const parent1HyperdriveKey = parent1.url.replace("hyper://", "")
 
     let { rawJSON: parent2, metadata: parent2Metadata } = await p2p.init({
         type: "content",
         title: "Parent content 2"
     })
-    const parent2HyperdriveKey = parent2.url.replace("dat://", "")
+    const parent2HyperdriveKey = parent2.url.replace("hyper://", "")
 
     try {
         await writeFile(join(p2p.baseDir, parent1HyperdriveKey, 'main.txt'), 'hello')
@@ -1221,7 +1229,7 @@ test('Parents must be registered by at least one author - 2 parents, 2 authors, 
         authors: [ profile2.url ]
     }))
 
-    await p2p.publish(`${parent1.url}+${parent1Metadata.version}`, profile1.url)
+    await p2p.register(`${parent1.url}+${parent1Metadata.version}`, profile1.url)
 
     try {
         await validateParentsRegistered({
@@ -1350,7 +1358,7 @@ test('Follows may only contain Hyperdrive keys (versioned or non-versioned) - co
                 type: "profile",
                 follows: [
                     "cca6eb69a3ad6104ca31b9fee7832d74068db16ef2169eaaab5b48096e128342",
-                    "dat://8af39eb4a3eb3252141718f876d29220b8d6f539a045e833e9556aff2a5eacd8+5"
+                    "hyper://8af39eb4a3eb3252141718f876d29220b8d6f539a045e833e9556aff2a5eacd8+5"
                 ]
             }
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
@@ -1495,7 +1503,7 @@ test('Contents may only contain Hyperdrive keys (versioned or non-versioned) - c
                 type: "profile",
                 contents: [
                     "cca6eb69a3ad6104ca31b9fee7832d74068db16ef2169eaaab5b48096e128342",
-                    "dat://8af39eb4a3eb3252141718f876d29220b8d6f539a045e833e9556aff2a5eacd8+5"
+                    "hyper://8af39eb4a3eb3252141718f876d29220b8d6f539a045e833e9556aff2a5eacd8+5"
                 ]
             }
         }, "4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f")
@@ -1503,9 +1511,9 @@ test('Contents may only contain Hyperdrive keys (versioned or non-versioned) - c
     t.end()
 })
 
-test('Full validation - valid content', t => {
+test('Validate draft - valid content', t => {
     t.doesNotThrow(() => {
-        validate({
+        validateDraft({
             "title": "Content example",
             "description": "",
             "url": "hyper://00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23",
@@ -1533,9 +1541,9 @@ test('Full validation - valid content', t => {
     t.end()
 })
 
-test('Full validation - invalid content (future self-reference parent)', t => {
+test('Validate draft - invalid content (future self-reference parent)', t => {
     t.throws(() => {
-        validate({
+        validateDraft({
             "title": "Content example",
             "description": "",
             "url": "hyper://00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23",
@@ -1563,9 +1571,9 @@ test('Full validation - invalid content (future self-reference parent)', t => {
     t.end()
 })
 
-test('Full validation - valid profile', t => {
+test('Validate draft - valid profile', t => {
     t.doesNotThrow(() => {
-        validate({
+        validateDraft({
             "title": "Profile example",
             "description": "",
             "url": "hyper://cca6eb69a3ad6104ca31b9fee7832d74068db16ef2169eaaab5b48096e128342",
@@ -1592,9 +1600,9 @@ test('Full validation - valid profile', t => {
     t.end()
 })
 
-test('Full validation - invalid profile (contents missing)', t => {
+test('Validate draft - invalid profile (contents missing)', t => {
     t.throws(() => {
-        validate({
+        validateDraft({
             "title": "Profile example",
             "description": "",
             "url": "hyper://cca6eb69a3ad6104ca31b9fee7832d74068db16ef2169eaaab5b48096e128342",
@@ -1618,9 +1626,9 @@ test('Full validation - invalid profile (contents missing)', t => {
     t.end()
 })
 
-test('Full validation - flattened json', t => {
+test('Validate draft - flattened json', t => {
     t.throws(() => {
-        validate({
+        validateDraft({
             "title": "Content example",
             "description": "",
             "url": "hyper://00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23",
@@ -1646,52 +1654,45 @@ test('Full validation - flattened json', t => {
     t.end()
 })
 
-test('Validate before init - content url & links missing', t => {
+test('Validate before init - only title and type content, flattened', t => {
     t.doesNotThrow(() => {
         validateBeforeInit({
             "title": "Content example",
-            "description": "",
-            "p2pcommons": {
-              "type": "content",
-              "subtype": "",
-              "main": "test-content.html",
-              "authors": [
-                "cca6eb69a3ad6104ca31b9fee7832d74068db16ef2169eaaab5b48096e128342",
-                "f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4"
-              ],
-              "parents": [
-                "f0abcd6b1c4fc524e2d48da043b3d8399b96d9374d6606fca51182ee230b6b59+12",
-                "527f404aa77756b91cba4e3ba9fe30f72ee3eb5eef0f4da87172745f9389d1e5+4032"
-              ]
-            }
+            "type": "content"
         })
     })
     t.end()
 })
 
-test('Validate before init - profile url & links missing', t => {
+test('Validate before init - only title and type profile, flattened', t => {
     t.doesNotThrow(() => {
         validateBeforeInit({
             "title": "Profile example",
-            "description": "",
-            "p2pcommons": {
-              "type": "profile",
-              "subtype": "",
-              "main": "test-profile.html",
-              "avatar": "./test.png",
-              "follows": [
-                "f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4"
-              ],
-              "contents": [
-                "00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23+12"
-              ]
-            }
+            "type": "profile"
         })
     })
     t.end()
 })
 
-test('Validate on register - valid', async t => {
+test('Validate before init - title missing', t => {
+    t.throws(() => {
+        validateBeforeInit({
+            "type": "content"
+        })
+    }, /title_required/)
+    t.end()
+})
+
+test('Validate before init - type missing', t => {
+    t.throws(() => {
+        validateBeforeInit({
+            "title": "Profile example"
+        })
+    }, /type_required/)
+    t.end()
+})
+
+test('Validate (full) - valid', async t => {
     const p2p = createDb()
 
     let { rawJSON: profile } = await p2p.init({
@@ -1701,10 +1702,10 @@ test('Validate on register - valid', async t => {
 
     let { rawJSON: content } = await p2p.init({
         type: "content",
-        title: "Validate on register - valid",
+        title: "Validate (full) - valid",
         authors: [ profile.url ]
     })
-    const hyperdriveKey = content.url.replace("dat://", "")
+    const hyperdriveKey = content.url.replace("hyper://", "")
 
     try {
         await writeFile(join(p2p.baseDir, hyperdriveKey, 'main.txt'), 'hello')
@@ -1717,17 +1718,16 @@ test('Validate on register - valid', async t => {
         main: "main.txt"
     }))
 
-    content.url = content.url.replace("dat://", "hyper://") // TEMP
-    content.authors[0] = content.authors[0].replace("dat://", "")
+    content.authors[0] = content.authors[0].replace("hyper://", "") //TEMP
 
     t.doesNotThrow(() => {
-        validateOnRegister(content, metadata, hyperdriveKey, p2p.baseDir)
+        validate(content, metadata, hyperdriveKey, p2p.baseDir)
     })
     await p2p.destroy()
     t.end()
 })
 
-test('Validate on register - invalid (main file doesn\'t exist)', async t => {
+test('Validate (full) - invalid (main file doesn\'t exist)', async t => {
     const p2p = createDb()
 
     let { rawJSON: profile } = await p2p.init({
@@ -1737,9 +1737,9 @@ test('Validate on register - invalid (main file doesn\'t exist)', async t => {
 
     let { rawJSON: content } = await p2p.init({
         type: "content",
-        title: "Validate on register - valid"
+        title: "Validate (full) - valid"
     })
-    const hyperdriveKey = content.url.replace("dat://", "")
+    const hyperdriveKey = content.url.replace("hyper://", "")
 
     try {
         await writeFile(join(p2p.baseDir, hyperdriveKey, 'main2.txt'), 'hello')
@@ -1754,11 +1754,10 @@ test('Validate on register - invalid (main file doesn\'t exist)', async t => {
 
     content.main = "main.txt"
 
-    content.url = content.url.replace("dat://", "hyper://") // TEMP
-    content.authors[0] = content.authors[0].replace("dat://", "")
+    content.authors[0] = content.authors[0].replace("hyper://", "") // TEMP
 
     t.throws(() => {
-        validateOnRegister(content, metadata, hyperdriveKey, p2p.baseDir)
+        validate(content, metadata, hyperdriveKey, p2p.baseDir)
     }, /main_exists/)
     await p2p.destroy()
     t.end()
@@ -1776,7 +1775,7 @@ test('Validate on update parents - valid', async t => {
         type: "content",
         title: "Parent content 1"
     })
-    const parentHyperdriveKey = parent.url.replace("dat://", "")
+    const parentHyperdriveKey = parent.url.replace("hyper://", "")
 
     try {
         await writeFile(join(p2p.baseDir, parentHyperdriveKey, 'main.txt'), 'hello')
@@ -1790,19 +1789,18 @@ test('Validate on update parents - valid', async t => {
         authors: [ profile.url ]
     }))
 
-    await p2p.publish(`${parent.url}+${parentMetadata.version}`, profile.url)
+    await p2p.register(`${parent.url}+${parentMetadata.version}`, profile.url)
 
     const { rawJSON: child, metadata: childMetadata } = await p2p.init({
         type: "content",
         title: "Child content 1",
         authors: [ profile.url ]
     })
-    const childHyperdriveKey = child.url.replace("dat://", "")
+    const childHyperdriveKey = child.url.replace("hyper://", "")
     child.parents = [
         `${parentHyperdriveKey}+${parentMetadata.version}`
     ]
-    child.url = child.url.replace("dat://", "hyper://") // TEMP
-    child.authors[0] = child.authors[0].replace("dat://", "")
+    child.authors[0] = child.authors[0].replace("hyper://", "") //TEMP
 
     try {
         await validateOnUpdateParents(child, childMetadata, childHyperdriveKey, p2p)
@@ -1827,7 +1825,7 @@ test('Validate on update parents - invalid (parent not published)', async t => {
         type: "content",
         title: "Parent content 1"
     })
-    const parent1HyperdriveKey = parent1.url.replace("dat://", "")
+    const parent1HyperdriveKey = parent1.url.replace("hyper://", "")
 
     try {
         await writeFile(join(p2p.baseDir, parent1HyperdriveKey, 'main.txt'), 'hello')
@@ -1846,12 +1844,11 @@ test('Validate on update parents - invalid (parent not published)', async t => {
         title: "Child content 1",
         authors: [ profile1.url ]
     })
-    const childHyperdriveKey = child.url.replace("dat://", "")
+    const childHyperdriveKey = child.url.replace("hyper://", "")
     child.parents = [
         `${parent1HyperdriveKey}+${parent1Metadata.version}`
     ]
-    child.url = child.url.replace("dat://", "hyper://") // TEMP
-    child.authors[0] = child.authors[0].replace("dat://", "")
+    child.authors[0] = child.authors[0].replace("hyper://", "") // TEMP
 
     try {
         await validateOnUpdateParents(child, childMetadata, childHyperdriveKey, p2p)
