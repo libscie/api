@@ -4,7 +4,7 @@ const { Type } = require('@avro/types')
 const GenericType = require('./schemas/generic.json')
 const DBItemType = require('./schemas/dbitem.json')
 const { DateType } = require('./schemas/validation')
-const { MissingParam, ValidationError } = require('./lib/errors')
+const { MissingParam, TypeError } = require('./lib/errors')
 
 class Codec {
   constructor (registry) {
@@ -23,17 +23,17 @@ class Codec {
 
   encode (obj) {
     debug('p2pcommons:Codec:encode', obj)
-    assert(typeof obj === 'object', ValidationError, 'object', obj, 'obj')
+    assert(typeof obj === 'object', TypeError, 'object', obj, 'obj')
     assert(
       typeof obj.rawJSON === 'object',
-      ValidationError,
+      TypeError,
       'object',
       obj.rawJSON,
       'rawJSON'
     )
     assert(
       typeof obj.rawJSON.p2pcommons.type === 'string',
-      ValidationError,
+      TypeError,
       'string',
       obj.rawJSON.p2pcommons.type,
       'type'
