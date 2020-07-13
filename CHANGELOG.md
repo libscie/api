@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - rename dat:// with hyper:// #169
 - pretty print JSON write-out #183 
+- SDK now emits EBUSY error as a warn event #185
 
 ### Fixed
 - Use module property for spec #182
