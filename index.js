@@ -1,3 +1,4 @@
+const { EventEmitter } = require('events')
 const { join, isAbsolute } = require('path')
 const { homedir, tmpdir, platform } = require('os')
 const {
@@ -80,8 +81,9 @@ const DEFAULT_GLOBAL_SETTINGS = {
   sparseMetadata: true
 }
 
-class SDK {
+class SDK extends EventEmitter {
   constructor (opts = {}) {
+    super()
     debug('constructor')
     const finalOpts = { ...DEFAULT_SDK_OPTS, ...opts }
     this.start = false
@@ -188,6 +190,13 @@ class SDK {
   _log (msg, level = 'log') {
     if (this.verbose) {
       console[level](msg)
+    }
+  }
+
+  _watchErrHandler (err, key) {
+    if (err.code === 'EBUSY') {
+      const busyErr = new EBUSYError(err.message, key)
+      this.emit('warn', busyErr)
     }
   }
 
@@ -620,7 +629,10 @@ class SDK {
     assertValid(avroType, indexJSON)
 
     // write index.json
-    await writeFile(join(moduleDir, 'index.json'), JSON.stringify(indexJSON, null, 2))
+    await writeFile(
+      join(moduleDir, 'index.json'),
+      JSON.stringify(indexJSON, null, 2)
+    )
 
     const driveWatch = await dat.importFiles(archive, moduleDir, {
       watch: this.watch,
@@ -629,11 +641,7 @@ class SDK {
     })
 
     if (this.watch) {
-      driveWatch.on('error', err => {
-        if (err.code === 'EBUSY') {
-          throw new EBUSYError(err.message, publicKeyString)
-        }
-      })
+      driveWatch.on('error', err => this._watchErrHandler(err, publicKeyString))
       this.drivesToWatch.set(
         DatEncoding.encode(archive.discoveryKey),
         driveWatch
@@ -1264,7 +1272,10 @@ class SDK {
     const modulePath = version ? `${mKeyString}+${version}` : `${mKeyString}`
     const folderPath = join(this.baseDir, modulePath)
     await ensureDir(folderPath)
-    await writeFile(join(folderPath, 'index.json'), JSON.stringify(module, null, 2))
+    await writeFile(
+      join(folderPath, 'index.json'),
+      JSON.stringify(module, null, 2)
+    )
     const stat = await moduleHyper.stat('index.json')
 
     if (download) {
