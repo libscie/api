@@ -1,10 +1,9 @@
 const { join, isAbsolute } = require('path')
 const { homedir, tmpdir, platform } = require('os')
 const {
-  promises: { open, writeFile, readFile, readdir, access, stat: statFn }
+  promises: { open, writeFile, readFile, readdir, stat: statFn }
 } = require('fs')
 const { ensureDir } = require('fs-extra')
-const once = require('events.once')
 const assert = require('nanocustomassert')
 const level = require('level')
 const sub = require('subleveldown')
@@ -21,7 +20,7 @@ const pMemoize = require('p-memoize')
 const Swarm = require('corestore-swarm-networking')
 const dat = require('./lib/dat-helper')
 const parse = require('./lib/parse-url')
-const { validate, validateDraft, validateBeforeInit, validateOnRegister, validateOnFollow, validateParentsOnUpdate } = require('./lib/validate')
+const { validate, validatePartial, validateOnRegister, validateOnFollow, validateTitle, validateDescription, validateUrl, validateLinks, validateP2pcommons, validateType, validateSubtype, validateMain, validateAvatar, validateAuthors, validateParents, validateParentsOnUpdate, validateFollows, validateContents } = require('./lib/validate')
 const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
@@ -548,25 +547,21 @@ class SDK {
    */
   async init ({
     type,
-    title,
-    subtype = '',
+    title = '',
     description = '',
+    subtype = '',
     avatar = '',
     authors = [],
-    contents = [],
+    parents = [],
     follows = [],
-    parents = []
+    contents = []
   }) {
     // follow module spec: https://github.com/p2pcommons/specs/pull/1/files?short_path=2d471ef#diff-2d471ef4e3a452b579a3367eb33ccfb9
     // 1. create folder with unique name (pk)
     // 2. initialize an hyperdrive inside
     // 3. createIndexJSON with the correct metadata and save it there
 
-    validateBeforeInit({
-      title,
-      type,
-      subtype
-    })
+    validateType({ type })
 
     debug(`init ${type}`)
 
@@ -605,7 +600,7 @@ class SDK {
       url: `hyper://${publicKeyString}`
     })
 
-    validateBeforeInit(indexJSON)
+    await validatePartial(indexJSON)
 
     // Note(dk): validate earlier
     const avroType = this._getAvroType(type)
@@ -840,13 +835,14 @@ class SDK {
     // check valid params
     if (!force) {
       if (params.contents !== undefined) {
-        validate(finalJSON, metadata, hyperdriveKey, this.baseDir)
+        await validate(finalJSON, metadata, hyperdriveKey, this.baseDir)
         for (const content of params.contents) {
-          const { rawJSON: contentJSON } = await this.clone(content)
+          const { version: contentVersion } = parse(content)
+          const { rawJSON: contentJSON } = await this.clone(content, contentVersion)
           validateOnRegister(contentJSON, finalJSON.url)
         }
       } else {
-        validateDraft(finalJSON, metadata, hyperdriveKey)
+        await validatePartial(finalJSON, metadata, hyperdriveKey, this.baseDir)
       }
       if (params.parents !== undefined) {
         await validateParentsOnUpdate(finalJSON, this)
@@ -1630,5 +1626,7 @@ class SDK {
 }
 
 SDK.errors = { ValidationError, TypeError, InvalidKeyError, MissingParam, EBUSYError }
+
+SDK.validate = { validate, validatePartial, validateOnRegister, validateOnFollow, validateTitle, validateDescription, validateUrl, validateLinks, validateP2pcommons, validateType, validateSubtype, validateMain, validateAvatar, validateAuthors, validateParents, validateParentsOnUpdate, validateFollows, validateContents }
 
 module.exports = SDK

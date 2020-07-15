@@ -4,7 +4,7 @@
   "description": "The SDK for the p2p commons",
   "main": "index.js",
   "scripts": {
-    "test": "node tests/index.js | tap-spec",
+    "test": "node tests/tap.js tests/index.js tests/validate.js | tap-spec",
     "format": "prettier-standard --format",
     "version": "chan release ${npm_package_version} --ghrelease && git add CHANGELOG.md",
     "prepublishOnly": "npm test"

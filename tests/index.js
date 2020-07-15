@@ -112,7 +112,7 @@ test('init: title longer than 300 char should throw a ValidationError', async t 
   t.end()
 })
 
-test('init: creation should throw a ValidationError', async t => {
+test.skip('init: creation should throw a ValidationError', async t => {
   const p2p = createDb()
   const metadata = {
     type: 'content'
@@ -272,56 +272,6 @@ test('set: should throw validation error with extra params', async t => {
   t.end()
 })
 
-// Not sure this test is correct - it should try to set a parent that is a future version of itself, rather than a higher version of an existing parent
-test.skip('set: should throw validation error with future parents', async t => {
-  const p2p = createDb()
-  const sampleData = {
-    type: 'content',
-    title: 'random',
-    description: 'lorem ipsum',
-    parents: [
-      'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+3'
-    ]
-  }
-  const { rawJSON: metadata } = await p2p.init(sampleData)
-  const key = metadata.url
-
-  try {
-    await p2p.set({
-      url: key,
-      parents: [
-        'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
-      ]
-    })
-  } catch (err) {
-    t.ok(
-      err instanceof SDK.errors.ValidationError,
-      'future parents versions should throw ValidationError'
-    )
-  }
-
-  await p2p.set({
-    url: key,
-    parents: [
-      'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+2'
-    ]
-  })
-
-  const { rawJSON } = await p2p.get(key)
-
-  t.same(
-    rawJSON.parents,
-    [
-      'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+3',
-      'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+2'
-    ],
-    'parents updated successfully'
-  )
-
-  await p2p.destroy()
-  t.end()
-})
-
 test('set: should throw validation error with invalid main', async t => {
   const p2p = createDb()
   const sampleProfile = {
@@ -431,7 +381,6 @@ test('set: update should fail with bad data', async t => {
       err instanceof SDK.errors.ValidationError,
       'error should be instance of ValidationError'
     )
-    console.log(err)
     t.same(err.description, 'Title must be between 1 and 300 characters long')
     t.same(err.code, 'title_length')
     t.same(err.property, 'title')
@@ -513,9 +462,9 @@ test('set: content and profile idempotent with repeated values', async t => {
     })
   } catch (err) {
     t.same(
-      err.message,
-      'clone: Problems fetching external module',
-      'if module url is not found it will throw'
+      err.code,
+      'follows_unique',
+      'Follows must be unique'
     )
   }
 
@@ -1475,7 +1424,7 @@ test('check lastModified on ready', async t => {
     contentData
   )
 
-  const { rawJSON: profile, metadata: pMetadataInitial } = await p2p.init(
+  await p2p.init(
     profileData
   )
 
