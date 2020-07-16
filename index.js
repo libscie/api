@@ -25,6 +25,7 @@ const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
 const ValidationTypes = require('./schemas/validation') // avro related validations
+const once = require('events.once')
 
 /**
  * @typedef {Object} Module
@@ -148,21 +149,21 @@ class SDK {
     ]
   }
 
-  assertDatUrl (datUrl) {
+  assertHyperUrl (hyperUrl) {
     assert(
-      typeof datUrl === 'string' || Buffer.isBuffer(datUrl),
+      typeof hyperUrl === 'string' || Buffer.isBuffer(hyperUrl),
       TypeError,
       "'string' or Buffer",
-      datUrl,
-      'datUrl'
+      hyperUrl,
+      'hyperUrl'
     )
   }
 
-  assertVersionedUrl (datUrl) {
-    assert(typeof datUrl === 'string', TypeError, 'string', 'datUrl')
-    const { version } = parse(datUrl)
+  assertHyperUrlVersioned (hyperUrl) {
+    assert(typeof hyperUrl === 'string', TypeError, 'string', 'hyperUrl')
+    const { version } = parse(hyperUrl)
     if (version !== 0 && !version) {
-      throw new TypeError('versioned hyper url', datUrl, 'datUrl')
+      throw new TypeError('versioned hyper url', hyperUrl, 'hyperUrl')
     }
     return true
   }
@@ -255,31 +256,6 @@ class SDK {
     await Promise.all(joins)
   }
 
-  /**
-   * handy method for getting the dar url with its version (if version is omitted then module is fetched to get the latest version)
-   *
-   * @private
-   *
-   * @param {(string|buffer)} datUrl
-   * @returns {string}
-   */
-  async _getVersionedUrl (datUrl, version = null) {
-    this.assertDatUrl(datUrl)
-
-    const { version: versioned } = parse(datUrl)
-    if (versioned) return datUrl
-
-    if (version && typeof version === 'number') {
-      return `${datUrl}+${version}`
-    }
-
-    const { versionedKey } = await this.clone(datUrl, null, false)
-    if (!versionedKey) {
-      throw new Error(`Unable to found module with hyper url: ${datUrl}`)
-    }
-    return versionedKey
-  }
-
   async getOptionsOrCreate () {
     // read global settings or create with default values according to:
     // https://github.com/p2pcommons/specs/blob/main/interoperability.md#global-settings
@@ -311,8 +287,10 @@ class SDK {
         logicalTypes: {
           title: ValidationTypes.Title,
           path: ValidationTypes.Path,
-          'dat-url': ValidationTypes.DatUrl,
-          'dat-versioned-url': ValidationTypes.DatUrlVersion
+          'hyper-url': ValidationTypes.HyperUrl,
+          'hyper-url-versioned': ValidationTypes.HyperUrlVersioned,
+          'hyper-key': ValidationTypes.HyperKey,
+          'hyper-key-versioned': ValidationTypes.HyperKeyVersioned
         }
       })
       this.profileType = Type.forSchema(ProfileSchema, {
@@ -320,8 +298,10 @@ class SDK {
         logicalTypes: {
           title: ValidationTypes.Title,
           path: ValidationTypes.Path,
-          'dat-url': ValidationTypes.DatUrl,
-          'dat-versioned-url': ValidationTypes.DatUrlVersion
+          'hyper-url': ValidationTypes.HyperUrl,
+          'hyper-url-versioned': ValidationTypes.HyperUrlVersioned,
+          'hyper-key': ValidationTypes.HyperKey,
+          'hyper-key-versioned': ValidationTypes.HyperKeyVersioned
         }
       })
       const codec = new Codec(registry)
@@ -835,11 +815,13 @@ class SDK {
     // check valid params
     if (!force) {
       if (params.contents !== undefined) {
-        await validate(finalJSON, metadata, hyperdriveKey, this.baseDir)
-        for (const content of params.contents) {
-          const { version: contentVersion } = parse(content)
-          const { rawJSON: contentJSON } = await this.clone(content, contentVersion)
-          validateOnRegister(contentJSON, finalJSON.url)
+        for (const contentKey of params.contents) {
+          const { host: unversionedContentKey, version: contentVersion } = parse(contentKey)
+          const { rawJSON: contentJSON, metadata: contentMetadata, dwldHandle } = await this.clone(unversionedContentKey, contentVersion)
+          if (dwldHandle !== undefined) {
+            await once(dwldHandle, 'end')
+          }
+          await validateOnRegister(contentJSON, contentMetadata, contentKey, finalJSON, metadata, hyperdriveKey, this.baseDir)
         }
       } else {
         await validatePartial(finalJSON, metadata, hyperdriveKey, this.baseDir)
@@ -848,8 +830,8 @@ class SDK {
         await validateParentsOnUpdate(finalJSON, this)
       }
       if (params.follows !== undefined) {
-        for (const follow of params.follows) {
-          const { rawJSON: followJSON } = await this.clone(follow)
+        for (const followedKey of params.follows) {
+          const { rawJSON: followJSON } = await this.clone(followedKey)
           validateOnFollow(followJSON)
         }
       }
@@ -1250,7 +1232,7 @@ class SDK {
     // get module from localdb, if absent will query it from the swarm
     // this fn will also call seed() after retrieving the module from the swarm
 
-    this.assertDatUrl(mKey)
+    this.assertHyperUrl(mKey)
     if (typeof mVersion === 'boolean') {
       download = mVersion
       mVersion = null
@@ -1272,7 +1254,6 @@ class SDK {
     let version
     let meta
     let dwldHandle
-
     const mKeyString = DatEncoding.encode(mKey)
 
     if (!mVersion) {
@@ -1290,7 +1271,7 @@ class SDK {
 
     return {
       rawJSON: this._flatten(module),
-      versionedKey: `hyper://${mKeyString}+${version}`,
+      versionedKey: `${mKeyString}+${version}`,
       metadata: meta,
       dwldHandle
     }
@@ -1302,8 +1283,8 @@ class SDK {
    * @public
    * @async
    * @link https://github.com/p2pcommons/specs/blob/main/module.md#registration
-   * @param {(String|Buffer)} contentKey - hyper url
-   * @param {(String|Buffer)} profileKey - hyper url
+   * @param {(String|Buffer)} contentKey - hyper key
+   * @param {(String|Buffer)} profileKey - hyper key
    */
   async register (contentKey, profileKey) {
     debug(`register contentKey: ${contentKey}`)
@@ -1325,18 +1306,18 @@ class SDK {
    * @public
    * @async
    * @link https://github.com/p2pcommons/specs/blob/main/module.md#verification
-   * @param {String} datUrl - a versioned hyper url
+   * @param {String} versionedKey - a versioned hyper url
    * @returns {Boolean} - true if module is verified, false otherwise
    */
-  async verify (datUrl) {
-    debug('verify %s', datUrl)
-    const { host: url, version } = parse(datUrl)
+  async verify (versionedKey) {
+    debug('verify %s', versionedKey)
+    const { host: unversionedKey, version } = parse(versionedKey)
     if (!version) {
       throw new Error('Module can not be verified: unversioned content')
     }
     await this.ready()
 
-    const { rawJSON: module } = await this.clone(url, version, false)
+    const { rawJSON: module } = await this.clone(unversionedKey, version, false)
 
     assert(
       module.type === 'content',
@@ -1350,7 +1331,7 @@ class SDK {
     return module.authors.reduce(async (prevProm, authorKey) => {
       const prev = await prevProm
       const { rawJSON: profile } = await this.clone(authorKey, null, false)
-      return prev && profile.contents.includes(datUrl)
+      return prev && profile.contents.includes(versionedKey)
     }, Promise.resolve(true))
   }
 
@@ -1387,7 +1368,7 @@ class SDK {
 
     if (!profile) {
       throw new Error(
-        `profile with key ${DatEncoding.encode(profileKey)} not found`
+        `profile with key ${profileKey} not found`
       )
     }
 
@@ -1422,16 +1403,16 @@ class SDK {
    * follow a profile
    * @public
    * @async
-   * @param {string} localProfileUrl - local profile hyper url
-   * @param {string} targetProfileUrl - target profile hyper url
+   * @param {string} localProfileKey - local profile key
+   * @param {string} targetProfileKey - target profile key
    */
-  async follow (localProfileUrl, targetProfileUrl) {
+  async follow (localProfileKey, targetProfileKey) {
     debug('follow')
 
     // update profile
     await this.set({
-      url: localProfileUrl,
-      follows: [targetProfileUrl]
+      url: localProfileKey,
+      follows: [targetProfileKey]
     })
 
     this._log('follow: profile updated successfully')
@@ -1442,12 +1423,12 @@ class SDK {
    *
    * @public
    * @async
-   * @param {(string|buffer)} localProfileUrl - hyper url
-   * @param {(string|buffer)} targetProfileUrl - hyper url
+   * @param {(string|buffer)} localProfileKey - hyper key
+   * @param {(string|buffer)} targetProfileKey - hyper key
    */
-  async unfollow (localProfileUrl, targetProfileUrl) {
-    this.assertDatUrl(localProfileUrl)
-    this.assertDatUrl(targetProfileUrl)
+  async unfollow (localProfileKey, targetProfileKey) {
+    this.assertHyperUrl(localProfileKey)
+    this.assertHyperUrl(targetProfileKey)
 
     debug('unfollow')
 
@@ -1455,7 +1436,7 @@ class SDK {
 
     // Fetching localProfile module
     const { rawJSON: localProfile, metadata } = await this.clone(
-      localProfileUrl,
+      localProfileKey,
       false
     )
 
@@ -1471,16 +1452,16 @@ class SDK {
 
     this.assertModule(localProfile)
 
-    const { host: targetProfileKey, version: targetProfileVersion } = parse(
-      targetProfileUrl
+    const { host: targetProfileKeyUnversioned, version: targetProfileVersion } = parse(
+      targetProfileKey
     )
 
     // Fetching targetProfile module
     debug(
-      `follow: fetching module with key: ${targetProfileKey} and version: ${targetProfileVersion}`
+      `follow: fetching module with key: ${targetProfileKeyUnversioned} and version: ${targetProfileVersion}`
     )
     const { rawJSON: targetProfile } = await this.clone(
-      targetProfileKey,
+      targetProfileKeyUnversioned,
       targetProfileVersion,
       false
     )
@@ -1495,8 +1476,8 @@ class SDK {
 
     // everything is valid, removing profile
     const finalTargetProfileKey = targetProfileVersion
-      ? `hyper://${targetProfileKey}+${targetProfileVersion}`
-      : `hyper://${targetProfileKey}`
+      ? `${targetProfileKeyUnversioned}+${targetProfileVersion}`
+      : targetProfileKeyUnversioned
 
     const idx = localProfile.follows.indexOf(finalTargetProfileKey)
     if (idx !== -1) {
@@ -1627,6 +1608,6 @@ class SDK {
 
 SDK.errors = { ValidationError, TypeError, InvalidKeyError, MissingParam, EBUSYError }
 
-SDK.validate = { validate, validatePartial, validateOnRegister, validateOnFollow, validateTitle, validateDescription, validateUrl, validateLinks, validateP2pcommons, validateType, validateSubtype, validateMain, validateAvatar, validateAuthors, validateParents, validateParentsOnUpdate, validateFollows, validateContents }
+SDK.validations = { validate, validatePartial, validateOnRegister, validateOnFollow, validateTitle, validateDescription, validateUrl, validateLinks, validateP2pcommons, validateType, validateSubtype, validateMain, validateAvatar, validateAuthors, validateParents, validateParentsOnUpdate, validateFollows, validateContents }
 
 module.exports = SDK

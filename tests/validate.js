@@ -1,10 +1,11 @@
 const test = require('tape')
 const tempy = require('tempy')
-const { promises: { writeFile } } = require('fs')
+const { promises: { writeFile, rename } } = require('fs')
 const { join } = require('path')
 const { validate, validatePartial, validateOnRegister, validateOnFollow, validateTitle, validateDescription, validateUrl, validateLinks, validateP2pcommons, validateType, validateSubtype, validateMain, validateAvatar, validateAuthors, validateParents, validateParentsOnUpdate, validateFollows, validateContents } = require('../lib/validate')
 const SDK = require('../')
 const parse = require('../lib/parse-url')
+const { encode } = require('dat-encoding')
 
 const exampleKey1 = '4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f'
 const exampleKey1V5 = '4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f+5'
@@ -1117,10 +1118,14 @@ test('Parents must be registered by at least one author - 1 parent, 1 author, re
   ;({ rawJSON: parent, metadata: parentMetadata } = await p2p.set({
     url: parent.url,
     main: 'main.txt',
-    authors: [profile.url]
+    authors: [encode(profile.url)]
   }))
 
-  await p2p.register(`${parent.url}+${parentMetadata.version}`, profile.url)
+  try {
+    await p2p.register(`${encode(parent.url)}+${parentMetadata.version}`, encode(profile.url))
+  } catch (err) {
+    t.fail(err.message)
+  }
 
   await doesNotThrowAsync(t, async () => {
     await validateParentsOnUpdate({
@@ -1169,24 +1174,32 @@ test('Parents must be registered by at least one author - 2 parents, 2 authors, 
   ;({ rawJSON: parent1, metadata: parent1Metadata } = await p2p.set({
     url: parent1.url,
     main: 'main.txt',
-    authors: [profile1.url, profile2.url]
+    authors: [encode(profile1.url), encode(profile2.url)]
   }))
 
   ;({ rawJSON: parent2, metadata: parent2Metadata } = await p2p.set({
     url: parent2.url,
     main: 'main.txt',
-    authors: [profile2.url]
+    authors: [encode(profile2.url)]
   }))
 
-  await p2p.register(`${parent1.url}+${parent1Metadata.version}`, profile2.url)
-  await p2p.register(`${parent2.url}+${parent2Metadata.version}`, profile2.url)
+  try {
+    await p2p.register(`${encode(parent1.url)}+${parent1Metadata.version}`, encode(profile2.url))
+  } catch (err) {
+    t.fail(err.message)
+  }
+  try {
+    await p2p.register(`${encode(parent2.url)}+${parent2Metadata.version}`, encode(profile2.url))
+  } catch (err) {
+    t.fail(err.message)
+  }
 
   await doesNotThrowAsync(t, async () => {
     await validateParentsOnUpdate({
       p2pcommons: {
         parents: [
-                    `${parent1Key}+${parent1Metadata.version}`,
-                    `${parent2Key}+${parent2Metadata.version}`
+          `${parent1Key}+${parent1Metadata.version}`,
+          `${parent2Key}+${parent2Metadata.version}`
         ]
       }
     }, p2p)
@@ -1219,14 +1232,14 @@ test('Parents must be registered by at least one author - 1 parent, 1 author, no
   ;({ rawJSON: parent1, metadata: parent1Metadata } = await p2p.set({
     url: parent1.url,
     main: 'main.txt',
-    authors: [profile1.url]
+    authors: [encode(profile1.url)]
   }))
 
   await throwsAsync(t, async () => {
     await validateParentsOnUpdate({
       p2pcommons: {
         parents: [
-                    `${parent1Key}+${parent1Metadata.version}`
+          `${parent1Key}+${parent1Metadata.version}`
         ]
       }
     }, p2p)
@@ -1271,23 +1284,27 @@ test('Parents must be registered by at least one author - 2 parents, 2 authors, 
   ;({ rawJSON: parent1, metadata: parent1Metadata } = await p2p.set({
     url: parent1.url,
     main: 'main.txt',
-    authors: [profile1.url, profile2.url]
+    authors: [encode(profile1.url), encode(profile2.url)]
   }))
 
   ;({ rawJSON: parent2, metadata: parent2Metadata } = await p2p.set({
     url: parent2.url,
     main: 'main.txt',
-    authors: [profile2.url]
+    authors: [encode(profile2.url)]
   }))
 
-  await p2p.register(`${parent1.url}+${parent1Metadata.version}`, profile1.url)
+  try {
+    await p2p.register(`${encode(parent1.url)}+${parent1Metadata.version}`, encode(profile1.url))
+  } catch (err) {
+    t.fail(err.message)
+  }
 
   await throwsAsync(t, async () => {
     await validateParentsOnUpdate({
       p2pcommons: {
         parents: [
-                    `${parent1Key}+${parent1Metadata.version}`,
-                    `${parent2Key}+${parent2Metadata.version}`
+          `${parent1Key}+${parent1Metadata.version}`,
+          `${parent2Key}+${parent2Metadata.version}`
         ]
       }
     }, p2p)
@@ -1401,7 +1418,7 @@ test('Follows may only contain Hyperdrive keys (versioned or non-versioned) - co
         type: 'profile',
         follows: [
           exampleKey3,
-                    `hyperr://${exampleKey2V5}` // TEMP
+          `hyper://${exampleKey2V5}`
         ]
       }
     }, exampleKey1)
@@ -1545,7 +1562,7 @@ test('Contents may only contain Hyperdrive keys (versioned or non-versioned) - c
         type: 'profile',
         contents: [
           exampleKey3,
-          'hyperr://8af39eb4a3eb3252141718f876d29220b8d6f539a045e833e9556aff2a5eacd8+5' // TEMP
+          'hyper://8af39eb4a3eb3252141718f876d29220b8d6f539a045e833e9556aff2a5eacd8+5'
         ]
       }
     }, exampleKey1)
@@ -1707,47 +1724,143 @@ test('Validate before init - main path empty', async t => {
   t.end()
 })
 
-test('Registration - valid', t => {
-  t.doesNotThrow(() => {
-    validateOnRegister({
-      p2pcommons: {
-        type: 'content',
-        authors: [
-          exampleKey2,
-          exampleKey1
-        ]
-      }
-    }, exampleKey2)
+test('Registration - valid', async t => {
+  const p2p = createDb()
+
+  const { rawJSON: profile, metadata: profileMetadata } = await p2p.init({
+    type: 'profile',
+    title: 'Author'
   })
+
+  let { rawJSON: content, metadata: contentMetadata } = await p2p.init({
+    type: 'content',
+    title: 'Valid content',
+    authors: [encode(profile.url)]
+  })
+
+  try {
+    await writeFile(join(p2p.baseDir, encode(content.url), 'main.txt'), 'hello')
+  } catch (err) {
+    console.log(err)
+  }
+
+  ;({ rawJSON: content, metadata: contentMetadata } = await p2p.set({
+    url: content.url,
+    main: 'main.txt'
+  }))
+
+  await doesNotThrowAsync(t, async () => {
+    await validateOnRegister(content, contentMetadata, encode(content.url), profile, profileMetadata, encode(profile.url), p2p.baseDir)
+  })
+  await p2p.destroy()
+
   t.end()
 })
 
-test('Only content may be registered to a profile - register profile', t => {
-  t.throws(() => {
-    validateOnRegister({
-      p2pcommons: {
-        type: 'profile',
-        authors: [
-          exampleKey2,
-          exampleKey1
-        ]
-      }
-    }, exampleKey2)
+test('Registration - no main file', async t => {
+  const p2p = createDb()
+
+  const { rawJSON: profile, metadata: profileMetadata } = await p2p.init({
+    type: 'profile',
+    title: 'Author'
+  })
+
+  let { rawJSON: content, metadata: contentMetadata } = await p2p.init({
+    type: 'content',
+    title: 'No main file',
+    authors: [encode(profile.url)]
+  })
+
+  try {
+    await writeFile(join(p2p.baseDir, encode(content.url), 'main.txt'), 'hello')
+  } catch (err) {
+    console.log(err)
+  }
+
+  ;({ rawJSON: content, metadata: contentMetadata } = await p2p.set({
+    url: content.url,
+    main: 'main.txt'
+  }))
+
+  try {
+    await rename(
+      join(p2p.baseDir, encode(content.url), 'main.txt'),
+      join(p2p.baseDir, encode(content.url), 'main_renamed.txt')
+    )
+  } catch (err) {
+    console.log(err)
+  }
+
+  await throwsAsync(t, async () => {
+    await validateOnRegister(content, contentMetadata, encode(content.url), profile, profileMetadata, encode(profile.url), p2p.baseDir)
+  }, /main_exists/)
+  await p2p.destroy()
+
+  t.end()
+})
+
+test('Only content may be registered to a profile - register profile', async t => {
+  const p2p = createDb()
+
+  const { rawJSON: profile, metadata: profileMetadata } = await p2p.init({
+    type: 'profile',
+    title: 'Author'
+  })
+
+  let { rawJSON: profile2, metadata: profile2Metadata } = await p2p.init({
+    type: 'profile',
+    title: 'Author 2',
+    follows: [encode(profile.url)]
+  })
+
+  try {
+    await writeFile(join(p2p.baseDir, encode(profile2.url), 'main.txt'), 'hello')
+  } catch (err) {
+    console.log(err)
+  }
+
+  ;({ rawJSON: profile2, metadata: profile2Metadata } = await p2p.set({
+    url: profile2.url,
+    main: 'main.txt'
+  }))
+
+  await throwsAsync(t, async () => {
+    await validateOnRegister(profile2, profile2Metadata, encode(profile2.url), profile, profileMetadata, encode(profile.url), p2p.baseDir)
   }, /onregister_moduletype/)
+  await p2p.destroy()
+
   t.end()
 })
 
-test('Authors must contain profile key upon registration - does not contain author', t => {
-  t.throws(() => {
-    validateOnRegister({
-      p2pcommons: {
-        type: 'content',
-        authors: [
-          exampleKey1
-        ]
-      }
-    }, exampleKey2)
+test('Authors must contain profile key upon registration - does not contain author', async t => {
+  const p2p = createDb()
+
+  const { rawJSON: profile, metadata: profileMetadata } = await p2p.init({
+    type: 'profile',
+    title: 'Author'
+  })
+
+  let { rawJSON: content, metadata: contentMetadata } = await p2p.init({
+    type: 'content',
+    title: 'Valid content'
+  })
+
+  try {
+    await writeFile(join(p2p.baseDir, encode(content.url), 'main.txt'), 'hello')
+  } catch (err) {
+    console.log(err)
+  }
+
+  ;({ rawJSON: content, metadata: contentMetadata } = await p2p.set({
+    url: content.url,
+    main: 'main.txt'
+  }))
+
+  await throwsAsync(t, async () => {
+    await validateOnRegister(content, contentMetadata, encode(content.url), profile, profileMetadata, encode(profile.url), p2p.baseDir)
   }, /onregister_authorscontainsprofilekey/)
+  await p2p.destroy()
+
   t.end()
 })
 
@@ -1784,7 +1897,7 @@ test('Validate (full) - valid', async t => {
   let { rawJSON: content, metadata } = await p2p.init({
     type: 'content',
     title: 'Validate (full) - valid',
-    authors: [profile.url]
+    authors: [encode(profile.url)]
   })
   const { host: key } = parse(content.url)
 
@@ -1828,7 +1941,7 @@ test('Validate (full) - invalid (main file doesn\'t exist)', async t => {
 
   ;({ rawJSON: content, metadata } = await p2p.set({
     url: content.url,
-    authors: [profile.url]
+    authors: [encode(profile.url)]
   }))
 
   content.main = 'main.txt'

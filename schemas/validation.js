@@ -81,10 +81,10 @@ class Path extends LogicalType {
   }
 }
 
-class DatUrl extends LogicalType {
+class HyperUrl extends LogicalType {
   constructor (attrs, opts) {
     super(attrs, opts)
-    this._pattern = new RegExp(/^(hyper:\/\/)(\w{64})$/)
+    this._pattern = new RegExp(/^(hyper:\/\/)([a-f0-9]{64})$/)
   }
 
   _fromValue (val) {
@@ -108,12 +108,70 @@ class DatUrl extends LogicalType {
   }
 }
 
-class DatUrlVersion extends LogicalType {
+class HyperUrlVersioned extends LogicalType {
   constructor (attrs, opts) {
     super(attrs, opts)
-    let pattern = /^(hyper:\/\/)(\w{64})(\+\d+)?$/
+    let pattern = /^(hyper:\/\/)([a-f0-9]{64})(\+\d+)?$/
     if (attrs.strict) {
-      pattern = /^(hyper:\/\/)(\w{64})(\+\d+)$/
+      pattern = /^(hyper:\/\/)([a-f0-9]{64})(\+\d+)$/
+    }
+    this._pattern = new RegExp(pattern)
+  }
+
+  _fromValue (val) {
+    if (val === undefined || val === null) {
+      throw new TypeError('non empty string', val)
+    }
+    if (!this._pattern.test(val)) {
+      throw new TypeError('valid hyper url', val)
+    }
+    return val
+  }
+
+  _toValue (val) {
+    if (val === undefined || val === null) {
+      throw new TypeError('non empty string', val)
+    }
+    if (!this._pattern.test(val)) {
+      throw new TypeError('valid hyper url', val)
+    }
+    return val
+  }
+}
+
+class HyperKey extends LogicalType {
+  constructor (attrs, opts) {
+    super(attrs, opts)
+    this._pattern = new RegExp(/^([a-f0-9]{64})$/)
+  }
+
+  _fromValue (val) {
+    if (val === undefined || val === null) {
+      throw new TypeError('non empty string', val)
+    }
+    if (!this._pattern.test(val)) {
+      throw new TypeError('valid hyper url', val)
+    }
+    return val
+  }
+
+  _toValue (val) {
+    if (val === undefined || val === null) {
+      throw new TypeError('non empty string', val)
+    }
+    if (!this._pattern.test(val)) {
+      throw new TypeError('valid hyper url', val)
+    }
+    return val
+  }
+}
+
+class HyperKeyVersioned extends LogicalType {
+  constructor (attrs, opts) {
+    super(attrs, opts)
+    let pattern = /([a-f0-9]{64})(\+\d+)?$/
+    if (attrs.strict) {
+      pattern = /^([a-f0-9]{64})(\+\d+)$/
     }
     this._pattern = new RegExp(pattern)
   }
@@ -158,7 +216,9 @@ class DateType extends LogicalType {
 module.exports = {
   Title,
   Path,
-  DatUrl,
-  DatUrlVersion,
+  HyperUrl,
+  HyperUrlVersioned,
+  HyperKey,
+  HyperKeyVersioned,
   DateType
 }

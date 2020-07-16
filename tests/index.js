@@ -1,6 +1,6 @@
 const {
   existsSync,
-  promises: { writeFile, readdir }
+  promises: { writeFile, readdir, access }
 } = require('fs')
 const { join } = require('path')
 const execa = require('execa')
@@ -58,10 +58,10 @@ test('init: create content module', async t => {
     title: 'demo',
     description: 'lorem ipsum',
     authors: [
-      'hyper://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860e9d'
+      '3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860e9d'
     ],
     parents: [
-      'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
+      'be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
     ]
   }
   const { rawJSON: output, metadata } = await p2p.init(init)
@@ -112,11 +112,9 @@ test('init: title longer than 300 char should throw a ValidationError', async t 
   t.end()
 })
 
-test.skip('init: creation should throw a ValidationError', async t => {
+test('init: empty creation should throw a ValidationError', async t => {
   const p2p = createDb()
-  const metadata = {
-    type: 'content'
-  }
+  const metadata = {}
   try {
     await p2p.init(metadata)
   } catch (err) {
@@ -389,19 +387,33 @@ test('set: update should fail with bad data', async t => {
   }
 })
 
-test('set: content and profile idempotent with repeated values', async t => {
+test('set: content, follows, authors, parents idempotent with repeated values', async t => {
   const p2p = createDb()
-  const sampleData = {
-    type: 'content',
-    title: 'demo',
-    description: 'lorem ipsum',
-    authors: [
-      'hyper://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860e9d'
-    ],
-    parents: [
-      'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
-    ]
+
+  const followedProfile1 = {
+    type: 'profile',
+    title: 'followed1'
   }
+
+  const followedProfile2 = {
+    type: 'profile',
+    title: 'followed2'
+  }
+
+  const parentContent1 = {
+    type: 'content',
+    title: 'parent1'
+  }
+
+  const parentContent2 = {
+    type: 'content',
+    title: 'parent2'
+  }
+
+  const { rawJSON: { url: followedProfile1Url } } = await p2p.init(followedProfile1)
+  const { rawJSON: { url: followedProfile2Url } } = await p2p.init(followedProfile2)
+  const { rawJSON: { url: parentContent1Url }, metadata: { version: parentContent1Version } } = await p2p.init(parentContent1)
+  const { rawJSON: { url: parentContent2Url }, metadata: { version: parentContent2Version } } = await p2p.init(parentContent2)
 
   const sampleProfile = {
     type: 'profile',
@@ -409,56 +421,82 @@ test('set: content and profile idempotent with repeated values', async t => {
     subtype: '',
     avatar: './test.png',
     follows: [
-      'hyper://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4'
+      encode(followedProfile1Url),
+      encode(followedProfile2Url)
+    ]
+  }
+
+  const { rawJSON: profile } = await p2p.init(sampleProfile)
+  const profileKey = encode(profile.url)
+
+  const sampleData = {
+    type: 'content',
+    title: 'demo',
+    description: 'lorem ipsum',
+    authors: [
+      profileKey
     ],
-    contents: [
-      'hyper://00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23+12'
+    parents: [
+      `${encode(parentContent1Url)}+${parentContent1Version}`,
+      `${encode(parentContent2Url)}+${parentContent2Version}`
     ]
   }
 
   const { rawJSON: content } = await p2p.init(sampleData)
-  const { rawJSON: profile } = await p2p.init(sampleProfile)
+  const contentKey = encode(content.url)
 
-  const ckey = content.url
-  const pkey = profile.url
+  await writeFile(
+    join(p2p.baseDir, contentKey, 'file.txt'),
+    'hola mundo'
+  )
+
+  await p2p.set({
+    url: contentKey,
+    main: 'file.txt'
+  })
 
   const authors = sampleData.authors.concat(
-    'hyper://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860e9d'
+    encode(followedProfile1Url)
   )
 
   try {
-    // set content data parents field with some repeated values
+    // set content data authors field with some repeated values
     await p2p.set({
-      url: ckey,
-      authors,
-      parents: sampleData.parents
+      url: contentKey,
+      authors
     })
   } catch (err) {
-    t.ok(
-      err instanceof SDK.errors.ValidationError,
-      'trying to set duplicated values should throw ValidationError'
+    t.same(
+      err.code,
+      'authors_unique',
+      'Authors must be unique'
     )
   }
 
-  const { rawJSON: cUpdated } = await p2p.get(ckey)
+  try {
+    // set content data parents & authors field with some repeated values
+    await p2p.set({
+      url: contentKey,
+      parents: [`${encode(parentContent1Url)}+${parentContent1Version}`]
+    })
+  } catch (err) {
+    t.same(
+      err.code,
+      'parents_unique',
+      'Parents must be unique'
+    )
+  }
+
+  const { rawJSON: cUpdated } = await p2p.get(contentKey)
   t.same(cUpdated.authors, sampleData.authors, 'authors remains the same')
   t.same(cUpdated.parents, sampleData.parents, 'parents remains the same')
 
   // update profile with repeated values
-  const contents = [
-    'hyper://3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860alf',
-    'hyper://00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23+12' // repeated value
-  ]
-  const follows = [
-    'hyper://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4', // repeated value
-    'hyper://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c208062123'
-  ]
 
   try {
     await p2p.set({
-      url: pkey,
-      follows,
-      contents
+      url: profileKey,
+      follows: [encode(followedProfile2Url)]
     })
   } catch (err) {
     t.same(
@@ -468,10 +506,33 @@ test('set: content and profile idempotent with repeated values', async t => {
     )
   }
 
-  const { rawJSON: pUpdated } = await p2p.get(pkey)
+  const { rawJSON: pUpdated } = await p2p.get(profileKey)
 
   t.same(pUpdated.follows, sampleProfile.follows, 'follows remains the same')
-  t.same(pUpdated.contents, sampleProfile.contents, 'contents remains the same')
+
+  await p2p.set({
+    url: profileKey,
+    contents: [encode(contentKey)]
+  })
+
+  const { rawJSON: pRegistered } = await p2p.get(profileKey)
+
+  try {
+    await p2p.set({
+      url: profileKey,
+      contents: [encode(contentKey)]
+    })
+  } catch (err) {
+    t.same(
+      err.code,
+      'contents_unique',
+      'Contents must be unique'
+    )
+  }
+
+  const { rawJSON: pRegistered2 } = await p2p.get(profileKey)
+
+  t.same(pRegistered2.contents, pRegistered.contents, 'contents remains the same')
 
   await p2p.destroy()
   t.end()
@@ -488,10 +549,10 @@ test('follows: must not self-reference', async t => {
     subtype: '',
     avatar: './test.png',
     follows: [
-      'hyper://f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4'
+      'f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4'
     ],
     contents: [
-      'hyper://00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23+12'
+      '00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23+12'
     ]
   }
 
@@ -517,7 +578,7 @@ test('set: dont allow future parents versions nor self-reference', async t => {
     title: 'sample content',
     description: 'lorem ipsum',
     parents: [
-      'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
+      'be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
     ]
   }
   const { rawJSON } = await p2p.init(sampleData)
@@ -527,9 +588,9 @@ test('set: dont allow future parents versions nor self-reference', async t => {
     await p2p.set({
       url: ckey,
       parents: [
-        'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4',
-        'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4',
-        'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
+        'be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4',
+        'be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4',
+        'be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
       ]
     })
   } catch (err) {
@@ -699,7 +760,7 @@ test('register - local contents', async t => {
     description: 'lorem ipsum'
   })
 
-  const authors = [profile.url]
+  const authors = [encode(profile.url)]
 
   // update author on content module
   await p2p.set({ url: content1.url, authors })
@@ -718,9 +779,13 @@ test('register - local contents', async t => {
   })
 
   const { metadata } = await p2p.get(content1.url)
-  const contentKeyVersion = `${content1.url}+${metadata.version}`
+  const contentKeyVersion = `${encode(content1.url)}+${metadata.version}`
 
-  await p2p.register(contentKeyVersion, profile.url)
+  try {
+    await p2p.register(contentKeyVersion, encode(profile.url))
+  } catch (err) {
+    t.fail(err.message)
+  }
   const { rawJSON } = await p2p.get(profile.url)
   t.same(
     rawJSON.contents,
@@ -760,7 +825,7 @@ test('seed and register', async t => {
   const { rawJSON: content1, driveWatch } = await p2p2.init(sampleData)
   const { rawJSON: profile } = await p2p.init(sampleProfile)
 
-  const authors = [profile.url]
+  const authors = [encode(profile.url)]
 
   // update author on content module
   await p2p2.set({ url: content1.url, authors })
@@ -778,20 +843,23 @@ test('seed and register', async t => {
   })
 
   const { metadata: contentMetadata } = await p2p2.get(content1.url)
-  const contentKeyVersion = `${content1.url.replace(/hyper:\/\//, '')}+${
+  const contentKeyVersion = `${encode(content1.url)}+${
     contentMetadata.version
   }`
-  const contentKeyVersionPrefix = `hyper://${contentKeyVersion}`
 
   await p2p2.destroy(true, false)
 
   // call register
-  await p2p.register(contentKeyVersionPrefix, profile.url)
+  try {
+    await p2p.register(contentKeyVersion, encode(profile.url))
+  } catch (err) {
+    t.fail(err.message)
+  }
 
   const { rawJSON } = await p2p.get(profile.url)
   t.same(
     rawJSON.contents,
-    [contentKeyVersionPrefix],
+    [contentKeyVersion],
     'registration results in the addition of a dat key to the contents property of the target profile'
   )
 
@@ -803,7 +871,7 @@ test('seed and register', async t => {
 
   // call register again
   try {
-    await p2p.register(contentKeyVersionPrefix, profile.url)
+    await p2p.register(contentKeyVersion, encode(profile.url))
   } catch (err) {
     t.ok(
       err instanceof SDK.errors.ValidationError,
@@ -841,7 +909,7 @@ test('verify', async t => {
   const { rawJSON: content1, driveWatch } = await p2p.init(sampleData[0])
   const { rawJSON: content2 } = await p2p.init(sampleData[1])
 
-  const authors = [profile.url]
+  const authors = [encode(profile.url)]
 
   // manually writing a dummy file
   await writeFile(
@@ -860,10 +928,15 @@ test('verify', async t => {
   // update content in author profile
 
   const { metadata: metadata2 } = await p2p.get(content1.url)
+  const versionedKey = `${encode(content1.url)}+${metadata2.version}`
 
-  await p2p.register(`${content1.url}+${metadata2.version}`, profile.url)
+  try {
+    await p2p.register(versionedKey, profile.url)
+  } catch (err) {
+    t.fail(err.message)
+  }
 
-  const result = await p2p.verify(`${content1.url}+${metadata2.version}`)
+  const result = await p2p.verify(versionedKey)
 
   t.ok(result, 'content meets the verification requirements')
 
@@ -911,7 +984,7 @@ test('verify multiple authors', async t => {
   const { rawJSON: profileY } = await p2p2.init(externalProfile)
 
   // content has multiple authors
-  const authors = [profile.url, profileY.url]
+  const authors = [encode(profile.url), encode(profileY.url)]
   // update authors on content module
   await p2p.set({ url: content1.url, authors })
 
@@ -928,17 +1001,25 @@ test('verify multiple authors', async t => {
 
   const { rawJSON, metadata } = await p2p.get(content1.url)
   t.same(rawJSON.authors, authors, 'content authors contains two profiles')
-  const versioned = `${content1.url}+${metadata.version}`
+  const versionedKey = `${encode(content1.url)}+${metadata.version}`
   // update content in authors profiles
-  await p2p.register(versioned, profile.url)
-  await p2p2.register(versioned, profileY.url)
+  try {
+    await p2p.register(versionedKey, encode(profile.url))
+  } catch (err) {
+    t.fail(err.message)
+  }
+  try {
+    await p2p2.register(versionedKey, encode(profileY.url))
+  } catch (err) {
+    t.fail(err.message)
+  }
 
   const { rawJSON: pUpdated } = await p2p.get(profile.url)
   const { rawJSON: pUpdatedY } = await p2p2.get(profileY.url)
-  t.same(pUpdated.contents, [versioned], 'profile 1 updated ok')
-  t.same(pUpdatedY.contents, [versioned], 'profile 2 updated ok')
+  t.same(pUpdated.contents, [versionedKey], 'profile 1 updated ok')
+  t.same(pUpdatedY.contents, [versionedKey], 'profile 2 updated ok')
 
-  const result = await p2p.verify(versioned)
+  const result = await p2p.verify(versionedKey)
 
   t.ok(result, 'content with multiple authors is verified ok')
 
@@ -1063,7 +1144,7 @@ test('delete registered module', async t => {
   t.equal(contentModules.length, 1, '1 content module exists')
 
   // register
-  const authors = [profile.url]
+  const authors = [encode(profile.url)]
   // manually writing a dummy file
   await writeFile(join(dir, encode(content.url), 'file.txt'), 'hola mundo')
 
@@ -1072,7 +1153,11 @@ test('delete registered module', async t => {
     authors,
     main: 'file.txt'
   })
-  await p2p.register(content.url, profile.url)
+  try {
+    await p2p.register(encode(content.url), encode(profile.url))
+  } catch (err) {
+    t.fail(err.message)
+  }
   const { rawJSON: updatedProfile } = await p2p.get(profile.url)
   t.same(updatedProfile.contents.length, 1, 'content registered')
 
@@ -1114,7 +1199,7 @@ test('deregister content module from profile', async t => {
   const { rawJSON: profile } = await p2p.init(sampleProfile)
 
   // Manually setting the author profile
-  await p2p.set({ url: content.url, authors: [profile.url] })
+  await p2p.set({ url: content.url, authors: [encode(profile.url)] })
 
   t.equal(profile.contents.length, 0, 'profile.contents is empty')
 
@@ -1132,8 +1217,12 @@ test('deregister content module from profile', async t => {
   })
 
   const { metadata: contentMeta } = await p2p.get(content.url)
-  const versioned = `${content.url}+${contentMeta.version}`
-  await p2p.register(versioned, profile.url)
+  const versioned = `${encode(content.url)}+${contentMeta.version}`
+  try {
+    await p2p.register(versioned, profile.url)
+  } catch (err) {
+    t.fail(err.message)
+  }
 
   const { rawJSON: updatedProfile } = await p2p.get(profile.url)
 
@@ -1183,18 +1272,18 @@ test('follow and unfollow a profile', async t => {
   const { rawJSON: profileY, metadata } = await p2p2.init(professorY)
 
   const followUrl = profileY.url
-  const followVersionedUrl = `${profileY.url}+${metadata.version}`
+  const followVersionedKey = `${encode(profileY.url)}+${metadata.version}`
 
   t.equal(profileX.follows.length, 0, 'Initially follows should be empty')
 
   // call follow (unversioned)
-  await p2p.follow(profileX.url, followUrl)
+  await p2p.follow(encode(profileX.url), encode(followUrl))
 
   // follow an nonexistant profile should throw
   try {
     await p2p.follow(
-      profileX.url,
-      'hyper://be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a'
+      encode(profileX.url),
+      'be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a'
     )
   } catch (err) {
     t.same(
@@ -1208,12 +1297,13 @@ test('follow and unfollow a profile', async t => {
   t.equal(profileXUpdated.follows.length, 1, 'following 1 new profile')
   t.same(
     profileXUpdated.follows,
-    [followUrl],
+    [encode(followUrl)],
     'follows property should contain target profile url'
   )
 
   // unfollow versioned profile url which does not exists
-  await p2p.unfollow(profileX.url, followVersionedUrl)
+
+  await p2p.unfollow(encode(profileX.url), followVersionedKey)
 
   const { rawJSON: profileXSame } = await p2p.get(profileX.url)
   t.equal(
@@ -1223,7 +1313,7 @@ test('follow and unfollow a profile', async t => {
   )
 
   // unfollow unversioned profile url
-  await p2p.unfollow(profileX.url, followUrl)
+  await p2p.unfollow(encode(profileX.url), encode(followUrl))
 
   const { rawJSON: profileXFinal } = await p2p.get(profileX.url)
   t.equal(
@@ -1233,18 +1323,18 @@ test('follow and unfollow a profile', async t => {
   )
 
   // call follow (versioned)
-  await p2p.follow(profileX.url, followVersionedUrl)
+  await p2p.follow(encode(profileX.url), followVersionedKey)
 
   const { rawJSON: profileXUpdated2 } = await p2p.get(profileX.url)
   t.equal(profileXUpdated2.follows.length, 1, 'following 1 new profile')
   t.same(
     profileXUpdated2.follows,
-    [followVersionedUrl],
+    [followVersionedKey],
     'follows property should contain target profile versioned url'
   )
 
   // unfollow unversioned profile but only versioned is being followed
-  await p2p.unfollow(profileX.url, followUrl)
+  await p2p.unfollow(encode(profileX.url), encode(followUrl))
 
   const { rawJSON: profileXNoChange } = await p2p.get(profileX.url)
   t.equal(
@@ -1254,7 +1344,7 @@ test('follow and unfollow a profile', async t => {
   )
 
   // unfollow versioned profile url
-  await p2p.unfollow(profileX.url, followVersionedUrl)
+  await p2p.unfollow(encode(profileX.url), followVersionedKey)
 
   const { rawJSON: profileXFinal2 } = await p2p.get(profileX.url)
   t.equal(
@@ -1299,7 +1389,7 @@ test('clone a module', async t => {
   }
 
   const { rawJSON, driveWatch } = await p2p.init(content)
-  const rawJSONpath = rawJSON.url.replace('hyper://', '')
+  const rawJSONpath = encode(rawJSON.url)
 
   // write main.txt
   await writeFile(join(dir, rawJSONpath, 'main.txt'), 'hello')

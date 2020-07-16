@@ -15,7 +15,7 @@
       "name": "url",
       "type": {
         "type": "string",
-        "logicalType": "dat-url"
+        "logicalType": "hyper-url"
       }
     },
     {
@@ -90,7 +90,7 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "logicalType": "dat-versioned-url"
+                "logicalType": "hyper-key-versioned"
               }
             },
             "default": []
@@ -101,7 +101,7 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "logicalType": "dat-versioned-url"
+                "logicalType": "hyper-key-versioned"
               }
             },
             "default": []
