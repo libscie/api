@@ -234,19 +234,31 @@ Validates all present data against the p2pcommons specs. Can be used for validat
 The following only validate a specific part of the supplied metadata:
 
 > _async_ `validateTitle(indexMetadata: object, unflatten: boolean)`
+
 > _async_ `validateDescription(indexMetadata: object, unflatten: boolean)`
+
 > _async_ `validateUrl(indexMetadata: object, key: string, unflatten: boolean)`
+
 > _async_ `validateLinks(indexMetadata: object, unflatten: boolean)`
+
 > _async_ `validateP2pcommons(indexMetadata: object, unflatten: boolean)`
 Validates the p2pcommons object structure (not its contents)
+
 > _async_ `validateType(indexMetadata: object, unflatten: boolean)`
+
 > _async_ `validateSubtype(indexMetadata: object, unflatten: boolean)`
+
 > _async_ `validateMain(indexMetadata: object, key: string, p2pcommonsDir: string, unflatten: boolean)`
 Also checks the existence of the specified main file
+
 > _async_ `validateAvatar(indexMetadata: object, unflatten: boolean)`
+
 > _async_ `validateAuthors(indexMetadata: object, unflatten: boolean)`
+
 > _async_ `validateParents(indexMetadata: object, dbMetadata: object, key: string, unflatten: boolean)`
+
 > _async_ `validateFollows(indexMetadata: object, key: string, unflatten: boolean)`
+
 > _async_ `validateContents(indexMetadata: object, unflatten: boolean)`
 
 ### Special validations
