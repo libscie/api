@@ -222,14 +222,14 @@ Fully validates a module against the [p2pcommons module specs](https://github.co
 - indexMetadata: metadata from index.json (=rawJSON)
 - dbMetadata: metadata from the database (=metadata)
 - key: versioned or unversioned Hyperdrive key
-- p2pcommonsDir: path to p2pcommons directory
+- p2pcommonsDir: path to p2pcommons directory [OPTIONAL]
 - unflatten: set false to validate non-flattened metadata (i.e. directly read from index.json) [DEFAULT=TRUE]
 
 ### Partial validations
 
 > _async_ `validatePartial(indexMetadata: object, dbMetadata: object, key: string, p2pcommonsDir: string, unflatten: boolean)`
 
-Validates all present data against the p2pcommons specs. Can be used for validating unfinished modules. Empty `p2pcommons.main` will not be validated.
+Validates all present data against the p2pcommons specs. Can be used for validating unfinished modules. If p2pcommons.main is present, but empty, it will not be validated.
 
 The following only validate a specific part of the supplied metadata:
 

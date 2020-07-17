@@ -1,6 +1,5 @@
 const { EventEmitter } = require('events')
-const { join, isAbsolute } = require('path')
-const { homedir, tmpdir, platform } = require('os')
+const { join } = require('path')
 const {
   promises: { open, writeFile, readFile, readdir, stat: statFn }
 } = require('fs')
@@ -21,6 +20,7 @@ const pMemoize = require('p-memoize')
 const Swarm = require('corestore-swarm-networking')
 const dat = require('./lib/dat-helper')
 const parse = require('./lib/parse-url')
+const baseDir = require('./lib/base-dir')
 const { validate, validatePartial, validateOnRegister, validateOnFollow, validateTitle, validateDescription, validateUrl, validateLinks, validateP2pcommons, validateType, validateSubtype, validateMain, validateAvatar, validateAuthors, validateParents, validateParentsOnUpdate, validateFollows, validateContents } = require('./lib/validate')
 const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
@@ -89,18 +89,8 @@ class SDK extends EventEmitter {
     debug('constructor')
     const finalOpts = { ...DEFAULT_SDK_OPTS, ...opts }
     this.start = false
-    this.platform = platform()
     // NOTE(dk): consider switch to envPaths usage
-    this.home =
-      process.env.HOME ||
-      (this.windows && this.windowsHome()) ||
-      homedir() ||
-      tmpdir()
-    this.windows = this.platform === 'win32'
-    finalOpts.baseDir = finalOpts.baseDir || '.p2pcommons'
-    this.baseDir = isAbsolute(finalOpts.baseDir)
-      ? finalOpts.baseDir
-      : join(this.home, finalOpts.baseDir)
+    this.baseDir = baseDir(finalOpts.baseDir)
     this.persist = finalOpts.persist
     this.storage = finalOpts.storage
     this.verbose = finalOpts.verbose
@@ -128,9 +118,6 @@ class SDK extends EventEmitter {
     // cancelable methods
     this.clone = PCancelable.fn(this.clone.bind(this))
     // debug constructor
-    debug(`platform: ${this.platform}`)
-    debug(`Is windows? ${!!this.windows}`)
-    debug(`home: ${this.home}`)
     debug(`baseDir: ${this.baseDir}`)
     debug(`dbPath: ${this.dbPath}`)
     debug(`persist drives? ${!!this.persist}`)
