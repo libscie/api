@@ -1,3 +1,4 @@
+const { EventEmitter } = require('events')
 const { join, isAbsolute } = require('path')
 const { homedir, tmpdir, platform } = require('os')
 const {
@@ -82,8 +83,9 @@ const DEFAULT_GLOBAL_SETTINGS = {
   sparseMetadata: true
 }
 
-class SDK {
+class SDK extends EventEmitter {
   constructor (opts = {}) {
+    super()
     debug('constructor')
     const finalOpts = { ...DEFAULT_SDK_OPTS, ...opts }
     this.start = false
@@ -193,6 +195,13 @@ class SDK {
     }
   }
 
+  _watchErrHandler (err, key) {
+    if (err.code === 'EBUSY') {
+      const busyErr = new EBUSYError(err.message, key)
+      this.emit('warn', busyErr)
+    }
+  }
+
   _getAvroType (appType) {
     if (appType === 'content') {
       return this.contentType
@@ -271,7 +280,7 @@ class SDK {
       // create missing settings.json file
       await writeFile(
         join(this.baseDir, 'settings.json'),
-        JSON.stringify(options)
+        JSON.stringify(options, null, 2)
       )
       // default options
       return options
@@ -588,7 +597,10 @@ class SDK {
     assertValid(avroType, indexJSON)
 
     // write index.json
-    await writeFile(join(moduleDir, 'index.json'), JSON.stringify(indexJSON))
+    await writeFile(
+      join(moduleDir, 'index.json'),
+      JSON.stringify(indexJSON, null, 2)
+    )
 
     const driveWatch = await dat.importFiles(archive, moduleDir, {
       watch: this.watch,
@@ -597,11 +609,7 @@ class SDK {
     })
 
     if (this.watch) {
-      driveWatch.on('error', err => {
-        if (err.code === 'EBUSY') {
-          throw new EBUSYError(err.message, publicKeyString)
-        }
-      })
+      driveWatch.on('error', err => this._watchErrHandler(err, publicKeyString))
       this.drivesToWatch.set(
         DatEncoding.encode(archive.discoveryKey),
         driveWatch
@@ -684,7 +692,7 @@ class SDK {
     if (isWritable) {
       await writeFile(
         join(indexJSONDir, 'index.json'),
-        JSON.stringify(indexJSON)
+        JSON.stringify(indexJSON, null, 2)
       )
       await dat.importFiles(archive, indexJSONDir)
 
@@ -1153,7 +1161,10 @@ class SDK {
     const modulePath = version ? `${mKeyString}+${version}` : `${mKeyString}`
     const folderPath = join(this.baseDir, modulePath)
     await ensureDir(folderPath)
-    await writeFile(join(folderPath, 'index.json'), JSON.stringify(module))
+    await writeFile(
+      join(folderPath, 'index.json'),
+      JSON.stringify(module, null, 2)
+    )
     const stat = await moduleHyper.stat('index.json')
 
     if (download) {

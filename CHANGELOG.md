@@ -7,16 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Changed
 - rename dat:// with hyper:// #169
-- remove
-- ValidationError
-- Improved
+- remove hyper:// protocol from p2pcommons keys
+- ValidationError parameters to fit with new validations
+- improved readability of some parts of the readme
+- pretty print JSON write-out #183 
+- SDK now emits EBUSY error as a warn event #185
 
 ### Fixed
 - Use module property for spec #182
 
 ### Added
-- full
-- TypeError
+- full and partial metadata validations
+- TypeError to replace old ValidationErrors
 
 ## [0.6.2] - 2020-07-08
 ### Added

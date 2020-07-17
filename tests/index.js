@@ -4,12 +4,15 @@ const {
 } = require('fs')
 const { join } = require('path')
 const execa = require('execa')
+const { EventEmitter } = require('events')
 const once = require('events.once')
 const test = require('tape')
 const tempy = require('tempy')
 const level = require('level')
 const SwarmNetwoker = require('corestore-swarm-networking')
 const { encode } = require('dat-encoding')
+const proxyquire = require('proxyquire')
+const mirror = require('mirror-folder')
 const SDK = require('../')
 const createDHT = require('./utils/dht')
 const vers = require('../lib/spec')
@@ -50,6 +53,66 @@ test('ready', async t => {
   t.end()
 })
 
+test('SDK emit warning', async t => {
+  class EBUSYMock extends Error {
+    constructor (message) {
+      super(message)
+      this.code = 'EBUSY'
+    }
+  }
+
+  const mockDat = {
+    './lib/dat-helper.js': {
+      importFiles: async (drive, src, opts) => {
+        const finalOpts = { ...opts, watch: false }
+        await new Promise((resolve, reject) => {
+          mirror(src, { name: '/', fs: drive }, finalOpts, err => {
+            if (err) {
+              return reject(err)
+            }
+            return resolve()
+          })
+        })
+
+        const ee = new EventEmitter()
+
+        ee.destroy = () => {}
+        setTimeout(() => {
+          ee.emit('error', new EBUSYMock('EBUSY mock error'))
+        }, 1000)
+        return ee
+      }
+    }
+  }
+
+  const SDK = proxyquire('../', mockDat)
+
+  const p2p = new SDK({
+    disableSwarm: true,
+    baseDir: tempy.directory()
+  })
+  await p2p.ready()
+
+  const contentData = {
+    type: 'content',
+    subtype: 'Theory',
+    title: 'demo'
+  }
+  const { rawJSON } = await p2p.init(contentData)
+
+  const [warn] = await once(p2p, 'warn')
+
+  t.ok(
+    warn instanceof SDK.errors.EBUSYError,
+    'emits expected warning with EBUSYError'
+  )
+  t.same(rawJSON.title, contentData.title)
+  t.same(rawJSON.type, contentData.type)
+  t.same(rawJSON.subtype, contentData.subtype)
+  await p2p.destroy()
+  t.end()
+})
+
 test('init: create content module', async t => {
   const p2p = createDb()
   const init = {
@@ -75,7 +138,10 @@ test('init: create content module', async t => {
     output.links.license[0].href,
     'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
   )
-  t.same(output.links.spec[0].href, `https://p2pcommons.com/specs/module/${vers.module}`)
+  t.same(
+    output.links.spec[0].href,
+    `https://p2pcommons.com/specs/module/${vers.module}`
+  )
   t.same(
     output.main,
     '',
@@ -154,7 +220,10 @@ test('init: create profile module', async t => {
     output.links.license[0].href,
     'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
   )
-  t.same(output.links.spec[0].href, `https://p2pcommons.com/specs/module/${vers.module}`)
+  t.same(
+    output.links.spec[0].href,
+    `https://p2pcommons.com/specs/module/${vers.module}`
+  )
   t.same(output.follows, [])
   t.same(output.contents, [])
   await p2p.destroy()
