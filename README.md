@@ -242,6 +242,7 @@ The following only validate a specific part of the supplied metadata:
 > _async_ `validateLinks(indexMetadata: object, unflatten: boolean)`
 
 > _async_ `validateP2pcommons(indexMetadata: object, unflatten: boolean)`
+
 Validates the p2pcommons object structure (not its contents)
 
 > _async_ `validateType(indexMetadata: object, unflatten: boolean)`
@@ -249,6 +250,7 @@ Validates the p2pcommons object structure (not its contents)
 > _async_ `validateSubtype(indexMetadata: object, unflatten: boolean)`
 
 > _async_ `validateMain(indexMetadata: object, key: string, p2pcommonsDir: string, unflatten: boolean)`
+
 Also checks the existence of the specified main file
 
 > _async_ `validateAvatar(indexMetadata: object, unflatten: boolean)`
