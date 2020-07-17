@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Changed
 - rename dat:// with hyper:// #169
+- remove
+- ValidationError
+- Improved
 
 ### Fixed
 - Use module property for spec #182
+
+### Added
+- full
+- TypeError
 
 ## [0.6.2] - 2020-07-08
 ### Added

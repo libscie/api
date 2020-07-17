@@ -1,6 +1,6 @@
 const {
   existsSync,
-  promises: { writeFile, readdir, access }
+  promises: { writeFile, readdir }
 } = require('fs')
 const { join } = require('path')
 const execa = require('execa')

@@ -73,27 +73,29 @@ Creates a new folder for 'content' or 'profile' according to the received `data.
 
 - `data` object following the [p2pcommons module spec](https://github.com/p2pcommons/specs/blob/main/module.md). The only required field is `type`.
 
-Returns an object containing the **flattened** rawJSON and metadata (**version, lastModified, isWritable**) for the newly created module.
+Returns an object with:
+- **rawJSON**: flattened indexJSON data
+- **metadata**: (**version, lastModified, isWritable**)
 
 ### get
 
-> _async_ `get(hash: string)`
+> _async_ `get(key: string)`
 
 Retrieves raw indexJSON item and metadata from the local db.
 
-- hash: represents the key (`url`) to be looked for. It is the buffer archive key `.toString('hex')`
+- key: represents the key or hyper url to be looked for. It is the buffer archive key `.toString('hex')`
 
 Returns an object with:
 - **rawJSON**: flattened indexJSON data
-- **metadata**: Extra information like last modified time, latest archive version, etc
+- **metadata**: (**version, lastModified, isWritable**)
 
 ### set
 
 > _async_ `set(metadata: object)`
 
-Used to update a previously retrieved value.
+Used to update an existing module.
 
-- metadata: it is an object with the updated values. The only required field is the `url` property, which is used as the object key.
+- metadata: object with updated or added values. The only required field is the `url` property, which is used to identify the module to update.
 
 ### filter
 
@@ -136,7 +138,10 @@ Used to obtain a file descriptor from the `main` file of a module.
 
 > _async_ `register(contentKey: string or buffer, profileKey: string or buffer)`
 
-Register (add) new content into a profile. The new content is added to the profile's `p2pcommons.contents`.
+Register (add) new content into a profile. The new content is added to the profile's `p2pcommons.contents`. See [p2pcommons specs on registration](https://github.com/p2pcommons/specs/blob/main/module.md#registration)
+
+- contentKey: versioned or unversioned key to be registered (origin module)
+- profileKey: unversioned profile key (destination module)
 
 ### deregister
 
@@ -144,17 +149,34 @@ Register (add) new content into a profile. The new content is added to the profi
 
 Deregister (remove) content from a profile.
 
+- contentKey: versioned or unversioned key of content at the version that is registered
+- profileKey: unversioned profile key (destination module)
+
 ### follow
 
-> _async_ `follow(localProfile: string or buffer, targetProfile: string or buffer)`
+> _async_ `follow(localProfileKey: string, targetProfileKey: string)`
 
-Get a local profile and updates its follows property adding a new profile (targetProfile)
+Get a local profile and update its follows property adding a new profile (targetProfile)
+
+- localProfileKey: unversioned key of local profile
+- targetProfileKey: versioned or unversioned key of profile to follow
 
 ### unfollow
 
-> _async_ `unfollow(localProfile: string or buffer, targetProfile: string or buffer)`
+> _async_ `unfollow(localProfileKey: string, targetProfileKey: string)`
 
 Undo the follow operation.
+
+- localProfileKey: unversioned key of local profile
+- targetProfileKey: versioned or unversioned key of profile at the version that is followed
+
+### verify
+
+> _async_ `verify(versionedKey: string)`
+
+Verifies a module. See [p2pcommons specs on verification](https://github.com/p2pcommons/specs/blob/main/module.md#verification)
+
+Returns a boolean indicating whether the module is verified.
 
 ### clone
 
@@ -187,13 +209,79 @@ If `deleteFiles` option is true, then the target folder will be moved to the tra
 
 Closes the swarm instance (if created) and the local db.
 
+## Validations
+
+The SDK exports many validation methods as `SDK.validations` that throw [`ValidationErrors`](#ValidationError) when validation fails
+
+### Full validations
+
+> _async_ `validate(indexMetadata: object, dbMetadata: object, key: string, p2pcommonsDir: string, unflatten: boolean)`
+
+Fully validates a module against the [p2pcommons module specs](https://github.com/p2pcommons/specs/blob/main/module.md)
+
+- indexMetadata: metadata from index.json (=rawJSON)
+- dbMetadata: metadata from the database (=metadata)
+- key: versioned or unversioned Hyperdrive key
+- p2pcommonsDir: path to p2pcommons directory
+- unflatten: set false to validate non-flattened metadata (i.e. directly read from index.json) [DEFAULT=TRUE]
+
+### Partial validations
+
+> _async_ `validatePartial(indexMetadata: object, dbMetadata: object, key: string, p2pcommonsDir: string, unflatten: boolean)`
+
+Validates all present data against the p2pcommons specs. Can be used for validating unfinished modules. Empty `p2pcommons.main` will not be validated.
+
+The following only validate a specific part of the supplied metadata:
+
+> _async_ `validateTitle(indexMetadata: object, unflatten: boolean)`
+> _async_ `validateDescription(indexMetadata: object, unflatten: boolean)`
+> _async_ `validateUrl(indexMetadata: object, key: string, unflatten: boolean)`
+> _async_ `validateLinks(indexMetadata: object, unflatten: boolean)`
+> _async_ `validateP2pcommons(indexMetadata: object, unflatten: boolean)`
+Validates the p2pcommons object structure (not its contents)
+> _async_ `validateType(indexMetadata: object, unflatten: boolean)`
+> _async_ `validateSubtype(indexMetadata: object, unflatten: boolean)`
+> _async_ `validateMain(indexMetadata: object, key: string, p2pcommonsDir: string, unflatten: boolean)`
+Also checks the existence of the specified main file
+> _async_ `validateAvatar(indexMetadata: object, unflatten: boolean)`
+> _async_ `validateAuthors(indexMetadata: object, unflatten: boolean)`
+> _async_ `validateParents(indexMetadata: object, dbMetadata: object, key: string, unflatten: boolean)`
+> _async_ `validateFollows(indexMetadata: object, key: string, unflatten: boolean)`
+> _async_ `validateContents(indexMetadata: object, unflatten: boolean)`
+
+### Special validations
+
+> _async_ `validateOnRegister(contentIndexMetadata: object, contentDbMetadata: object, contentKey: string, profileIndexMetadata: object, profileDbMetadata: object, profileKey: string, p2pcommonsDir: string, unflatten: boolean)`
+
+Fully validates a content module and a profile module upon registration.
+Includes cross-validation of module types and presence of the author in the content's metadata.
+
+> _async_ `validateOnFollow(followedIndexMetadata: object, unflatten: boolean)`
+
+Validates whether the followed module is a profile. This validation is only relevant at time of updating follows and is not included in any of the other validations.
+
+> _async_ `validateParentsOnUpdate(indexMetadata: object, p2pcommons: SDK, unflatten: boolean)`
+
+Validates whether parents are registered. This validation is only relevant at time of updating parents and is not included in any of the other validations.
+
+- p2pcommons: active instance of the p2pcommons SDK
+
 ## Errors
 
 The SDK exports some custom errors: `SDK.errors`
 
 ### ValidationError
 
-Indicates there is a difference between what is expected and what was received.
+Indicates that metadata of a given module is invalid.
+
+Error object contains some useful properties:
+- `description`: Description of the error - may change across versions
+- `code`: Error code - stable across versions
+- `property`: A string indicating the property in question
+
+### TypeError
+
+Indicates that an input parameter is of an incorrect type.
 
 Error object contains some useful properties:
 - `expected`: Expected value

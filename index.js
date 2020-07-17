@@ -508,14 +508,14 @@ class SDK {
   }
 
   /**
-   * initialize a new module. This method will create a specific folder and seed the content if swarm is enabeld.
+   * initialize a new module. This method will create a specific folder and seed the content if swarm is enabled. Only type is mandatory.
    *
    * @public
    * @async
    * @param {{
    *   type: String,
    *   title: String,
-   *   subtype: String ,
+   *   subtype: String,
    *   description: String,
    *   authors: Array,
    *   contents: Array,
@@ -729,14 +729,18 @@ class SDK {
    * @public
    * @async
    * @link https://github.com/p2pcommons/specs/blob/main/module.md
-   * @param {Object} module - Object containing field to update
-   * @param {(String|Buffer)} module.url - module hyper url REQUIRED
-   * @param {String} [module.title]
-   * @param {String} [module.description]
-   * @param {String} [module.main]
-   * @param {String} [module.subtype]
-   * @param {Array<String>} [module.authors] - only valid for content modules
-   * @param {Array<String>} [module.contents] - only valid for profile modules
+   * @param {Object} params - Object containing field to update
+   * @param {(String|Buffer)} params.url - module hyper url REQUIRED
+   * @param {String} [params.title]
+   * @param {String} [params.description]
+   * @param {String} [params.main]
+   * @param {String} [params.subtype]
+   * @param {String} [params.avatar]
+   * @param {Array<String>} [params.authors] - only valid for content modules
+   * @param {Array<String>} [params.parents] - only valid for content modules
+   * @param {Array<String>} [params.contents] - only valid for profile modules
+   * @param {Array<String>} [params.follows] - only valid for profile modules
+   * @param {Boolean} [force] - overrides validations if true
    */
   async set (params, force = false) {
     assert(
@@ -1283,8 +1287,8 @@ class SDK {
    * @public
    * @async
    * @link https://github.com/p2pcommons/specs/blob/main/module.md#registration
-   * @param {(String|Buffer)} contentKey - hyper key
-   * @param {(String|Buffer)} profileKey - hyper key
+   * @param {(String|Buffer)} contentKey - versioned or unversioned key
+   * @param {(String|Buffer)} profileKey - unversioned key
    */
   async register (contentKey, profileKey) {
     debug(`register contentKey: ${contentKey}`)
@@ -1306,7 +1310,7 @@ class SDK {
    * @public
    * @async
    * @link https://github.com/p2pcommons/specs/blob/main/module.md#verification
-   * @param {String} versionedKey - a versioned hyper url
+   * @param {String} versionedKey - a versioned hyper key or url
    * @returns {Boolean} - true if module is verified, false otherwise
    */
   async verify (versionedKey) {
@@ -1338,8 +1342,8 @@ class SDK {
   /**
    * deregister content from a user's profile
    *
-   * @param {(String)} contentKey - contentKey should include the version
-   * @param {(String|Buffer)} profileKey
+   * @param {(String|Buffer)} contentKey - version that is registered
+   * @param {(String|Buffer)} profileKey - unversioned key
    */
   async deregister (contentKey, profileKey) {
     assert(
@@ -1403,8 +1407,8 @@ class SDK {
    * follow a profile
    * @public
    * @async
-   * @param {string} localProfileKey - local profile key
-   * @param {string} targetProfileKey - target profile key
+   * @param {string} localProfileKey - unversioned key
+   * @param {string} targetProfileKey - versioned or unversioned key
    */
   async follow (localProfileKey, targetProfileKey) {
     debug('follow')
@@ -1423,8 +1427,8 @@ class SDK {
    *
    * @public
    * @async
-   * @param {(string|buffer)} localProfileKey - hyper key
-   * @param {(string|buffer)} targetProfileKey - hyper key
+   * @param {(string|buffer)} localProfileKey - unversioned key
+   * @param {(string|buffer)} targetProfileKey - version that is followed
    */
   async unfollow (localProfileKey, targetProfileKey) {
     this.assertHyperUrl(localProfileKey)
