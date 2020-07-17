@@ -215,7 +215,7 @@ The SDK exports many validation methods as `SDK.validations` that throw [`Valida
 
 ### Full validations
 
-> _async_ `validate(indexMetadata: object, dbMetadata: object, key: string, p2pcommonsDir: string, unflatten: boolean)`
+> _async_ `validate(indexMetadata: object, dbMetadata: object, key: string, p2pcommonsDir: string, flat: boolean)`
 
 Fully validates a module against the [p2pcommons module specs](https://github.com/p2pcommons/specs/blob/main/module.md)
 
@@ -223,58 +223,58 @@ Fully validates a module against the [p2pcommons module specs](https://github.co
 - dbMetadata: metadata from the database (=metadata)
 - key: versioned or unversioned Hyperdrive key
 - p2pcommonsDir: path to p2pcommons directory [OPTIONAL]
-- unflatten: set false to validate non-flattened metadata (i.e. directly read from index.json) [DEFAULT=TRUE]
+- flat: indicates whether the metadata is flattened - set false to validate non-flattened metadata (i.e. directly read from index.json) [DEFAULT=TRUE]
 
 ### Partial validations
 
-> _async_ `validatePartial(indexMetadata: object, dbMetadata: object, key: string, p2pcommonsDir: string, unflatten: boolean)`
+> _async_ `validatePartial(indexMetadata: object, dbMetadata: object, key: string, p2pcommonsDir: string, flat: boolean)`
 
 Validates all present data against the p2pcommons specs. Can be used for validating unfinished modules. If p2pcommons.main is present, but empty, it will not be validated.
 
 The following only validate a specific part of the supplied metadata:
 
-> _async_ `validateTitle(indexMetadata: object, unflatten: boolean)`
+> _async_ `validateTitle(indexMetadata: object, flat: boolean)`
 
-> _async_ `validateDescription(indexMetadata: object, unflatten: boolean)`
+> _async_ `validateDescription(indexMetadata: object, flat: boolean)`
 
-> _async_ `validateUrl(indexMetadata: object, key: string, unflatten: boolean)`
+> _async_ `validateUrl(indexMetadata: object, key: string, flat: boolean)`
 
-> _async_ `validateLinks(indexMetadata: object, unflatten: boolean)`
+> _async_ `validateLinks(indexMetadata: object, flat: boolean)`
 
-> _async_ `validateP2pcommons(indexMetadata: object, unflatten: boolean)`
+> _async_ `validateP2pcommons(indexMetadata: object, flat: boolean)`
 
 Validates the p2pcommons object structure (not its contents)
 
-> _async_ `validateType(indexMetadata: object, unflatten: boolean)`
+> _async_ `validateType(indexMetadata: object, flat: boolean)`
 
-> _async_ `validateSubtype(indexMetadata: object, unflatten: boolean)`
+> _async_ `validateSubtype(indexMetadata: object, flat: boolean)`
 
-> _async_ `validateMain(indexMetadata: object, key: string, p2pcommonsDir: string, unflatten: boolean)`
+> _async_ `validateMain(indexMetadata: object, key: string, p2pcommonsDir: string, flat: boolean)`
 
 Also checks the existence of the specified main file
 
-> _async_ `validateAvatar(indexMetadata: object, unflatten: boolean)`
+> _async_ `validateAvatar(indexMetadata: object, flat: boolean)`
 
-> _async_ `validateAuthors(indexMetadata: object, unflatten: boolean)`
+> _async_ `validateAuthors(indexMetadata: object, flat: boolean)`
 
-> _async_ `validateParents(indexMetadata: object, dbMetadata: object, key: string, unflatten: boolean)`
+> _async_ `validateParents(indexMetadata: object, dbMetadata: object, key: string, flat: boolean)`
 
-> _async_ `validateFollows(indexMetadata: object, key: string, unflatten: boolean)`
+> _async_ `validateFollows(indexMetadata: object, key: string, flat: boolean)`
 
-> _async_ `validateContents(indexMetadata: object, unflatten: boolean)`
+> _async_ `validateContents(indexMetadata: object, flat: boolean)`
 
 ### Special validations
 
-> _async_ `validateOnRegister(contentIndexMetadata: object, contentDbMetadata: object, contentKey: string, profileIndexMetadata: object, profileDbMetadata: object, profileKey: string, p2pcommonsDir: string, unflatten: boolean)`
+> _async_ `validateOnRegister(contentIndexMetadata: object, contentDbMetadata: object, contentKey: string, profileIndexMetadata: object, profileDbMetadata: object, profileKey: string, p2pcommonsDir: string, flat: boolean)`
 
 Fully validates a content module and a profile module upon registration.
 Includes cross-validation of module types and presence of the author in the content's metadata.
 
-> _async_ `validateOnFollow(followedIndexMetadata: object, unflatten: boolean)`
+> _async_ `validateOnFollow(followedIndexMetadata: object, flat: boolean)`
 
 Validates whether the followed module is a profile. This validation is only relevant at time of updating follows and is not included in any of the other validations.
 
-> _async_ `validateParentsOnUpdate(indexMetadata: object, p2pcommons: SDK, unflatten: boolean)`
+> _async_ `validateParentsOnUpdate(indexMetadata: object, p2pcommons: SDK, flat: boolean)`
 
 Validates whether parents are registered. This validation is only relevant at time of updating parents and is not included in any of the other validations.
 
