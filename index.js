@@ -98,7 +98,7 @@ class SDK extends EventEmitter {
     this.watch = finalOpts.watch
 
     this.drives = new Map()
-    this.stores = new Map() // deprecated
+    this.seeds = new Map()
     this.drivesToWatch = new Map()
 
     this.dht = finalOpts.dht
@@ -212,28 +212,38 @@ class SDK extends EventEmitter {
 
   async _seed (archive, joinOpts = {}) {
     const dkey = DatEncoding.encode(archive.discoveryKey)
+    const defaultJoinOpts = {
+      announce: true,
+      lookup: true
+    }
 
+    const finalOpts = { ...defaultJoinOpts, ...joinOpts }
+
+    let alreadySeededOpts = {}
+    try {
+      const { opts } = await this.seeddb.get(dkey)
+      alreadySeededOpts = opts
+    } catch (_) {}
+
+    if (
+      finalOpts.announce === alreadySeededOpts.announce &&
+      finalOpts.lookup === alreadySeededOpts.lookup
+    ) {
+      return
+    }
     this.drives.set(dkey, archive)
 
     if (!this.disableSwarm) {
-      const defaultJoinOpts = {
-        announce: true,
-        lookup: true
-      }
-
-      await this.localdb.open()
-      await this.seeddb.open()
+      // await this.localdb.open()
+      // await this.seeddb.open()
       await this.seeddb.put(dkey, {
         key: dkey,
-        opts: { ...defaultJoinOpts, ...joinOpts }
+        opts: finalOpts
       })
 
       debug(`swarm seeding ${dkey}`)
 
-      await this.networker.join(archive.discoveryKey, {
-        ...defaultJoinOpts,
-        ...joinOpts
-      })
+      this.networker.join(archive.discoveryKey, { ...finalOpts })
 
       archive.once('close', () => {
         debug(`closing archive ${dkey}...`)
@@ -458,12 +468,9 @@ class SDK extends EventEmitter {
         bootstrap: this.bootstrap
       })
       this.networker.on('error', console.error)
-      if (typeof this.networker.listen === 'function') {
-        // legacy method - unused by corestore-swarm-networking
-        this.networker.listen()
-      }
-      debug('swarm listening...')
 
+      this.networker.listen()
+      debug('swarm listening...')
       await this._reseed()
     }
   }
@@ -1127,6 +1134,10 @@ class SDK extends EventEmitter {
     version = version || moduleHyper.version
     debug('clone: Module version', version)
 
+    if (this.canceledClone) {
+      return
+    }
+
     try {
       // 3 - after fetching module we still need to read the index.json file
       if (version !== 0) {
@@ -1160,6 +1171,7 @@ class SDK extends EventEmitter {
       this.drives.set(version ? `${dkey}+${version}` : dkey, moduleVersion)
     } catch (err) {
       this._log(err.message, 'error')
+      if (this.canceledClone) return
       throw new Error('clone: Problems fetching external module')
     }
     // 4 - clone new module (move into its own method)
@@ -1266,6 +1278,9 @@ class SDK extends EventEmitter {
 
     if (onCancel) {
       onCancel.shouldReject = false
+      onCancel(() => {
+        this.canceledClone = true
+      })
     }
 
     await this.ready()
@@ -1278,12 +1293,14 @@ class SDK extends EventEmitter {
 
     if (!mVersion) {
       const out = await this.getModule(mKeyString)
+      if (this.canceledClone) return
       module = out.rawJSON
       meta = out.metadata
     }
 
     if (!module) {
       const out = await this.getFromSwarm(mKey, mVersion, download)
+      if (this.canceledClone) return
       module = out.rawJSON
       meta = out.metadata
       dwldHandle = out.dwldHandle

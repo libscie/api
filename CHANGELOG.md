@@ -5,20 +5,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+- Full and partial metadata validations #154
+- TypeError to replace old ValidationErrors #154
+
 ### Changed
-- rename dat:// with hyper:// #169
-- remove hyper:// protocol from p2pcommons keys
-- ValidationError parameters to fit with new validations
-- improved readability of some parts of the readme
-- pretty print JSON write-out #183 
+- Remove hyper:// protocol from p2pcommons keys #179
+- ValidationError parameters to fit with new validations #154
+- Improved readability of some parts of the readme
+- Eagerly call networker listen, remove await from swarm.join call #193
+
+## [0.6.3] - 2020-07-14
+### Changed
+- rename dat:// to hyper:// #169
+- pretty print JSON write-out #183
 - SDK now emits EBUSY error as a warn event #185
 
 ### Fixed
 - Use module property for spec #182
-
-### Added
-- full and partial metadata validations
-- TypeError to replace old ValidationErrors
 
 ## [0.6.2] - 2020-07-08
 ### Added
@@ -99,7 +104,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ready method call is now implicit
 - extra params now throw validationError
 
-[Unreleased]: https://github.com/p2pcommons/sdk-js/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/p2pcommons/sdk-js/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/p2pcommons/sdk-js/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/p2pcommons/sdk-js/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/p2pcommons/sdk-js/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/p2pcommons/sdk-js/compare/v0.5.8...v0.6.0

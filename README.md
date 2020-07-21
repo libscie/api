@@ -325,7 +325,14 @@ Error object contains some useful properties:
 
 ## Release
 
-`npm publish`
+1. create a new branch like `{username}/release-{nextVersion}`
+2. `npm version {nextVersion}`
+    - this will prompt you with a new gh release window, you can mark it as _draft_ until PR is accepted.
+3. _acceptance_ & _merge_
+4. `git co main`
+5. `git pull`
+6. `npm publish`
+7. :tada:
 
 Requirements:
 - 2FA enabled
