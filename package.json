@@ -47,7 +47,7 @@
     "fs-extra": "^7.0.1",
     "hex-to-32": "^2.0.0",
     "hypercore-crypto": "^2.0.0",
-    "level": "^5.0.1",
+    "level": "^6.0.0",
     "level-auto-index": "^2.0.0",
     "mirror-folder": "^3.0.0",
     "nanocustomassert": "^1.0.0",

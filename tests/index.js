@@ -1275,14 +1275,12 @@ test('follow and unfollow a profile', async t => {
   const p2p = createDb({
     swarm: true,
     persist: false,
-    swarmFn: testSwarmCreator,
     dht,
     dhtBootstrap
   })
   const p2p2 = createDb({
     swarm: true,
     persist: false,
-    swarmFn: testSwarmCreator,
     dht,
     dhtBootstrap
   })
@@ -1392,21 +1390,15 @@ test('clone a module', async t => {
   const dir2 = tempy.directory()
 
   const p2p = new SDK({
-    disableSwarm: false,
-    persist: true,
     baseDir: dir,
-    swarm: testSwarmCreator,
     dht,
-    dhtBootstrap
+    bootstrap: dhtBootstrap
   })
 
   const p2p2 = new SDK({
-    disableSwarm: false,
-    persist: true,
     baseDir: dir2,
-    swarm: testSwarmCreator,
     dht,
-    dhtBootstrap
+    bootstrap: dhtBootstrap
   })
 
   await p2p2.ready()
@@ -1422,28 +1414,20 @@ test('clone a module', async t => {
   // write main.txt
   await writeFile(join(dir, rawJSONpath, 'main.txt'), 'hello')
 
-  driveWatch.on('put-end', async file => {
-    if (!file.name.endsWith('main.txt')) return
+  await once(driveWatch, 'put-end') // wait for the main file to be written on the hyperdrive
 
-    const { rawJSON: module, dwldHandle, metadata } = await p2p2.clone(
-      rawJSON.url
-    )
+  const { rawJSON: module, dwldHandle } = await p2p2.clone(rawJSON.url)
 
-    t.same(module.title, content.title)
+  t.same(module.title, content.title)
 
-    await once(dwldHandle, 'end')
+  await once(dwldHandle, 'end')
 
-    const clonedDir = await readdir(
-      join(p2p2.baseDir, `${rawJSONpath}+${metadata.version}`)
-    )
-    t.ok(
-      clonedDir.includes('main.txt'),
-      'clone downloaded content successfully'
-    )
-    await p2p.destroy()
-    await p2p2.destroy()
-    t.end()
-  })
+  const clonedDir = await readdir(join(p2p2.baseDir, `${rawJSONpath}`))
+  t.ok(clonedDir.includes('main.txt'), 'clone downloaded content successfully')
+
+  await p2p.destroy()
+  await p2p2.destroy()
+  t.end()
 })
 
 test('cancel clone', async t => {
@@ -1456,7 +1440,7 @@ test('cancel clone', async t => {
     baseDir: dir,
     swarm: testSwarmCreator,
     dht,
-    dhtBootstrap
+    bootstrap: dhtBootstrap
   })
 
   const p2p2 = new SDK({
@@ -1465,7 +1449,7 @@ test('cancel clone', async t => {
     baseDir: dir2,
     swarm: testSwarmCreator,
     dht,
-    dhtBootstrap
+    bootstrap: dhtBootstrap
   })
 
   const content = {
@@ -1482,8 +1466,9 @@ test('cancel clone', async t => {
   await once(driveWatch, 'put-end')
 
   // clone can be canceled
+
   const cloning = p2p2.clone(rawJSON.url)
-  process.nextTick(() => {
+  setImmediate(() => {
     cloning.cancel()
     t.ok(cloning.isCanceled, 'cloning promise is canceled')
   })
