@@ -537,7 +537,7 @@ class SDK extends EventEmitter {
     // 2. initialize an hyperdrive inside
     // 3. createIndexJSON with the correct metadata and save it there
 
-    validateType({ type })
+    validateType({ indexMetadata: { type } })
 
     debug(`init ${type}`)
 
@@ -576,7 +576,7 @@ class SDK extends EventEmitter {
       url: `hyper://${publicKeyString}`
     })
 
-    await validatePartial(indexJSON)
+    await validatePartial({ indexMetadata: indexJSON })
 
     // Note(dk): validate earlier
     const avroType = this._getAvroType(type)
@@ -820,18 +820,36 @@ class SDK extends EventEmitter {
           if (dwldHandle !== undefined) {
             await once(dwldHandle, 'end')
           }
-          await validateOnRegister(contentJSON, contentMetadata, contentKey, finalJSON, metadata, hyperdriveKey, this.baseDir)
+          await validateOnRegister({
+            contentIndexMetadata: contentJSON,
+            contentDbMetadata: contentMetadata,
+            contentKey,
+            profileIndexMetadata: finalJSON,
+            profileDbMetadata: metadata,
+            profileKey: hyperdriveKey,
+            p2pcommonsDir: this.baseDir
+          })
         }
       } else {
-        await validatePartial(finalJSON, metadata, hyperdriveKey, this.baseDir)
+        await validatePartial({
+          indexMetadata: finalJSON,
+          dbMetadata: metadata,
+          key: hyperdriveKey,
+          p2pcommonsDir: this.baseDir
+        })
       }
       if (params.parents !== undefined) {
-        await validateParentsOnUpdate(finalJSON, this)
+        await validateParentsOnUpdate({
+          indexMetadata: finalJSON,
+          p2pcommons: this
+        })
       }
       if (params.follows !== undefined) {
         for (const followedKey of params.follows) {
           const { rawJSON: followJSON } = await this.clone(followedKey)
-          validateOnFollow(followJSON)
+          validateOnFollow({
+            followedIndexMetadata: followJSON
+          })
         }
       }
       debug('set: valid params')
