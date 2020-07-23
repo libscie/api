@@ -12,7 +12,7 @@ const createDHT = async () => {
     return new Promise(resolve => {
       bootstrap.once('listening', () => {
         return resolve({
-          url: `localhost:${BOOTSTRAP_PORT}`,
+          url: [`localhost:${BOOTSTRAP_PORT}`],
           node: bootstrap
         })
       })
