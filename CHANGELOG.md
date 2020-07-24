@@ -6,6 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Changed
+- bump lodash from 4.17.15 to 4.17.19 
 - Eagerly call networker listen, remove await from swarm.join call #193
 
 ### Fixed
