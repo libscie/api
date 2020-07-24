@@ -84,7 +84,7 @@ class Path extends LogicalType {
 class HyperUrl extends LogicalType {
   constructor (attrs, opts) {
     super(attrs, opts)
-    this._pattern = new RegExp(/^(hyper:\/\/)([a-f0-9]{64})$/)
+    this._pattern = /^(hyper:\/\/)([a-f0-9]{64})$/i
   }
 
   _fromValue (val) {
@@ -111,9 +111,9 @@ class HyperUrl extends LogicalType {
 class HyperUrlVersioned extends LogicalType {
   constructor (attrs, opts) {
     super(attrs, opts)
-    this._pattern = /^(hyper:\/\/)([a-f0-9]{64})(\+\d+)?$/
+    this._pattern = /^(hyper:\/\/)([a-f0-9]{64})(\+\d+)?$/i
     if (attrs.strict) {
-      this._pattern = /^(hyper:\/\/)([a-f0-9]{64})(\+\d+)$/
+      this._pattern = /^(hyper:\/\/)([a-f0-9]{64})(\+\d+)$/i
     }
   }
 
@@ -141,7 +141,7 @@ class HyperUrlVersioned extends LogicalType {
 class HyperKey extends LogicalType {
   constructor (attrs, opts) {
     super(attrs, opts)
-    this._pattern = new RegExp(/^([a-f0-9]{64})$/)
+    this._pattern = /^([a-f0-9]{64})$/i
   }
 
   _fromValue (val) {
@@ -168,9 +168,9 @@ class HyperKey extends LogicalType {
 class HyperKeyVersioned extends LogicalType {
   constructor (attrs, opts) {
     super(attrs, opts)
-    this._pattern = /^([a-f0-9]{64})(\+\d+)?$/
+    this._pattern = /^([a-f0-9]{64})(\+\d+)?$/i
     if (attrs.strict) {
-      this._pattern = /^([a-f0-9]{64})(\+\d+)$/
+      this._pattern = /^([a-f0-9]{64})(\+\d+)$/i
     }
   }
 
