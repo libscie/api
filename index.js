@@ -187,6 +187,18 @@ class SDK extends EventEmitter {
     }
   }
 
+  assertMetadata (meta) {
+    assert(typeof meta === 'object', 'metadata object expected')
+    const dbitem = {
+      ...meta,
+      rawJSON: Buffer.alloc(0) // we test validity of this property separately
+    }
+
+    this.dbItemType.isValid(dbitem, {
+      errorHook: this._dbItemError
+    })
+  }
+
   _log (msg, level = 'log') {
     if (this.verbose) {
       console[level](msg)
@@ -207,6 +219,14 @@ class SDK extends EventEmitter {
     if (appType === 'profile') {
       return this.profileType
     }
+  }
+
+  _dbItemError (path, any, type) {
+    throw new ValidationError(
+      `Valid Metadata: ${type}`,
+      `${any} (${typeof any})`,
+      path.join()
+    )
   }
 
   _unflatten (data) {
@@ -343,6 +363,7 @@ class SDK extends EventEmitter {
         }
       })
       const codec = new Codec(registry)
+      this.dbItemType = codec.dbItemType
 
       level(join(this.dbPath, 'db'), { valueEncoding: codec }, (err, db) => {
         if (err) {
@@ -359,6 +380,10 @@ class SDK extends EventEmitter {
         // create partitions - required by level-auto-index
         this.localdb = sub(this.db, 'localdb', {
           valueEncoding: codec
+        })
+        this.localdb.on('error', err => {
+          this._log(err.message, 'error')
+          this.emit('error', err)
         })
         // create seeded modules partitions
         this.seeddb = sub(this.db, 'seeddb', {
@@ -465,9 +490,21 @@ class SDK extends EventEmitter {
         const module = await drive.readFile('index.json')
         const indexJSON = this._unflatten(JSON.parse(module))
 
+        // check indexJSON is still valid
+        const avroType = this._getAvroType(indexJSON.p2pcommons.type)
+        try {
+          assertValid(avroType, indexJSON)
+        } catch (err) {
+          // Note(dk): sdk will emit warning if metadata has been modified offline and made invalid according to schema
+          this.emit('warn', err)
+        }
+
         // update metadata
         metadata.lastModified = mtime
-        metadata.version = drive.version
+        metadata.version = Number(drive.version)
+
+        this.assertMetadata(metadata)
+
         // update localdb
         await this.localdb.put(urlString, {
           ...metadata,
@@ -673,8 +710,10 @@ class SDK extends EventEmitter {
       // start hyperswarm
       isWritable: archive.writable,
       lastModified: stat[0].mtime,
-      version: archive.version
+      version: Number(archive.version)
     }
+
+    this.assertMetadata(metadata)
 
     await this.localdb.put(publicKeyString, {
       ...metadata,
@@ -752,21 +791,24 @@ class SDK extends EventEmitter {
     const lastM =
       mtime && mtime.getTime() >= lastModified.getTime() ? mtime : lastModified
     debug('saving item on local db')
-    await this.localdb.put(DatEncoding.encode(indexJSON.url), {
+
+    const metadata = {
       isWritable,
       lastModified: lastM,
-      version: version,
+      version: Number(version)
+    }
+
+    this.assertMetadata(metadata)
+
+    await this.localdb.put(DatEncoding.encode(indexJSON.url), {
+      ...metadata,
       rawJSON: indexJSON,
       avroType: this._getAvroType(indexJSON.p2pcommons.type).name
     })
 
     return {
       rawJSON: this._flatten(indexJSON),
-      metadata: {
-        isWritable,
-        lastModified: lastM,
-        version
-      }
+      metadata
     }
   }
 
@@ -1301,14 +1343,18 @@ class SDK extends EventEmitter {
     } catch (_) {}
 
     // Note(dk): only update localdb if fetched module is more recent
+    const metadata = {
+      isWritable: moduleVersion.writable,
+      lastModified: stat[0].mtime,
+      version: Number(moduleVersion.version)
+    }
     if (
       !lastMeta ||
       stat[0].mtime.getTime() > lastMeta.lastModified.getTime()
     ) {
+      this.assertMetadata(metadata)
       await this.localdb.put(DatEncoding.encode(module.url), {
-        isWritable: moduleVersion.writable,
-        lastModified: stat[0].mtime,
-        version: Number(moduleVersion.version),
+        ...metadata,
         rawJSON: module,
         avroType: this._getAvroType(module.p2pcommons.type).name
       })
@@ -1316,11 +1362,7 @@ class SDK extends EventEmitter {
 
     return {
       rawJSON: module,
-      metadata: {
-        isWritable: moduleVersion.writable,
-        lastModified: stat[0].mtime,
-        version: Number(moduleVersion.version)
-      },
+      metadata,
       dwldHandle
     }
   }

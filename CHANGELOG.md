@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Eagerly call networker listen, remove await from swarm.join call #193
 
+### Fixed
+- Always cast version to Number
+
 ## [0.6.3] - 2020-07-14
 ### Changed
 - rename dat:// to hyper:// #169
