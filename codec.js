@@ -9,8 +9,8 @@ const { MissingParam, TypeError } = require('./lib/errors')
 class Codec {
   constructor (registry) {
     assert(registry, MissingParam, 'registry')
-    Type.forSchema(GenericType, { registry })
-    Type.forSchema(DBItemType, {
+    this.genericType = Type.forSchema(GenericType, { registry })
+    this.dbItemType = Type.forSchema(DBItemType, {
       registry,
       logicalTypes: {
         date: DateType

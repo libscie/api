@@ -14,7 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove hyper:// protocol from p2pcommons keys #179
 - ValidationError parameters to fit with new validations #154
 - Improved readability of some parts of the readme
+- bump lodash from 4.17.15 to 4.17.19 
 - Eagerly call networker listen, remove await from swarm.join call #193
+
+### Fixed
+- Always cast version to Number
 
 ## [0.6.3] - 2020-07-14
 ### Changed
