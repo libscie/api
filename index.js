@@ -1,11 +1,9 @@
 const { EventEmitter } = require('events')
-const { join, isAbsolute } = require('path')
-const { homedir, tmpdir, platform } = require('os')
+const { join } = require('path')
 const {
-  promises: { open, writeFile, readFile, readdir, access, stat: statFn }
+  promises: { open, writeFile, readFile, readdir, stat: statFn }
 } = require('fs')
 const { ensureDir } = require('fs-extra')
-const once = require('events.once')
 const assert = require('nanocustomassert')
 const level = require('level')
 const sub = require('subleveldown')
@@ -22,10 +20,13 @@ const pMemoize = require('p-memoize')
 const Swarm = require('corestore-swarm-networking')
 const dat = require('./lib/dat-helper')
 const parse = require('./lib/parse-url')
+const baseDir = require('./lib/base-dir')
+const { validate, validatePartial, validateOnRegister, validateOnFollow, validateTitle, validateDescription, validateUrl, validateLinks, validateP2pcommons, validateType, validateSubtype, validateMain, validateAvatar, validateAuthors, validateParents, validateParentsOnUpdate, validateFollows, validateContents } = require('./lib/validate')
 const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
 const ValidationTypes = require('./schemas/validation') // avro related validations
+const once = require('events.once')
 
 /**
  * @typedef {Object} Module
@@ -36,6 +37,7 @@ const ValidationTypes = require('./schemas/validation') // avro related validati
 const {
   InvalidKeyError,
   ValidationError,
+  TypeError,
   MissingParam,
   EBUSYError
 } = require('./lib/errors')
@@ -52,13 +54,13 @@ const assertValid = (type, val) => {
         const declared = new Set(type.fields.map(f => f.name))
         const extra = Object.keys(any).filter(n => !declared.has(n))
         msg = `extra fields (${extra.join(', ')})`
-        throw new ValidationError('', msg, extra.join(', '))
+        throw new TypeError(msg, extra.join(', '))
       } else {
         msg += `not an object: ${any}`
         throw new Error(msg)
       }
     }
-    throw new ValidationError(
+    throw new TypeError(
       type.name ? type.name : type._logicalTypeName,
       any,
       msg
@@ -87,18 +89,8 @@ class SDK extends EventEmitter {
     debug('constructor')
     const finalOpts = { ...DEFAULT_SDK_OPTS, ...opts }
     this.start = false
-    this.platform = platform()
     // NOTE(dk): consider switch to envPaths usage
-    this.home =
-      process.env.HOME ||
-      (this.windows && this.windowsHome()) ||
-      homedir() ||
-      tmpdir()
-    this.windows = this.platform === 'win32'
-    finalOpts.baseDir = finalOpts.baseDir || '.p2pcommons'
-    this.baseDir = isAbsolute(finalOpts.baseDir)
-      ? finalOpts.baseDir
-      : join(this.home, finalOpts.baseDir)
+    this.baseDir = baseDir(finalOpts.baseDir)
     this.persist = finalOpts.persist
     this.storage = finalOpts.storage
     this.verbose = finalOpts.verbose
@@ -126,9 +118,6 @@ class SDK extends EventEmitter {
     // cancelable methods
     this.clone = PCancelable.fn(this.clone.bind(this))
     // debug constructor
-    debug(`platform: ${this.platform}`)
-    debug(`Is windows? ${!!this.windows}`)
-    debug(`home: ${this.home}`)
     debug(`baseDir: ${this.baseDir}`)
     debug(`dbPath: ${this.dbPath}`)
     debug(`persist drives? ${!!this.persist}`)
@@ -149,21 +138,21 @@ class SDK extends EventEmitter {
     ]
   }
 
-  assertDatUrl (datUrl) {
+  assertHyperUrl (hyperUrl) {
     assert(
-      typeof datUrl === 'string' || Buffer.isBuffer(datUrl),
-      ValidationError,
+      typeof hyperUrl === 'string' || Buffer.isBuffer(hyperUrl),
+      TypeError,
       "'string' or Buffer",
-      datUrl,
-      'datUrl'
+      hyperUrl,
+      'hyperUrl'
     )
   }
 
-  assertVersionedUrl (datUrl) {
-    assert(typeof datUrl === 'string', ValidationError, 'string', 'datUrl')
-    const { version } = parse(datUrl)
+  assertHyperUrlVersioned (hyperUrl) {
+    assert(typeof hyperUrl === 'string', TypeError, 'string', 'hyperUrl')
+    const { version } = parse(hyperUrl)
     if (version !== 0 && !version) {
-      throw new ValidationError('versioned hyper url', datUrl, 'datUrl')
+      throw new TypeError('versioned hyper url', hyperUrl, 'hyperUrl')
     }
     return true
   }
@@ -172,7 +161,7 @@ class SDK extends EventEmitter {
     const unflatten = this._unflatten(module)
     assert(
       unflatten.p2pcommons.type === mType,
-      ValidationError,
+      TypeError,
       mType,
       unflatten.p2pcommons.type,
       'type'
@@ -293,31 +282,6 @@ class SDK extends EventEmitter {
     await Promise.all(joins)
   }
 
-  /**
-   * handy method for getting the dar url with its version (if version is omitted then module is fetched to get the latest version)
-   *
-   * @private
-   *
-   * @param {(string|buffer)} datUrl
-   * @returns {string}
-   */
-  async _getVersionedUrl (datUrl, version = null) {
-    this.assertDatUrl(datUrl)
-
-    const { version: versioned } = parse(datUrl)
-    if (versioned) return datUrl
-
-    if (version && typeof version === 'number') {
-      return `${datUrl}+${version}`
-    }
-
-    const { versionedKey } = await this.clone(datUrl, null, false)
-    if (!versionedKey) {
-      throw new Error(`Unable to found module with hyper url: ${datUrl}`)
-    }
-    return versionedKey
-  }
-
   async getOptionsOrCreate () {
     // read global settings or create with default values according to:
     // https://github.com/p2pcommons/specs/blob/main/interoperability.md#global-settings
@@ -349,8 +313,10 @@ class SDK extends EventEmitter {
         logicalTypes: {
           title: ValidationTypes.Title,
           path: ValidationTypes.Path,
-          'dat-url': ValidationTypes.DatUrl,
-          'dat-versioned-url': ValidationTypes.DatUrlVersion
+          'hyper-url': ValidationTypes.HyperUrl,
+          'hyper-url-versioned': ValidationTypes.HyperUrlVersioned,
+          'hyper-key': ValidationTypes.HyperKey,
+          'hyper-key-versioned': ValidationTypes.HyperKeyVersioned
         }
       })
       this.profileType = Type.forSchema(ProfileSchema, {
@@ -358,8 +324,10 @@ class SDK extends EventEmitter {
         logicalTypes: {
           title: ValidationTypes.Title,
           path: ValidationTypes.Path,
-          'dat-url': ValidationTypes.DatUrl,
-          'dat-versioned-url': ValidationTypes.DatUrlVersion
+          'hyper-url': ValidationTypes.HyperUrl,
+          'hyper-url-versioned': ValidationTypes.HyperUrlVersioned,
+          'hyper-key': ValidationTypes.HyperKey,
+          'hyper-key-versioned': ValidationTypes.HyperKeyVersioned
         }
       })
       const codec = new Codec(registry)
@@ -580,14 +548,14 @@ class SDK extends EventEmitter {
   }
 
   /**
-   * initialize a new module. This method will create a specific folder and seed the content if swarm is enabeld.
+   * initialize a new module. This method will create a specific folder and seed the content if swarm is enabled. Only type is mandatory.
    *
    * @public
    * @async
    * @param {{
    *   type: String,
    *   title: String,
-   *   subtype: String ,
+   *   subtype: String,
    *   description: String,
    *   authors: Array,
    *   contents: Array,
@@ -599,36 +567,21 @@ class SDK extends EventEmitter {
    */
   async init ({
     type,
-    title,
-    subtype = '',
+    title = '',
     description = '',
+    subtype = '',
     avatar = '',
     authors = [],
-    contents = [],
+    parents = [],
     follows = [],
-    parents = []
+    contents = []
   }) {
     // follow module spec: https://github.com/p2pcommons/specs/pull/1/files?short_path=2d471ef#diff-2d471ef4e3a452b579a3367eb33ccfb9
     // 1. create folder with unique name (pk)
     // 2. initialize an hyperdrive inside
     // 3. createIndexJSON with the correct metadata and save it there
-    //
-    assert(typeof type === 'string', ValidationError, 'string', type, 'type')
-    assert(
-      type === 'profile' || type === 'content',
-      ValidationError,
-      "'content' or 'profile'",
-      type,
-      'type'
-    )
-    assert(typeof title === 'string', ValidationError, 'string', title, 'title')
-    assert(
-      typeof subtype === 'string',
-      ValidationError,
-      'string',
-      subtype,
-      'subtype'
-    )
+
+    validateType({ indexMetadata: { type } })
 
     debug(`init ${type}`)
 
@@ -666,6 +619,8 @@ class SDK extends EventEmitter {
       contents,
       url: `hyper://${publicKeyString}`
     })
+
+    await validatePartial({ indexMetadata: indexJSON })
 
     // Note(dk): validate earlier
     const avroType = this._getAvroType(type)
@@ -734,14 +689,14 @@ class SDK extends EventEmitter {
     debug('saveItem', indexJSON)
     assert(
       typeof isWritable === 'boolean',
-      ValidationError,
+      TypeError,
       'boolean',
       isWritable,
       'isWritable'
     )
     assert(
       typeof indexJSON === 'object',
-      ValidationError,
+      TypeError,
       'object',
       indexJSON,
       'indexJSON'
@@ -813,139 +768,35 @@ class SDK extends EventEmitter {
   }
 
   /**
-   * validateMain
-   *
-   * @throws ValidationError
-   * @param {string} mainParam - the main param to check
-   * @param {string|buffer} url - the module url
-   * @param {[number]} version - the module version
-   * @returns {Boolean} -  true if validation went well
-   */
-  async validateMain (mainParam, url, version) {
-    // check if file exists
-    assert(
-      mainParam.length > 0,
-      ValidationError,
-      'non empty string',
-      mainParam,
-      'main'
-    )
-    try {
-      let thePath
-      if (isAbsolute(mainParam)) {
-        thePath = mainParam
-      } else {
-        const datUrl = version
-          ? `${DatEncoding.encode(url)}+${version}`
-          : DatEncoding.encode(url)
-        thePath = join(this.baseDir, datUrl, mainParam)
-      }
-      await access(thePath)
-    } catch (err) {
-      throw new ValidationError('file exists', err.message, 'main')
-    }
-  }
-
-  /**
-   * validate params passed to set
-   *
-   * @throws ValidationError
-   * @param params={}
-   * @returns {Boolean}
-   */
-  async validateParams (original, params = {}) {
-    // internal validations helpers
-    // no future parents (versions) validation
-    const validateNoFutureParents = (arr, newValue) => {
-      const { host: target, version: targetVersion } = parse(newValue)
-      for (const val of arr) {
-        const { host: root, version: localVersion } = parse(val)
-        if (root === target) {
-          if (targetVersion > localVersion) {
-            throw new ValidationError(
-              'version equal or lower',
-              newValue,
-              'version'
-            )
-          }
-        }
-      }
-      return true
-    }
-
-    // uniqueness validation
-    const isUnique = (arr = [], newValue, property) => {
-      if (arr.includes(newValue)) {
-        throw new ValidationError(
-          'unique values',
-          `${newValue} is already included`,
-          property
-        )
-      }
-    }
-
-    if (params.main) {
-      await this.validateMain(params.main, original.url)
-    }
-
-    if (params.authors && original.type === 'content') {
-      for (const a of params.authors) {
-        isUnique(original.authors, a, 'authors')
-      }
-    }
-
-    if (params.parents && original.type === 'content') {
-      for (const p of params.parents) {
-        // detect repeated
-        isUnique(original.parents, p, 'parents')
-        // O(n^2) - detect invalid future values
-        validateNoFutureParents(original.parents, p)
-      }
-    }
-
-    if (params.follows && original.type === 'profile') {
-      for (const f of params.follows) {
-        await this.validateFollow(original.url, f, original)
-        isUnique(original.follows, f, 'follows')
-      }
-    }
-
-    if (params.contents && original.type === 'profile') {
-      for (const c of params.contents) {
-        await this.validateRegister(c, original.url)
-        isUnique(original.contents, c, 'contents')
-      }
-    }
-    // all good
-    return true
-  }
-
-  /**
    * updates module fields
    *
    * @public
    * @async
    * @link https://github.com/p2pcommons/specs/blob/main/module.md
-   * @param {Object} module - Object containing field to update
-   * @param {(String|Buffer)} module.url - module hyper url REQUIRED
-   * @param {String} [module.title]
-   * @param {String} [module.description]
-   * @param {String} [module.main]
-   * @param {String} [module.subtype]
-   * @param {Array<String>} [module.authors] - only valid for content modules
-   * @param {Array<String>} [module.contents] - only valid for profile modules
+   * @param {Object} params - Object containing field to update
+   * @param {(String|Buffer)} params.url - module hyper url REQUIRED
+   * @param {String} [params.title]
+   * @param {String} [params.description]
+   * @param {String} [params.main]
+   * @param {String} [params.subtype]
+   * @param {String} [params.avatar]
+   * @param {Array<String>} [params.authors] - only valid for content modules
+   * @param {Array<String>} [params.parents] - only valid for content modules
+   * @param {Array<String>} [params.contents] - only valid for profile modules
+   * @param {Array<String>} [params.follows] - only valid for profile modules
+   * @param {Boolean} [force] - overrides validations if true
    */
   async set (params, force = false) {
     assert(
       typeof params === 'object',
-      ValidationError,
+      TypeError,
       'object',
       params,
       'params'
     )
     assert(
       typeof params.url === 'string' || Buffer.isBuffer(params.url),
-      ValidationError,
+      TypeError,
       "'string' or Buffer",
       params.url,
       'params.url'
@@ -953,7 +804,7 @@ class SDK extends EventEmitter {
 
     await this.ready()
 
-    // NOTE(dk): some properties are read only (license, follows, ...)
+    // NOTE(dk): some properties are read only (type, license, url, ...)
     const { url, ...mod } = params
     debug('set params', params)
     // Check if received keys are valid (editable)
@@ -968,16 +819,15 @@ class SDK extends EventEmitter {
     const { rawJSON: rawJSONFlatten, metadata } = await this.get(
       DatEncoding.encode(url)
     )
+    const { host: hyperdriveKey } = parse(rawJSONFlatten.url)
 
     if (!rawJSONFlatten) {
       // Note(dk): check if we need to search the module on the hyperdrive?
       throw new Error(`Module with url ${url} can not be found on localdb`)
     }
 
-    // check valid params
-    if (!force) {
-      await this.validateParams(rawJSONFlatten, params) // this will throw if invalid params are present
-      debug('set: valid params')
+    if (!metadata.isWritable) {
+      throw new Error(`Module with url ${url} is not writable`)
     }
 
     const prepareMergeData = ({
@@ -1009,6 +859,50 @@ class SDK extends EventEmitter {
         arrayMerge: force ? overwriteMerge : null
       }
     )
+
+    // check valid params
+    if (!force) {
+      if (params.contents !== undefined) {
+        for (const contentKey of params.contents) {
+          const { host: unversionedContentKey, version: contentVersion } = parse(contentKey)
+          const { rawJSON: contentJSON, metadata: contentMetadata, dwldHandle } = await this.clone(unversionedContentKey, contentVersion)
+          if (dwldHandle !== undefined) {
+            await once(dwldHandle, 'end')
+          }
+          await validateOnRegister({
+            contentIndexMetadata: contentJSON,
+            contentDbMetadata: contentMetadata,
+            contentKey,
+            profileIndexMetadata: finalJSON,
+            profileDbMetadata: metadata,
+            profileKey: hyperdriveKey,
+            p2pcommonsDir: this.baseDir
+          })
+        }
+      } else {
+        await validatePartial({
+          indexMetadata: finalJSON,
+          dbMetadata: metadata,
+          key: hyperdriveKey,
+          p2pcommonsDir: this.baseDir
+        })
+      }
+      if (params.parents !== undefined) {
+        await validateParentsOnUpdate({
+          indexMetadata: finalJSON,
+          p2pcommons: this
+        })
+      }
+      if (params.follows !== undefined) {
+        for (const followedKey of params.follows) {
+          const { rawJSON: followJSON } = await this.clone(followedKey)
+          validateOnFollow({
+            followedIndexMetadata: followJSON
+          })
+        }
+      }
+      debug('set: valid params')
+    }
 
     debug('set', { finalJSON })
     // Check if keys values are valid (ie: non empty, etc)
@@ -1053,14 +947,14 @@ class SDK extends EventEmitter {
   async filterExact (feature, criteria) {
     assert(
       typeof feature === 'string',
-      ValidationError,
+      TypeError,
       'string',
       feature,
       'feature'
     )
     assert(
       typeof criteria === 'string',
-      ValidationError,
+      TypeError,
       'string',
       criteria,
       'criteria'
@@ -1082,14 +976,14 @@ class SDK extends EventEmitter {
   async filter (feature, criteria) {
     assert(
       typeof feature === 'string',
-      ValidationError,
+      TypeError,
       'string',
       feature,
       'feature'
     )
     assert(
       typeof criteria === 'string',
-      ValidationError,
+      TypeError,
       'string',
       criteria,
       'criteria'
@@ -1208,7 +1102,7 @@ class SDK extends EventEmitter {
   async openFile (key) {
     assert(
       typeof key === 'string' || Buffer.isBuffer(key),
-      ValidationError,
+      TypeError,
       "'string' or Buffer",
       key,
       'key'
@@ -1412,7 +1306,7 @@ class SDK extends EventEmitter {
     // get module from localdb, if absent will query it from the swarm
     // this fn will also call seed() after retrieving the module from the swarm
 
-    this.assertDatUrl(mKey)
+    this.assertHyperUrl(mKey)
     if (typeof mVersion === 'boolean') {
       download = mVersion
       mVersion = null
@@ -1437,7 +1331,6 @@ class SDK extends EventEmitter {
     let version
     let meta
     let dwldHandle
-
     const mKeyString = DatEncoding.encode(mKey)
 
     if (!mVersion) {
@@ -1457,102 +1350,10 @@ class SDK extends EventEmitter {
 
     return {
       rawJSON: this._flatten(module),
-      versionedKey: `hyper://${mKeyString}+${version}`,
+      versionedKey: `${mKeyString}+${version}`,
       metadata: meta,
       dwldHandle
     }
-  }
-
-  async validateRegister (contentKey, profileKey) {
-    assert(
-      typeof contentKey === 'string' || Buffer.isBuffer(contentKey),
-      ValidationError,
-      "'string' or Buffer",
-      contentKey,
-      'contentKey'
-    )
-    assert(
-      typeof profileKey === 'string' || Buffer.isBuffer(profileKey),
-      ValidationError,
-      "'string' or Buffer",
-      profileKey,
-      'profileKey'
-    )
-    await this.ready()
-
-    const { host: cKey, version: contentVersion } = parse(contentKey)
-    const { host: pKey, version: profileVersion } = parse(profileKey)
-    if (!contentVersion) {
-      this._log(
-        'register: Content version is not found. Using latest version.',
-        'warn'
-      )
-    }
-    // fetch content and profile
-    const {
-      rawJSON: content,
-      versionedKey: cKeyVersion,
-      dwldHandle
-    } = await this.clone(cKey, contentVersion, true)
-
-    if (dwldHandle) {
-      await once(dwldHandle, 'end')
-    }
-
-    const { rawJSON: profile } = await this.clone(pKey, profileVersion, false)
-
-    // TODO(dk): consider add custom errors for registration and verification
-    assert(
-      content.type === 'content',
-      ValidationError,
-      'content',
-      content.type,
-      'type'
-    )
-    assert(
-      profile.type === 'profile',
-      ValidationError,
-      'profile',
-      profile.type,
-      'type'
-    )
-
-    const profileType = this._getAvroType(profile.type)
-    const profileValid = profileType.isValid(this._unflatten(profile))
-    if (!profileValid) {
-      throw new Error('Invalid profile module')
-    }
-    const contentType = this._getAvroType(content.type)
-    const contentValid = contentType.isValid(this._unflatten(content))
-    if (!contentValid) {
-      throw new Error('Invalid content module')
-    }
-
-    // validate content's main file exists
-    await this.validateMain(content.main, content.url, contentVersion)
-
-    // Note(dk): at this point is safe to save the new modules if necessary
-    if (content.authors.length === 0) {
-      throw new ValidationError(
-        'authors field should not be empty',
-        content.authors,
-        'authors'
-      )
-    }
-
-    if (!content.authors.includes(profile.url)) {
-      throw new ValidationError(
-        'authors should include profile url',
-        profile.url,
-        'authors'
-      )
-    }
-
-    if (profile.contents.includes(cKeyVersion)) {
-      throw new ValidationError('unique value', cKeyVersion, 'contents')
-    }
-
-    return true
   }
 
   /**
@@ -1561,8 +1362,8 @@ class SDK extends EventEmitter {
    * @public
    * @async
    * @link https://github.com/p2pcommons/specs/blob/main/module.md#registration
-   * @param {(String|Buffer)} contentKey - hyper url
-   * @param {(String|Buffer)} profileKey - hyper url
+   * @param {(String|Buffer)} contentKey - versioned or unversioned key
+   * @param {(String|Buffer)} profileKey - unversioned key
    */
   async register (contentKey, profileKey) {
     debug(`register contentKey: ${contentKey}`)
@@ -1584,22 +1385,22 @@ class SDK extends EventEmitter {
    * @public
    * @async
    * @link https://github.com/p2pcommons/specs/blob/main/module.md#verification
-   * @param {String} datUrl - a versioned hyper url
+   * @param {String} versionedKey - a versioned hyper key or url
    * @returns {Boolean} - true if module is verified, false otherwise
    */
-  async verify (datUrl) {
-    debug('verify %s', datUrl)
-    const { host: url, version } = parse(datUrl)
+  async verify (versionedKey) {
+    debug('verify %s', versionedKey)
+    const { host: unversionedKey, version } = parse(versionedKey)
     if (!version) {
       throw new Error('Module can not be verified: unversioned content')
     }
     await this.ready()
 
-    const { rawJSON: module } = await this.clone(url, version, false)
+    const { rawJSON: module } = await this.clone(unversionedKey, version, false)
 
     assert(
       module.type === 'content',
-      ValidationError,
+      TypeError,
       'content',
       module.type,
       'type'
@@ -1609,27 +1410,27 @@ class SDK extends EventEmitter {
     return module.authors.reduce(async (prevProm, authorKey) => {
       const prev = await prevProm
       const { rawJSON: profile } = await this.clone(authorKey, null, false)
-      return prev && profile.contents.includes(datUrl)
+      return prev && profile.contents.includes(versionedKey)
     }, Promise.resolve(true))
   }
 
   /**
    * deregister content from a user's profile
    *
-   * @param {(String)} contentKey - contentKey should include the version
-   * @param {(String|Buffer)} profileKey
+   * @param {(String|Buffer)} contentKey - version that is registered
+   * @param {(String|Buffer)} profileKey - unversioned key
    */
   async deregister (contentKey, profileKey) {
     assert(
       typeof contentKey === 'string' || Buffer.isBuffer(contentKey),
-      ValidationError,
+      TypeError,
       "'string' or Buffer",
       contentKey,
       'contentKey'
     )
     assert(
       typeof profileKey === 'string' || Buffer.isBuffer(profileKey),
-      ValidationError,
+      TypeError,
       "'string' or Buffer",
       profileKey,
       'profileKey'
@@ -1646,7 +1447,7 @@ class SDK extends EventEmitter {
 
     if (!profile) {
       throw new Error(
-        `profile with key ${DatEncoding.encode(profileKey)} not found`
+        `profile with key ${profileKey} not found`
       )
     }
 
@@ -1677,100 +1478,20 @@ class SDK extends EventEmitter {
     )
   }
 
-  async validateFollow (
-    localProfileUrl,
-    targetProfileUrl,
-    profileModule = null
-  ) {
-    this.assertDatUrl(localProfileUrl)
-    this.assertDatUrl(targetProfileUrl)
-
-    debug('validate follow')
-
-    let localProfile
-
-    const localUrl = DatEncoding.encode(localProfileUrl)
-    const targetUrl = DatEncoding.encode(targetProfileUrl)
-    if (localUrl === targetUrl) {
-      throw new ValidationError('self-reference', targetProfileUrl, 'follows')
-    }
-
-    await this.ready()
-
-    if (profileModule) {
-      localProfile = profileModule
-    } else {
-      // Fetching localProfile module
-      const { rawJSON: module, metadata } = await this.clone(
-        localProfileUrl,
-        false
-      )
-      if (!metadata.isWritable) {
-        throw new Error('Profile is not writable')
-      }
-      localProfile = module
-    }
-
-    // Note(dk): consider make custom error types for these
-    if (!localProfile) {
-      throw new Error('Profile module not found')
-    }
-
-    this.assertModuleType(localProfile, 'profile')
-
-    this.assertModule(localProfile)
-
-    const { host: targetProfileKey, version: targetProfileVersion } = parse(
-      targetProfileUrl
-    )
-
-    // Fetching targetProfile module
-    debug(
-      `follow validation: fetching module with key: ${targetProfileKey} and version: ${targetProfileVersion}`
-    )
-    const { rawJSON: targetProfile } = await this.clone(
-      targetProfileKey,
-      targetProfileVersion,
-      false
-    )
-
-    if (!targetProfile) {
-      throw new Error('Profile module not found')
-    }
-
-    this.assertModuleType(targetProfile, 'profile')
-
-    this.assertModule(targetProfile)
-
-    const finalTargetProfileKey = targetProfileVersion
-      ? `hyper://${targetProfileKey}+${targetProfileVersion}`
-      : `hyper://${targetProfileKey}`
-
-    if (localProfile.follows.includes(finalTargetProfileKey)) {
-      throw new ValidationError(
-        'unique value',
-        finalTargetProfileKey,
-        'follows'
-      )
-    }
-
-    return true
-  }
-
   /**
    * follow a profile
    * @public
    * @async
-   * @param {string} localProfileUrl - local profile hyper url
-   * @param {string} targetProfileUrl - target profile hyper url
+   * @param {string} localProfileKey - unversioned key
+   * @param {string} targetProfileKey - versioned or unversioned key
    */
-  async follow (localProfileUrl, targetProfileUrl) {
+  async follow (localProfileKey, targetProfileKey) {
     debug('follow')
 
     // update profile
     await this.set({
-      url: localProfileUrl,
-      follows: [targetProfileUrl]
+      url: localProfileKey,
+      follows: [targetProfileKey]
     })
 
     this._log('follow: profile updated successfully')
@@ -1781,12 +1502,12 @@ class SDK extends EventEmitter {
    *
    * @public
    * @async
-   * @param {(string|buffer)} localProfileUrl - hyper url
-   * @param {(string|buffer)} targetProfileUrl - hyper url
+   * @param {(string|buffer)} localProfileKey - unversioned key
+   * @param {(string|buffer)} targetProfileKey - version that is followed
    */
-  async unfollow (localProfileUrl, targetProfileUrl) {
-    this.assertDatUrl(localProfileUrl)
-    this.assertDatUrl(targetProfileUrl)
+  async unfollow (localProfileKey, targetProfileKey) {
+    this.assertHyperUrl(localProfileKey)
+    this.assertHyperUrl(targetProfileKey)
 
     debug('unfollow')
 
@@ -1794,7 +1515,7 @@ class SDK extends EventEmitter {
 
     // Fetching localProfile module
     const { rawJSON: localProfile, metadata } = await this.clone(
-      localProfileUrl,
+      localProfileKey,
       false
     )
 
@@ -1810,16 +1531,16 @@ class SDK extends EventEmitter {
 
     this.assertModule(localProfile)
 
-    const { host: targetProfileKey, version: targetProfileVersion } = parse(
-      targetProfileUrl
+    const { host: targetProfileKeyUnversioned, version: targetProfileVersion } = parse(
+      targetProfileKey
     )
 
     // Fetching targetProfile module
     debug(
-      `follow: fetching module with key: ${targetProfileKey} and version: ${targetProfileVersion}`
+      `follow: fetching module with key: ${targetProfileKeyUnversioned} and version: ${targetProfileVersion}`
     )
     const { rawJSON: targetProfile } = await this.clone(
-      targetProfileKey,
+      targetProfileKeyUnversioned,
       targetProfileVersion,
       false
     )
@@ -1834,8 +1555,8 @@ class SDK extends EventEmitter {
 
     // everything is valid, removing profile
     const finalTargetProfileKey = targetProfileVersion
-      ? `hyper://${targetProfileKey}+${targetProfileVersion}`
-      : `hyper://${targetProfileKey}`
+      ? `${targetProfileKeyUnversioned}+${targetProfileVersion}`
+      : targetProfileKeyUnversioned
 
     const idx = localProfile.follows.indexOf(finalTargetProfileKey)
     if (idx !== -1) {
@@ -1864,7 +1585,7 @@ class SDK extends EventEmitter {
   async delete (key, deleteFiles = false) {
     assert(
       typeof key === 'string' || Buffer.isBuffer(key),
-      ValidationError,
+      TypeError,
       "'string' or Buffer",
       key,
       'key'
@@ -1964,6 +1685,8 @@ class SDK extends EventEmitter {
   }
 }
 
-SDK.errors = { ValidationError, InvalidKeyError, MissingParam, EBUSYError }
+SDK.errors = { ValidationError, TypeError, InvalidKeyError, MissingParam, EBUSYError }
+
+SDK.validations = { validate, validatePartial, validateOnRegister, validateOnFollow, validateTitle, validateDescription, validateUrl, validateLinks, validateP2pcommons, validateType, validateSubtype, validateMain, validateAvatar, validateAuthors, validateParents, validateParentsOnUpdate, validateFollows, validateContents }
 
 module.exports = SDK

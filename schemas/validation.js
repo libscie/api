@@ -1,5 +1,5 @@
 const { LogicalType, Type } = require('@avro/types')
-const { ValidationError } = require('../lib/errors')
+const { TypeError } = require('../lib/errors')
 
 /**
  * string validator
@@ -14,14 +14,14 @@ class Title extends LogicalType {
 
   _fromValue (val) {
     if (val === undefined || val === null) {
-      throw new ValidationError('non empty string', val)
+      throw new TypeError('non empty string', val)
     }
     if (!this._pattern.test(val)) {
-      throw new ValidationError('non empty string', val)
+      throw new TypeError('non empty string', val)
     }
 
     if (val.length > 300) {
-      throw new ValidationError('max limit exceeded (300)', val)
+      throw new TypeError('max limit exceeded (300)', val)
     }
 
     return val
@@ -29,15 +29,15 @@ class Title extends LogicalType {
 
   _toValue (val) {
     if (val === undefined || val === null) {
-      throw new ValidationError('non empty string', val)
+      throw new TypeError('non empty string', val)
     }
 
     if (!this._pattern.test(val)) {
-      throw new ValidationError('non empty string', val)
+      throw new TypeError('non empty string', val)
     }
 
     if (val.length > 300) {
-      throw new ValidationError('max limit exceeded (300)', val)
+      throw new TypeError('max limit exceeded (300)', val)
     }
 
     return val
@@ -56,10 +56,10 @@ class Path extends LogicalType {
       this.required &&
       (val === undefined || val === null || val.length === 0)
     ) {
-      throw new ValidationError('path must be defined', val)
+      throw new TypeError('path must be defined', val)
     }
     if (!this._pattern.test(val)) {
-      throw new ValidationError('invalid path', val)
+      throw new TypeError('invalid path', val)
     }
 
     return val
@@ -70,70 +70,126 @@ class Path extends LogicalType {
       this.required &&
       (val === undefined || val === null || val.length === 0)
     ) {
-      throw new ValidationError('non empty string', val)
+      throw new TypeError('non empty string', val)
     }
 
     if (!this._pattern.test(val)) {
-      throw new ValidationError('invalid path', val)
+      throw new TypeError('invalid path', val)
     }
 
     return val
   }
 }
 
-class DatUrl extends LogicalType {
+class HyperUrl extends LogicalType {
   constructor (attrs, opts) {
     super(attrs, opts)
-    this._pattern = new RegExp(/^(hyper:\/\/)(\w{64})$/)
+    this._pattern = /^(hyper:\/\/)([a-f0-9]{64})$/i
   }
 
   _fromValue (val) {
     if (val === undefined || val === null) {
-      throw new ValidationError('non empty string', val)
+      throw new TypeError('non empty string', val)
     }
     if (!this._pattern.test(val)) {
-      throw new ValidationError('valid hyper url', val)
+      throw new TypeError('valid hyper url', val)
     }
     return val
   }
 
   _toValue (val) {
     if (val === undefined || val === null) {
-      throw new ValidationError('non empty string', val)
+      throw new TypeError('non empty string', val)
     }
     if (!this._pattern.test(val)) {
-      throw new ValidationError('valid hyper url', val)
+      throw new TypeError('valid hyper url', val)
     }
     return val
   }
 }
 
-class DatUrlVersion extends LogicalType {
+class HyperUrlVersioned extends LogicalType {
   constructor (attrs, opts) {
     super(attrs, opts)
-    let pattern = /^(hyper:\/\/)(\w{64})(\+\d+)?$/
+    this._pattern = /^(hyper:\/\/)([a-f0-9]{64})(\+\d+)?$/i
     if (attrs.strict) {
-      pattern = /^(hyper:\/\/)(\w{64})(\+\d+)$/
+      this._pattern = /^(hyper:\/\/)([a-f0-9]{64})(\+\d+)$/i
     }
-    this._pattern = new RegExp(pattern)
   }
 
   _fromValue (val) {
     if (val === undefined || val === null) {
-      throw new ValidationError('non empty string', val)
+      throw new TypeError('non empty string', val)
     }
     if (!this._pattern.test(val)) {
-      throw new ValidationError('valid hyper url', val)
+      throw new TypeError('valid hyper url', val)
     }
     return val
   }
 
   _toValue (val) {
     if (val === undefined || val === null) {
-      throw new ValidationError('non empty string', val)
+      throw new TypeError('non empty string', val)
     }
     if (!this._pattern.test(val)) {
-      throw new ValidationError('valid hyper url', val)
+      throw new TypeError('valid hyper url', val)
+    }
+    return val
+  }
+}
+
+class HyperKey extends LogicalType {
+  constructor (attrs, opts) {
+    super(attrs, opts)
+    this._pattern = /^([a-f0-9]{64})$/i
+  }
+
+  _fromValue (val) {
+    if (val === undefined || val === null) {
+      throw new TypeError('non empty string', val)
+    }
+    if (!this._pattern.test(val)) {
+      throw new TypeError('valid hyper url', val)
+    }
+    return val
+  }
+
+  _toValue (val) {
+    if (val === undefined || val === null) {
+      throw new TypeError('non empty string', val)
+    }
+    if (!this._pattern.test(val)) {
+      throw new TypeError('valid hyper url', val)
+    }
+    return val
+  }
+}
+
+class HyperKeyVersioned extends LogicalType {
+  constructor (attrs, opts) {
+    super(attrs, opts)
+    this._pattern = /^([a-f0-9]{64})(\+\d+)?$/i
+    if (attrs.strict) {
+      this._pattern = /^([a-f0-9]{64})(\+\d+)$/i
+    }
+  }
+
+  _fromValue (val) {
+    if (val === undefined || val === null) {
+      throw new TypeError('non empty string', val)
+    }
+    if (!this._pattern.test(val)) {
+      throw new TypeError('valid hyper url', val)
+    }
+    return val
+  }
+
+  _toValue (val) {
+    if (val === undefined || val === null) {
+      throw new TypeError('non empty string', val)
+    }
+    if (!this._pattern.test(val)) {
+      throw new TypeError('valid hyper url', val)
     }
     return val
   }
@@ -158,7 +214,9 @@ class DateType extends LogicalType {
 module.exports = {
   Title,
   Path,
-  DatUrl,
-  DatUrlVersion,
+  HyperUrl,
+  HyperUrlVersioned,
+  HyperKey,
+  HyperKeyVersioned,
   DateType
 }

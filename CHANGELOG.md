@@ -5,7 +5,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+- Full and partial metadata validations #154
+- TypeError to replace old ValidationErrors #154
+
 ### Changed
+- Remove hyper:// protocol from p2pcommons keys #179
+- ValidationError parameters to fit with new validations #154
+- Improved readability of some parts of the readme
 - bump lodash from 4.17.15 to 4.17.19 
 - Eagerly call networker listen, remove await from swarm.join call #193
 
