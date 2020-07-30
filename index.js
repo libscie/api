@@ -1058,7 +1058,7 @@ class SDK extends EventEmitter {
       const s = this.localdb.createValueStream()
       s.on('data', val => {
         const { rawJSON, ...metadata } = val
-        if (metadata.isWritable && rawJSON.p2pcommons.type === 'profile') {
+        if (rawJSON.p2pcommons.type === 'profile') {
           const flattened = {
             rawJSON: this._flatten(rawJSON),
             metadata

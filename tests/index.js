@@ -786,6 +786,10 @@ test('list content', async t => {
 
 test('list profiles', async t => {
   const p2p = createDb()
+  const sampleDataProfile = [
+    { type: 'profile', title: 'Professor X' },
+    { type: 'profile', title: 'Mystique' }
+  ]
   const sampleDataContent = [
     {
       type: 'content',
@@ -798,15 +802,41 @@ test('list profiles', async t => {
     },
     { type: 'content', title: 'sample' }
   ]
-
-  const sampleDataProfile = [{ type: 'profile', title: 'Professor X' }]
-
-  await Promise.all(
+  const [{ rawJSON: { url } }] = await Promise.all(
     []
-      .concat(sampleDataContent)
       .concat(sampleDataProfile)
+      .concat(sampleDataContent)
       .map(d => p2p.init(d))
   )
+
+  await p2p.saveItem({
+    isWritable: false,
+    lastModified: new Date(),
+    version: '5',
+    indexJSON: {
+      url,
+      title: sampleDataProfile[0].title,
+      description: '',
+      links: {
+        license: [
+          {
+            href:
+              'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+          }
+        ],
+        spec: [{ href: 'https://p2pcommons.com/specs/module/x.x.x' }]
+      },
+      p2pcommons: {
+        type: 'profile',
+        subtype: '',
+        main: '',
+        avatar: '',
+        follows: [],
+        contents: []
+      }
+    }
+  })
+
   const result = await p2p.listProfiles()
   t.same(result.length, sampleDataProfile.length)
   await p2p.destroy()
