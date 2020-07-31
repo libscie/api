@@ -1,7 +1,8 @@
 const P2PCommons = require('..') // liberate science constructor function
 const tempy = require('tempy')
 const commons = new P2PCommons({
-  verbose: true
+  verbose: true,
+  persist: false
 })
 
 process.once('SIGINT', () => commons.destroy())

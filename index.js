@@ -21,7 +21,26 @@ const Swarm = require('corestore-swarm-networking')
 const dat = require('./lib/dat-helper')
 const parse = require('./lib/parse-url')
 const baseDir = require('./lib/base-dir')
-const { validate, validatePartial, validateOnRegister, validateOnFollow, validateTitle, validateDescription, validateUrl, validateLinks, validateP2pcommons, validateType, validateSubtype, validateMain, validateAvatar, validateAuthors, validateParents, validateParentsOnUpdate, validateFollows, validateContents } = require('./lib/validate')
+const {
+  validate,
+  validatePartial,
+  validateOnRegister,
+  validateOnFollow,
+  validateTitle,
+  validateDescription,
+  validateUrl,
+  validateLinks,
+  validateP2pcommons,
+  validateType,
+  validateSubtype,
+  validateMain,
+  validateAvatar,
+  validateAuthors,
+  validateParents,
+  validateParentsOnUpdate,
+  validateFollows,
+  validateContents
+} = require('./lib/validate')
 const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
@@ -60,11 +79,7 @@ const assertValid = (type, val) => {
         throw new Error(msg)
       }
     }
-    throw new TypeError(
-      type.name ? type.name : type._logicalTypeName,
-      any,
-      msg
-    )
+    throw new TypeError(type.name ? type.name : type._logicalTypeName, any, msg)
   }
 }
 
@@ -100,6 +115,7 @@ class SDK extends EventEmitter {
     this.drives = new Map()
     this.seeds = new Map()
     this.drivesToWatch = new Map()
+    this.dwldsToWatch = new Map()
 
     this.dht = finalOpts.dht
     this.bootstrap = finalOpts.bootstrap
@@ -251,7 +267,10 @@ class SDK extends EventEmitter {
     ) {
       return
     }
-    this.drives.set(dkey, archive)
+
+    if (!archive.isCheckout) {
+      this.drives.set(dkey, archive)
+    }
 
     if (!this.disableSwarm) {
       // await this.localdb.open()
@@ -710,7 +729,9 @@ class SDK extends EventEmitter {
     const dkey = DatEncoding.encode(
       crypto.discoveryKey(DatEncoding.decode(keyString))
     )
-    archive = this.drives.get(version ? `${dkey}+${version}` : dkey)
+    // archive = this.drives.get(version ? `${dkey}+${version}` : dkey)
+    archive = this.drives.get(dkey)
+
     if (!archive) {
       debug(`saveItem: calling hyper open ${keyString}`)
       const drive = dat.open(this.store, DatEncoding.decode(indexJSON.url), {
@@ -735,13 +756,10 @@ class SDK extends EventEmitter {
     }
 
     debug('updating cache value')
-    // Note(dk): we are almost all the time fetching profiles without indicating any specific version so this is more effective
-    this.drives.set(
-      version && indexJSON.p2pcommons.type !== 'profile'
-        ? `${dkey}+${version}`
-        : dkey,
-      archive
-    )
+
+    if (!archive.isCheckout) {
+      this.drives.set(dkey, archive)
+    }
 
     const lastM =
       mtime && mtime.getTime() >= lastModified.getTime() ? mtime : lastModified
@@ -787,13 +805,7 @@ class SDK extends EventEmitter {
    * @param {Boolean} [force] - overrides validations if true
    */
   async set (params, force = false) {
-    assert(
-      typeof params === 'object',
-      TypeError,
-      'object',
-      params,
-      'params'
-    )
+    assert(typeof params === 'object', TypeError, 'object', params, 'params')
     assert(
       typeof params.url === 'string' || Buffer.isBuffer(params.url),
       TypeError,
@@ -864,15 +876,22 @@ class SDK extends EventEmitter {
     if (!force) {
       if (params.contents !== undefined) {
         for (const contentKey of params.contents) {
-          const { host: unversionedContentKey, version: contentVersion } = parse(contentKey)
-          const { rawJSON: contentJSON, metadata: contentMetadata, dwldHandle } = await this.clone(unversionedContentKey, contentVersion)
+          const {
+            host: unversionedContentKey,
+            version: contentVersion
+          } = parse(contentKey)
+          const {
+            rawJSON: contentJSON,
+            metadata: contentMetadata,
+            dwldHandle
+          } = await this.clone(unversionedContentKey, contentVersion)
           if (dwldHandle !== undefined) {
             await once(dwldHandle, 'end')
           }
           await validateOnRegister({
             contentIndexMetadata: contentJSON,
             contentDbMetadata: contentMetadata,
-            contentKey,
+            contentKey: contentKey,
             profileIndexMetadata: finalJSON,
             profileDbMetadata: metadata,
             profileKey: hyperdriveKey,
@@ -945,13 +964,7 @@ class SDK extends EventEmitter {
   }
 
   async filterExact (feature, criteria) {
-    assert(
-      typeof feature === 'string',
-      TypeError,
-      'string',
-      feature,
-      'feature'
-    )
+    assert(typeof feature === 'string', TypeError, 'string', feature, 'feature')
     assert(
       typeof criteria === 'string',
       TypeError,
@@ -974,13 +987,7 @@ class SDK extends EventEmitter {
   }
 
   async filter (feature, criteria) {
-    assert(
-      typeof feature === 'string',
-      TypeError,
-      'string',
-      feature,
-      'feature'
-    )
+    assert(typeof feature === 'string', TypeError, 'string', feature, 'feature')
     assert(
       typeof criteria === 'string',
       TypeError,
@@ -1131,7 +1138,8 @@ class SDK extends EventEmitter {
     const dkey = DatEncoding.encode(crypto.discoveryKey(keyBuffer))
     const cacheKey = version ? `${dkey}+${version}` : dkey
 
-    const archive = this.drives.get(cacheKey)
+    // const archive = this.drives.get(cacheKey)
+    const archive = this.drives.get(dkey)
     if (archive) {
       debug(`getDrive: module found in cache with cachekey ${cacheKey}`)
       return archive
@@ -1210,7 +1218,10 @@ class SDK extends EventEmitter {
       module = JSON.parse(content)
       // NOTE (dk): we can consider have another map for checkouts only
       const dkey = DatEncoding.encode(moduleVersion.discoveryKey)
-      this.drives.set(version ? `${dkey}+${version}` : dkey, moduleVersion)
+
+      if (!moduleVersion.isCheckout) {
+        this.drives.set(dkey, moduleVersion)
+      }
     } catch (err) {
       this._log(err.message, 'error')
       if (this.canceledClone) return
@@ -1228,6 +1239,10 @@ class SDK extends EventEmitter {
 
     if (download) {
       dwldHandle = dat.downloadFiles(moduleVersion, folderPath)
+      this.dwldsToWatch.set(
+        DatEncoding.encode(moduleVersion.discoveryKey),
+        dwldHandle
+      )
     }
 
     let lastMeta
@@ -1369,11 +1384,23 @@ class SDK extends EventEmitter {
     debug(`register contentKey: ${contentKey}`)
     debug(`register profileKey: ${profileKey}`)
 
-    // profile.p2pcommons.contents.push(cKeyVersion)
-    // update profile
+    const parseUrl = urlOrBuffer => {
+      let url
+      if (Buffer.isBuffer(urlOrBuffer)) {
+        url = DatEncoding.encode(urlOrBuffer)
+      } else if (typeof urlOrBuffer === 'string') {
+        const fullUrl = parse(urlOrBuffer)
+        url = fullUrl.version
+          ? `${fullUrl.host}+${fullUrl.version}`
+          : fullUrl.host
+      }
+
+      return url
+    }
+
     await this.set({
       url: profileKey,
-      contents: [contentKey]
+      contents: [parseUrl(contentKey)]
     })
 
     this._log('register: profile updated successfully')
@@ -1398,13 +1425,7 @@ class SDK extends EventEmitter {
 
     const { rawJSON: module } = await this.clone(unversionedKey, version, false)
 
-    assert(
-      module.type === 'content',
-      TypeError,
-      'content',
-      module.type,
-      'type'
-    )
+    assert(module.type === 'content', TypeError, 'content', module.type, 'type')
 
     if (module.authors.length === 0) return false
     return module.authors.reduce(async (prevProm, authorKey) => {
@@ -1446,9 +1467,7 @@ class SDK extends EventEmitter {
     }
 
     if (!profile) {
-      throw new Error(
-        `profile with key ${profileKey} not found`
-      )
+      throw new Error(`profile with key ${profileKey} not found`)
     }
 
     const { host: cKey, version: contentVersion } = parse(contentKey)
@@ -1456,18 +1475,22 @@ class SDK extends EventEmitter {
       this._log('content url does not include version', 'warn')
     }
 
-    const { rawJSON: content, versionedKey } = await this.clone(
-      cKey,
-      contentVersion,
-      false
-    )
+    const { rawJSON: content } = await this.clone(cKey, contentVersion, false)
     if (!content) {
       this._log(`content with key ${cKey} not found`)
       return
     }
 
+    // check if cKey is part of contents
+    const finalCkey = contentVersion ? `${cKey}+${contentVersion}` : `${cKey}`
+
+    if (!profile.contents.includes(finalCkey)) {
+      this._log('contentKey is not included in profiles contents', 'warn')
+      return
+    }
+
     // everything is valid, removing content from contents
-    profile.contents.splice(profile.contents.indexOf(versionedKey), 1)
+    profile.contents.splice(profile.contents.indexOf(finalCkey), 1)
 
     await this.set(
       {
@@ -1531,9 +1554,10 @@ class SDK extends EventEmitter {
 
     this.assertModule(localProfile)
 
-    const { host: targetProfileKeyUnversioned, version: targetProfileVersion } = parse(
-      targetProfileKey
-    )
+    const {
+      host: targetProfileKeyUnversioned,
+      version: targetProfileVersion
+    } = parse(targetProfileKey)
 
     // Fetching targetProfile module
     debug(
@@ -1647,10 +1671,12 @@ class SDK extends EventEmitter {
    * @param {Boolean} swarm=true - if true it will close the swarm
    */
   async destroy (db = true, swarm = true) {
-    if (this.watch) {
-      for (const mirror of this.drivesToWatch.values()) {
-        mirror.destroy()
-      }
+    for (const mirror of this.drivesToWatch.values()) {
+      mirror.destroy()
+    }
+
+    for (const mirror of this.dwldsToWatch.values()) {
+      mirror.destroy()
     }
 
     if (db) {
@@ -1665,12 +1691,11 @@ class SDK extends EventEmitter {
       debug('db successfully closed')
     }
 
+    for (const drive of this.drives.values()) {
+      await drive.close()
+    }
+
     if (swarm && this.networker) {
-      for (const drive of this.drives.values()) {
-        if (drive.closing && !drive.closed) {
-          await drive.close()
-        }
-      }
       debug('closing swarm...')
       try {
         await this.networker.close()
@@ -1685,8 +1710,33 @@ class SDK extends EventEmitter {
   }
 }
 
-SDK.errors = { ValidationError, TypeError, InvalidKeyError, MissingParam, EBUSYError }
+SDK.errors = {
+  ValidationError,
+  TypeError,
+  InvalidKeyError,
+  MissingParam,
+  EBUSYError
+}
 
-SDK.validations = { validate, validatePartial, validateOnRegister, validateOnFollow, validateTitle, validateDescription, validateUrl, validateLinks, validateP2pcommons, validateType, validateSubtype, validateMain, validateAvatar, validateAuthors, validateParents, validateParentsOnUpdate, validateFollows, validateContents }
+SDK.validations = {
+  validate,
+  validatePartial,
+  validateOnRegister,
+  validateOnFollow,
+  validateTitle,
+  validateDescription,
+  validateUrl,
+  validateLinks,
+  validateP2pcommons,
+  validateType,
+  validateSubtype,
+  validateMain,
+  validateAvatar,
+  validateAuthors,
+  validateParents,
+  validateParentsOnUpdate,
+  validateFollows,
+  validateContents
+}
 
 module.exports = SDK

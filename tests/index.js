@@ -535,20 +535,27 @@ test('set: content, follows, authors, parents idempotent with repeated values', 
     title: 'parent2'
   }
 
-  const { rawJSON: { url: followedProfile1Url } } = await p2p.init(followedProfile1)
-  const { rawJSON: { url: followedProfile2Url } } = await p2p.init(followedProfile2)
-  const { rawJSON: { url: parentContent1Url }, metadata: { version: parentContent1Version } } = await p2p.init(parentContent1)
-  const { rawJSON: { url: parentContent2Url }, metadata: { version: parentContent2Version } } = await p2p.init(parentContent2)
+  const {
+    rawJSON: { url: followedProfile1Url }
+  } = await p2p.init(followedProfile1)
+  const {
+    rawJSON: { url: followedProfile2Url }
+  } = await p2p.init(followedProfile2)
+  const {
+    rawJSON: { url: parentContent1Url },
+    metadata: { version: parentContent1Version }
+  } = await p2p.init(parentContent1)
+  const {
+    rawJSON: { url: parentContent2Url },
+    metadata: { version: parentContent2Version }
+  } = await p2p.init(parentContent2)
 
   const sampleProfile = {
     type: 'profile',
     title: 'professorX',
     subtype: '',
     avatar: './test.png',
-    follows: [
-      encode(followedProfile1Url),
-      encode(followedProfile2Url)
-    ]
+    follows: [encode(followedProfile1Url), encode(followedProfile2Url)]
   }
 
   const { rawJSON: profile } = await p2p.init(sampleProfile)
@@ -558,9 +565,7 @@ test('set: content, follows, authors, parents idempotent with repeated values', 
     type: 'content',
     title: 'demo',
     description: 'lorem ipsum',
-    authors: [
-      profileKey
-    ],
+    authors: [profileKey],
     parents: [
       `${encode(parentContent1Url)}+${parentContent1Version}`,
       `${encode(parentContent2Url)}+${parentContent2Version}`
@@ -570,19 +575,14 @@ test('set: content, follows, authors, parents idempotent with repeated values', 
   const { rawJSON: content } = await p2p.init(sampleData)
   const contentKey = encode(content.url)
 
-  await writeFile(
-    join(p2p.baseDir, contentKey, 'file.txt'),
-    'hola mundo'
-  )
+  await writeFile(join(p2p.baseDir, contentKey, 'file.txt'), 'hola mundo')
 
   await p2p.set({
     url: contentKey,
     main: 'file.txt'
   })
 
-  const authors = sampleData.authors.concat(
-    encode(followedProfile1Url)
-  )
+  const authors = sampleData.authors.concat(encode(followedProfile1Url))
 
   try {
     // set content data authors field with some repeated values
@@ -591,11 +591,7 @@ test('set: content, follows, authors, parents idempotent with repeated values', 
       authors
     })
   } catch (err) {
-    t.same(
-      err.code,
-      'authors_unique',
-      'Authors must be unique'
-    )
+    t.same(err.code, 'authors_unique', 'Authors must be unique')
   }
 
   try {
@@ -605,11 +601,7 @@ test('set: content, follows, authors, parents idempotent with repeated values', 
       parents: [`${encode(parentContent1Url)}+${parentContent1Version}`]
     })
   } catch (err) {
-    t.same(
-      err.code,
-      'parents_unique',
-      'Parents must be unique'
-    )
+    t.same(err.code, 'parents_unique', 'Parents must be unique')
   }
 
   const { rawJSON: cUpdated } = await p2p.get(contentKey)
@@ -624,11 +616,7 @@ test('set: content, follows, authors, parents idempotent with repeated values', 
       follows: [encode(followedProfile2Url)]
     })
   } catch (err) {
-    t.same(
-      err.code,
-      'follows_unique',
-      'Follows must be unique'
-    )
+    t.same(err.code, 'follows_unique', 'Follows must be unique')
   }
 
   const { rawJSON: pUpdated } = await p2p.get(profileKey)
@@ -648,16 +636,16 @@ test('set: content, follows, authors, parents idempotent with repeated values', 
       contents: [encode(contentKey)]
     })
   } catch (err) {
-    t.same(
-      err.code,
-      'contents_unique',
-      'Contents must be unique'
-    )
+    t.same(err.code, 'contents_unique', 'Contents must be unique')
   }
 
   const { rawJSON: pRegistered2 } = await p2p.get(profileKey)
 
-  t.same(pRegistered2.contents, pRegistered.contents, 'contents remains the same')
+  t.same(
+    pRegistered2.contents,
+    pRegistered.contents,
+    'contents remains the same'
+  )
 
   await p2p.destroy()
   t.end()
@@ -956,15 +944,13 @@ test('seed and register', async t => {
 
   const p2p = createDb({
     swarm: true,
-    persist: false,
-    swarmFn: testSwarmCreator,
+    persist: true,
     dht,
     dhtBootstrap
   })
   const p2p2 = createDb({
     swarm: true,
-    persist: false,
-    swarmFn: testSwarmCreator,
+    persist: true,
     dht,
     dhtBootstrap
   })
@@ -998,9 +984,7 @@ test('seed and register', async t => {
   })
 
   const { metadata: contentMetadata } = await p2p2.get(content1.url)
-  const contentKeyVersion = `${encode(content1.url)}+${
-    contentMetadata.version
-  }`
+  const contentKeyVersion = `${encode(content1.url)}+${contentMetadata.version}`
 
   await p2p2.destroy(true, false)
 
@@ -1397,6 +1381,125 @@ test('deregister content module from profile', async t => {
   t.end()
 })
 
+test('deregister content - more complex case', async t => {
+  const p2p = createDb({ persist: true })
+  const sampleContent = {
+    type: 'content',
+    title: 'demo 1',
+    description: 'lorem ipsum'
+  }
+
+  const sampleContent2 = {
+    type: 'content',
+    title: 'demo 2',
+    description: 'lorem ipsum'
+  }
+
+  const sampleContent3 = {
+    type: 'content',
+    title: 'demo 3',
+    description: 'lorem ipsum'
+  }
+
+  // create multiple content
+  const { rawJSON: content, driveWatch } = await p2p.init(sampleContent)
+  const {
+    rawJSON: { url: url2 },
+    driveWatch: dw2
+  } = await p2p.init(sampleContent2)
+  const {
+    rawJSON: { url: url3 },
+    driveWatch: dw3
+  } = await p2p.init(sampleContent3)
+
+  const sampleProfile = {
+    type: 'profile',
+    title: 'd'
+  }
+
+  // create my profile
+  const { rawJSON: profile } = await p2p.init(sampleProfile)
+
+  const pUrl = encode(profile.url)
+  // Manually setting the author profile
+  await p2p.set({ url: content.url, authors: [pUrl] })
+  await p2p.set({ url: url2, authors: [pUrl] })
+  await p2p.set({ url: url3, authors: [pUrl] })
+
+  // manually writing a dummy file 1
+  await writeFile(join(p2p.baseDir, encode(content.url), 'file.txt'), 'main1')
+  await once(driveWatch, 'put-end')
+  await p2p.set({
+    url: content.url,
+    main: 'file.txt'
+  })
+  // manually writing a dummy file 2
+  await writeFile(join(p2p.baseDir, encode(url2), 'file.txt'), 'main2')
+  await once(dw2, 'put-end')
+  const {
+    metadata: { version: v2 }
+  } = await p2p.set({
+    url: url2,
+    main: 'file.txt'
+  })
+  // manually writing a dummy file 3
+  await writeFile(join(p2p.baseDir, encode(url3), 'file.txt'), 'main3')
+  await once(dw3, 'put-end')
+  const {
+    metadata: { version: v3 }
+  } = await p2p.set({
+    url: url3,
+    main: 'file.txt'
+  })
+
+  // register the modules (unversioned)
+  await p2p.register(content.url, profile.url)
+  await p2p.register(url2, profile.url)
+  await p2p.register(url3, profile.url)
+
+  const { rawJSON: updatedProfile } = await p2p.get(profile.url)
+  t.equal(updatedProfile.contents.length, 3, '3 registrations')
+  // make some changes
+  await writeFile(
+    join(p2p.baseDir, encode(content.url), 'new_file.txt'),
+    'hallo'
+  )
+  await once(driveWatch, 'put-end')
+
+  // deregister all modules
+  await p2p.deregister(content.url, profile.url)
+  await p2p.deregister(url2, profile.url)
+  await p2p.deregister(url3, profile.url)
+
+  // register all modules again (versioned)
+  const {
+    metadata: { version: v1 }
+  } = await p2p.get(content.url)
+  const versioned = `${content.url}+${v1}`
+  const versioned2 = `${url2}+${v2}`
+  const versioned3 = `${url3}+${v3}`
+
+  await p2p.register(versioned, profile.url)
+
+  await p2p.register(versioned2, profile.url)
+
+  await p2p.register(versioned3, profile.url)
+
+  // deregister updated module
+  await p2p.deregister(versioned, profile.url)
+  const { rawJSON: finalProfile } = await p2p.get(profile.url)
+  t.notOk(
+    finalProfile.contents.includes(versioned),
+    'should deregister specific key'
+  )
+
+  driveWatch.destroy()
+  dw2.destroy()
+  dw3.destroy()
+  await p2p.destroy()
+  t.end()
+})
+
 test('follow and unfollow a profile', async t => {
   const p2p = createDb({
     swarm: true,
@@ -1654,9 +1757,7 @@ test('check lastModified on ready', async t => {
     contentData
   )
 
-  await p2p.init(
-    profileData
-  )
+  await p2p.init(profileData)
 
   const contentPath = encode(content.url)
 
