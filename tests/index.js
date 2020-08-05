@@ -54,6 +54,74 @@ test('ready', async t => {
   t.end()
 })
 
+test('sdk re-start', async t => {
+  await localDHT()
+  // issue arise when we have external content in our db, lets fix that
+
+  const p2p = createDb({ swarm: true, persist: true, dhtBootstrap })
+
+  const p2p2 = createDb({ swarm: true, persist: true, dhtBootstrap })
+
+  const p2p3 = createDb({ swarm: true, persist: true, dhtBootstrap })
+
+  const externalContent = {
+    type: 'content',
+    title: 'demo content',
+    description: 'something remote'
+  }
+  const {
+    rawJSON,
+    metadata: { version: remoteVersion }
+  } = await p2p.init(externalContent)
+
+  const localProfile = {
+    type: 'profile',
+    title: 'professorX'
+  }
+  await p2p2.init(localProfile)
+
+  // p2p2 clones the module
+  const { rawJSON: remoteJSON } = await p2p2.clone(rawJSON.url)
+  t.same(remoteJSON, rawJSON, 'cloned module')
+  // some other peer clone the content module too
+  await p2p3.clone(rawJSON.url)
+
+  // shutdown sdk instances
+  await p2p2.destroy()
+  await p2p3.destroy()
+
+  // content is updated remotely...
+  const {
+    metadata: { version: updatedVersion }
+  } = await p2p.set({ url: rawJSON.url, description: 'something updated' })
+  t.ok(updatedVersion > remoteVersion, 'version is incremented')
+
+  // restart other peer
+  const otherPeer = new SDK({
+    bootstrap: dhtBootstrap,
+    baseDir: p2p3.baseDir
+  })
+  await otherPeer.ready()
+
+  // now instantiate back p2p2 sdk (same storage, same db)
+  const p2p4 = new SDK({
+    bootstrap: dhtBootstrap,
+    baseDir: p2p2.baseDir,
+    versose: true
+  })
+
+  try {
+    await p2p4.ready()
+  } catch (err) {
+    t.fail(err)
+  }
+  t.pass('all good')
+  await otherPeer.destroy()
+  await p2p.destroy()
+  await p2p4.destroy()
+  t.end()
+})
+
 test('SDK emit warning', async t => {
   class EBUSYMock extends Error {
     constructor (message) {
@@ -452,7 +520,9 @@ test('set: can update main', async t => {
   }
 
   const { rawJSON: profile } = await p2p.init(sampleProfile)
-  const { rawJSON: content } = await p2p.init(sampleContent)
+  const { rawJSON: content, metadata: initialMeta } = await p2p.init(
+    sampleContent
+  )
 
   // manually writing a dummy file
   await writeFile(
@@ -460,12 +530,11 @@ test('set: can update main', async t => {
     'hola mundo'
   )
 
-  await p2p.set({
+  const { rawJSON: updatedProfile } = await p2p.set({
     url: profile.url,
     main: 'file.txt'
   })
 
-  const { rawJSON: updatedProfile } = await p2p.get(profile.url)
   t.same(updatedProfile.main, 'file.txt')
 
   // manually writing a dummy file
@@ -474,14 +543,13 @@ test('set: can update main', async t => {
     'hola mundo'
   )
 
-  await p2p.set({
+  const { rawJSON: updatedContent, metadata: updatedMeta } = await p2p.set({
     url: content.url,
     main: 'file.txt'
   })
 
-  const { rawJSON: updatedContent } = await p2p.get(content.url)
-
   t.same(updatedContent.main, 'file.txt')
+  t.ok(updatedMeta.version > initialMeta.version, 'version bump')
 
   await p2p.destroy()
   t.end()
@@ -790,7 +858,11 @@ test('list profiles', async t => {
     },
     { type: 'content', title: 'sample' }
   ]
-  const [{ rawJSON: { url } }] = await Promise.all(
+  const [
+    {
+      rawJSON: { url }
+    }
+  ] = await Promise.all(
     []
       .concat(sampleDataProfile)
       .concat(sampleDataContent)
@@ -808,8 +880,7 @@ test('list profiles', async t => {
       links: {
         license: [
           {
-            href:
-              'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+            href: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
           }
         ],
         spec: [{ href: 'https://p2pcommons.com/specs/module/x.x.x' }]
@@ -886,18 +957,18 @@ test('multiple writes with persistance', async t => {
 
     t.end()
   } catch (err) {
-    t.error(err)
+    t.fail(err)
   }
 })
 
 test('register - local contents', async t => {
-  const p2p = createDb()
+  const p2p = createDb({ persist: true })
 
   const { rawJSON: profile } = await p2p.init({
     type: 'profile',
     title: 'Professor X'
   })
-  const { rawJSON: content1, driveWatch } = await p2p.init({
+  const { rawJSON: content1 } = await p2p.init({
     type: 'content',
     title: 'demo',
     description: 'lorem ipsum'
@@ -913,8 +984,6 @@ test('register - local contents', async t => {
     join(p2p.baseDir, encode(content1.url), 'file.txt'),
     'hola mundo'
   )
-
-  await once(driveWatch, 'put-end')
 
   await p2p.set({
     url: content1.url,
@@ -940,18 +1009,14 @@ test('register - local contents', async t => {
 })
 
 test('seed and register', async t => {
-  await localDHT()
-
   const p2p = createDb({
     swarm: true,
     persist: true,
-    dht,
     dhtBootstrap
   })
   const p2p2 = createDb({
     swarm: true,
     persist: true,
-    dht,
     dhtBootstrap
   })
 
@@ -963,7 +1028,7 @@ test('seed and register', async t => {
 
   const sampleProfile = { type: 'profile', title: 'Professor X' }
 
-  const { rawJSON: content1, driveWatch } = await p2p2.init(sampleData)
+  const { rawJSON: content1 } = await p2p2.init(sampleData)
   const { rawJSON: profile } = await p2p.init(sampleProfile)
 
   const authors = [encode(profile.url)]
@@ -975,8 +1040,6 @@ test('seed and register', async t => {
     join(p2p2.baseDir, encode(content1.url), 'file.txt'),
     'hola mundo'
   )
-
-  await once(driveWatch, 'put-end')
 
   await p2p2.set({
     url: content1.url,
@@ -1024,6 +1087,7 @@ test('seed and register', async t => {
     dirs2,
     'repeated register method call, created directories remains the same'
   )
+
   await p2p2.destroy(false, true)
   await p2p.destroy()
   t.end()
@@ -1045,7 +1109,7 @@ test('verify', async t => {
   ]
 
   const { rawJSON: profile } = await p2p.init(sampleData[2])
-  const { rawJSON: content1, driveWatch } = await p2p.init(sampleData[0])
+  const { rawJSON: content1 } = await p2p.init(sampleData[0])
   const { rawJSON: content2 } = await p2p.init(sampleData[1])
 
   const authors = [encode(profile.url)]
@@ -1055,8 +1119,6 @@ test('verify', async t => {
     join(p2p.baseDir, encode(content1.url), 'file.txt'),
     'hola mundo'
   )
-
-  await once(driveWatch, 'put-end')
 
   await p2p.set({
     url: content1.url,
@@ -1117,7 +1179,7 @@ test('verify multiple authors', async t => {
 
   const externalProfile = { type: 'profile', title: 'Professor Y' }
 
-  const { rawJSON: content1, driveWatch } = await p2p.init(sampleData)
+  const { rawJSON: content1 } = await p2p.init(sampleData)
   const { rawJSON: profile } = await p2p.init(sampleProfile)
 
   const { rawJSON: profileY } = await p2p2.init(externalProfile)
@@ -1132,7 +1194,6 @@ test('verify multiple authors', async t => {
     join(p2p.baseDir, encode(content1.url), 'file.txt'),
     'hola mundo'
   )
-  await once(driveWatch, 'put-end')
   await p2p.set({
     url: content1.url,
     main: 'file.txt'
@@ -1292,6 +1353,7 @@ test('delete registered module', async t => {
     authors,
     main: 'file.txt'
   })
+
   try {
     await p2p.register(encode(content.url), encode(profile.url))
   } catch (err) {
@@ -1328,7 +1390,7 @@ test('deregister content module from profile', async t => {
     description: 'lorem ipsum'
   }
 
-  const { rawJSON: content, driveWatch } = await p2p.init(sampleContent)
+  const { rawJSON: content } = await p2p.init(sampleContent)
 
   const sampleProfile = {
     type: 'profile',
@@ -1347,8 +1409,6 @@ test('deregister content module from profile', async t => {
     join(p2p.baseDir, encode(content.url), 'file.txt'),
     'hola mundo'
   )
-
-  await once(driveWatch, 'put-end')
 
   await p2p.set({
     url: content.url,
@@ -1428,7 +1488,7 @@ test('deregister content - more complex case', async t => {
 
   // manually writing a dummy file 1
   await writeFile(join(p2p.baseDir, encode(content.url), 'file.txt'), 'main1')
-  await once(driveWatch, 'put-end')
+
   await p2p.set({
     url: content.url,
     main: 'file.txt'
@@ -1638,19 +1698,17 @@ test('clone a module', async t => {
     title: 'test'
   }
 
-  const { rawJSON, driveWatch } = await p2p.init(content)
+  const { rawJSON } = await p2p.init(content)
   const rawJSONpath = encode(rawJSON.url)
 
   // write main.txt
   await writeFile(join(dir, rawJSONpath, 'main.txt'), 'hello')
 
-  await once(driveWatch, 'put-end') // wait for the main file to be written on the hyperdrive
-
-  const { rawJSON: module, dwldHandle } = await p2p2.clone(rawJSON.url)
+  const { rawJSON: module, dlHandle } = await p2p2.clone(rawJSON.url)
 
   t.same(module.title, content.title)
 
-  await once(dwldHandle, 'end')
+  await once(dlHandle, 'end')
 
   const clonedDir = await readdir(join(p2p2.baseDir, `${rawJSONpath}`))
   t.ok(clonedDir.includes('main.txt'), 'clone downloaded content successfully')
@@ -1687,16 +1745,13 @@ test('cancel clone', async t => {
     title: 'test'
   }
 
-  const { rawJSON, driveWatch } = await p2p.init(content)
+  const { rawJSON } = await p2p.init(content)
   const rawJSONpath = rawJSON.url.replace('hyper://', '')
 
   // write main.txt
   await writeFile(join(dir, rawJSONpath, 'main.txt'), 'hello')
 
-  await once(driveWatch, 'put-end')
-
   // clone can be canceled
-
   const cloning = p2p2.clone(rawJSON.url)
   setImmediate(() => {
     cloning.cancel()
@@ -1738,8 +1793,6 @@ test('check lastModified on ready', async t => {
 
   const p2p = new SDK({
     disableSwarm: true,
-    watch: false,
-    persist: true,
     baseDir: dir
   })
 
@@ -1753,9 +1806,11 @@ test('check lastModified on ready', async t => {
     description: 'sample content'
   }
 
-  const { rawJSON: content, metadata: cMetadataInitial } = await p2p.init(
-    contentData
-  )
+  const {
+    rawJSON: content,
+    metadata: cMetadataInitial,
+    driveWatch
+  } = await p2p.init(contentData)
 
   await p2p.init(profileData)
 
@@ -1763,8 +1818,9 @@ test('check lastModified on ready', async t => {
 
   // write main.txt
   await writeFile(join(dir, contentPath, 'main.txt'), 'hello')
+  once(driveWatch, 'put-end')
 
-  await writeFile(join(dir, contentPath, 'main2.txt'), 'hello')
+  await writeFile(join(dir, contentPath, 'main2.txt'), 'hello 2')
   await p2p.set({ url: content.url, main: 'main.txt' })
   const { rawJSON, metadata: cMetadataUpdate } = await p2p.get(content.url)
 
@@ -1773,7 +1829,7 @@ test('check lastModified on ready', async t => {
       cMetadataUpdate.lastModified.getTime(),
     'content metadata lastModified is updated'
   )
-
+  driveWatch.destroy()
   await p2p.destroy()
 
   // update main.txt while sdk is off...
@@ -1781,10 +1837,14 @@ test('check lastModified on ready', async t => {
   rawJSON.description = 'what is this??'
   await writeFile(join(dir, contentPath, 'index.json'), JSON.stringify(rawJSON))
 
+  await new Promise(resolve => {
+    setTimeout(() => {
+      return resolve()
+    }, 200)
+  })
+
   const p2p2 = new SDK({
     disableSwarm: true,
-    watch: false,
-    persist: true,
     baseDir: dir
   })
   await p2p2.ready()

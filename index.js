@@ -1,9 +1,11 @@
 const { EventEmitter } = require('events')
-const { join } = require('path')
+const { join, isAbsolute } = require('path')
+const { platform } = require('os')
 const {
   promises: { open, writeFile, readFile, readdir, stat: statFn }
 } = require('fs')
 const { ensureDir } = require('fs-extra')
+const once = require('events.once')
 const assert = require('nanocustomassert')
 const level = require('level')
 const sub = require('subleveldown')
@@ -45,7 +47,7 @@ const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
 const ValidationTypes = require('./schemas/validation') // avro related validations
-const once = require('events.once')
+const { driveWaitForFile, dlWaitForFile } = require('./lib/utils')
 
 /**
  * @typedef {Object} Module
@@ -104,6 +106,7 @@ class SDK extends EventEmitter {
     debug('constructor')
     const finalOpts = { ...DEFAULT_SDK_OPTS, ...opts }
     this.start = false
+    this.platform = platform()
     // NOTE(dk): consider switch to envPaths usage
     this.baseDir = baseDir(finalOpts.baseDir)
     this.persist = finalOpts.persist
@@ -113,9 +116,8 @@ class SDK extends EventEmitter {
     this.watch = finalOpts.watch
 
     this.drives = new Map()
-    this.seeds = new Map()
     this.drivesToWatch = new Map()
-    this.dwldsToWatch = new Map()
+    this.dls = new Map()
 
     this.dht = finalOpts.dht
     this.bootstrap = finalOpts.bootstrap
@@ -134,6 +136,7 @@ class SDK extends EventEmitter {
     // cancelable methods
     this.clone = PCancelable.fn(this.clone.bind(this))
     // debug constructor
+    debug(`platform: ${this.platform}`)
     debug(`baseDir: ${this.baseDir}`)
     debug(`dbPath: ${this.dbPath}`)
     debug(`persist drives? ${!!this.persist}`)
@@ -436,45 +439,70 @@ class SDK extends EventEmitter {
 
         const statDrive = await drive.stat('/')
         const statDir = await statFn(moduleDir)
+        const statDriveIndex = await drive.stat('index.json')
+        const statDirIndex = await statFn(join(moduleDir, 'index.json'))
         const statDriveMtime = statDrive[0].mtime
         const statDirMtime = statDir.mtime
+        const statDriveIndexMtime = statDriveIndex[0].mtime
+        const statDirIndexMtime = statDirIndex.mtime
+        const dirIndexJSON = await readFile(join(moduleDir, 'index.json'), {
+          encoding: 'utf-8'
+        })
+        const driveIndexJSON = await drive.readFile('index.json', {
+          encoding: 'utf-8'
+        })
 
-        const mtime =
-          statDriveMtime.getTime() >= statDirMtime.getTime()
+        const mtimePerRoot =
+          statDriveMtime.getTime() > statDirMtime.getTime()
             ? statDriveMtime
             : statDirMtime
 
-        const driveWatch = await dat.importFiles(drive, moduleDir, {
-          watch: this.watch,
-          keepExisting: false,
-          dereference: true
-        })
+        const mtimePerIndex =
+          statDriveIndexMtime > statDirIndexMtime
+            ? statDriveIndexMtime
+            : statDirIndexMtime
 
-        if (this.watch) {
-          this.drivesToWatch.set(
-            DatEncoding.encode(drive.discoveryKey),
-            driveWatch
-          )
+        let mtime, overwriteIndex
+        if (dirIndexJSON !== driveIndexJSON) {
+          mtime = mtimePerIndex
+          if (statDirIndexMtime > statDriveIndexMtime) {
+            overwriteIndex = true
+          }
+        } else {
+          mtime = mtimePerRoot
         }
 
-        const unwatch = await new Promise(resolve => {
-          const unwatch = drive.watch('', () => {
-            resolve(unwatch)
+        if (drive.writable) {
+          // If local modules (fs) have changed, update the drives
+          const driveWatch = await dat.importFiles(drive, moduleDir, {
+            watch: this.watch,
+            keepExisting: false,
+            dereference: true
           })
-        })
-        unwatch.destroy()
+
+          if (this.watch) {
+            this.drivesToWatch.set(
+              DatEncoding.encode(drive.discoveryKey),
+              driveWatch
+            )
+          }
+        }
 
         if (metadata.lastModified.getTime() >= mtime.getTime()) continue
 
-        // Note(dk): this looks like an heuristic...
-        if (metadata.version === drive.version) {
-          const files = await drive.readdir('/')
-          const dirFiles = await readdir(moduleDir)
-          if (dirFiles.length === files.length) continue
-        }
-
         // update index.json file
-        const module = await drive.readFile('index.json')
+
+        // If an external drive have changed, update it locally
+        const dlHandle = dat.downloadFiles(drive, moduleDir)
+        debug('refreshMTimes: waiting for index.json...')
+        await dlWaitForFile(dlHandle, join(moduleDir, 'index.json'))
+
+        const dkey = DatEncoding.encode(drive.discoveryKey)
+        this.dls.set(dkey, dlHandle)
+
+        const module = overwriteIndex
+          ? dirIndexJSON
+          : await drive.readFile('index.json')
         const indexJSON = this._unflatten(JSON.parse(module))
 
         // check indexJSON is still valid
@@ -704,7 +732,7 @@ class SDK extends EventEmitter {
     return { rawJSON: this._flatten(indexJSON), metadata, driveWatch }
   }
 
-  async saveItem ({ isWritable, lastModified, version, indexJSON }) {
+  async saveItem ({ isWritable, lastModified, version, indexJSON, main }) {
     debug('saveItem', indexJSON)
     assert(
       typeof isWritable === 'boolean',
@@ -729,7 +757,6 @@ class SDK extends EventEmitter {
     const dkey = DatEncoding.encode(
       crypto.discoveryKey(DatEncoding.decode(keyString))
     )
-    // archive = this.drives.get(version ? `${dkey}+${version}` : dkey)
     archive = this.drives.get(dkey)
 
     if (!archive) {
@@ -742,6 +769,13 @@ class SDK extends EventEmitter {
       archive = drive
     }
 
+    const driveWatcher = this.drivesToWatch.get(dkey)
+    if (main && driveWatcher) {
+      debug(`saveItem: waiting for main file: ${main}...`)
+
+      await driveWaitForFile(archive, main)
+    }
+
     let stat, mtime
     if (isWritable) {
       await writeFile(
@@ -751,7 +785,7 @@ class SDK extends EventEmitter {
       await dat.importFiles(archive, indexJSONDir)
 
       version = archive.version
-      stat = await archive.stat('/index.json')
+      stat = await archive.stat('index.json')
       mtime = stat[0].mtime
     }
 
@@ -891,7 +925,7 @@ class SDK extends EventEmitter {
           await validateOnRegister({
             contentIndexMetadata: contentJSON,
             contentDbMetadata: contentMetadata,
-            contentKey: contentKey,
+            contentKey,
             profileIndexMetadata: finalJSON,
             profileDbMetadata: metadata,
             profileKey: hyperdriveKey,
@@ -932,7 +966,8 @@ class SDK extends EventEmitter {
     debug('set: valid input')
     return this.saveItem({
       ...metadata,
-      indexJSON: finalJSON
+      indexJSON: finalJSON,
+      main: params.main
     })
   }
 
@@ -1169,15 +1204,15 @@ class SDK extends EventEmitter {
    * @param {boolean} [download=true] - indicates if modules files should be downloaded or not
    * @returns {{
    *   Module,
-   *   dwldHandle
+   *   dlHandle
    * }}
    */
-  async getFromSwarm (key, version, download = true) {
+  async getFromSwarm (key, version = 0, download = true) {
     // if module isn't found locally, then fetch from swarm
     // something like:
     debug('clone: Module was not found in localdb.')
     const mKeyString = DatEncoding.encode(key)
-    let moduleVersion, module, dwldHandle
+    let moduleVersion, module, dlHandle
 
     const moduleHyper = await this.getDrive(mKeyString, version)
 
@@ -1238,11 +1273,19 @@ class SDK extends EventEmitter {
     const stat = await moduleHyper.stat('index.json')
 
     if (download) {
-      dwldHandle = dat.downloadFiles(moduleVersion, folderPath)
-      this.dwldsToWatch.set(
-        DatEncoding.encode(moduleVersion.discoveryKey),
-        dwldHandle
-      )
+      dlHandle = dat.downloadFiles(moduleVersion, folderPath)
+
+      const dkey = DatEncoding.encode(moduleVersion.discoveryKey)
+      this.dls.set(dkey, dlHandle)
+
+      if (module.p2pcommons.main) {
+        const filePath = isAbsolute(module.p2pcommons.main)
+          ? module.p2pcommons.main
+          : join(folderPath, module.p2pcommons.main)
+        debug('getFromSwarm: waiting for main file to download...')
+        debug('getFromSwarm: filePath %s', filePath)
+        await dlWaitForFile(dlHandle, filePath)
+      }
     }
 
     let lastMeta
@@ -1272,7 +1315,7 @@ class SDK extends EventEmitter {
     return {
       rawJSON: module,
       metadata,
-      dwldHandle
+      dlHandle
     }
   }
 
@@ -1314,7 +1357,7 @@ class SDK extends EventEmitter {
    *   rawJSON: Object,
    *   metadata: Object,
    *   versionedKey: String,
-   *   dwldHandle: Object
+   *   dlHandle: Object
    * }}
    */
   async clone (mKey, mVersion, download = true, onCancel) {
@@ -1345,7 +1388,8 @@ class SDK extends EventEmitter {
     let module
     let version
     let meta
-    let dwldHandle
+    let dlHandle
+
     const mKeyString = DatEncoding.encode(mKey)
 
     if (!mVersion) {
@@ -1360,14 +1404,14 @@ class SDK extends EventEmitter {
       if (this.canceledClone) return
       module = out.rawJSON
       meta = out.metadata
-      dwldHandle = out.dwldHandle
+      dlHandle = out.dlHandle
     }
 
     return {
       rawJSON: this._flatten(module),
       versionedKey: `${mKeyString}+${version}`,
       metadata: meta,
-      dwldHandle
+      dlHandle
     }
   }
 
@@ -1675,7 +1719,7 @@ class SDK extends EventEmitter {
       mirror.destroy()
     }
 
-    for (const mirror of this.dwldsToWatch.values()) {
+    for (const mirror of this.dls.values()) {
       mirror.destroy()
     }
 

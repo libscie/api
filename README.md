@@ -192,7 +192,7 @@ Returns a [cancelable promise](https://github.com/sindresorhus/p-cancelable). Wh
 - **rawJSON**: the module `index.json` content (**flattened**)
 - **metadata**: an object with modules metadata
 - **versionedKey**: an string indicating the full module url obtained. E.g: `hyper://${mKey}+${version}`
-- **dwldHandle**: it contains a download event emitter, you can listen to `end` event to know when the download has been completed. It's defined only if `download === true`.
+- **dlHandle**: it contains a download event emitter, you can listen to `end` event to know when the download has been completed. It's defined only if `download === true`.
 
 
 ### delete

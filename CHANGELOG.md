@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Always cast version to Number
 - deregister specific content #198
+- refreshMtimes: only call importFiles with writable drives + new test.
 
 ## [0.6.3] - 2020-07-14
 ### Changed
