@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - listProfiles() only returned writable profiles
 
+### Changed
+- Bump module specification version to `0.9.3`
+
 ## [0.7.0] - 2020-07-29
 ### Added
 - Full and partial metadata validations #154
