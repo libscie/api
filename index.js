@@ -2,7 +2,7 @@ const { EventEmitter } = require('events')
 const { join, isAbsolute } = require('path')
 const { platform } = require('os')
 const {
-  promises: { open, writeFile, readFile, readdir, stat: statFn }
+  promises: { open, writeFile, readFile, stat: statFn }
 } = require('fs')
 const { ensureDir } = require('fs-extra')
 const once = require('events.once')

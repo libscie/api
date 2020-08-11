@@ -1,7 +1,11 @@
 # @p2pcommons/sdk-js
+
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
+
 [![All Contributors](https://img.shields.io/badge/all_contributors-3-orange.svg?style=flat-square)](#contributors-)
+
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
+
 ![npm version](https://img.shields.io/npm/v/@p2pcommons/sdk-js?color=4F2D84)
 ![ci](https://github.com/p2pcommons/sdk-js/workflows/ci/badge.svg)
 
@@ -36,7 +40,6 @@ const P2PCommons = require('@p2pcommons/sdk-js')
 const p2p = new P2PCommons()
 
 ;(async () => {
-
   // create a content module
   await p2p.init({ type: 'content' }) // ~/.p2pcommons/hash/index.json --> type: content
   // create a profile module
@@ -55,6 +58,7 @@ const p2p = new P2PCommons()
 Returns a new instance of the sdk.
 
 - `opts` can include the following:
+
 ```javascript
 {
   baseDir: // defaults to '~/.p2pcommons'
@@ -74,6 +78,7 @@ Creates a new folder for 'content' or 'profile' according to the received `data.
 - `data` object following the [p2pcommons module spec](https://github.com/p2pcommons/specs/blob/main/module.md). The only required field is `type`.
 
 Returns an object with:
+
 - **rawJSON**: flattened indexJSON data
 - **metadata**: (**version, lastModified, isWritable**)
 
@@ -86,6 +91,7 @@ Retrieves raw indexJSON item and metadata from the local db.
 - key: represents the key or hyper url to be looked for. It is the buffer archive key `.toString('hex')`
 
 Returns an object with:
+
 - **rawJSON**: flattened indexJSON data
 - **metadata**: (**version, lastModified, isWritable**)
 
@@ -189,11 +195,11 @@ Get a module from the local db or the swarm. If the module is not present on the
 - download: a boolean indicating if module directory needs to be saved on disk. [DEFAULT=TRUE]
 
 Returns a [cancelable promise](https://github.com/sindresorhus/p-cancelable). When fullfiled returns an object with multiple values:
+
 - **rawJSON**: the module `index.json` content (**flattened**)
 - **metadata**: an object with modules metadata
 - **versionedKey**: an string indicating the full module url obtained. E.g: `hyper://${mKey}+${version}`
 - **dlHandle**: it contains a download event emitter, you can listen to `end` event to know when the download has been completed. It's defined only if `download === true`.
-
 
 ### delete
 
@@ -288,6 +294,7 @@ The SDK exports some custom errors: `SDK.errors`
 Indicates that metadata of a given module is invalid.
 
 Error object contains some useful properties:
+
 - `description`: Description of the error - may change across versions
 - `code`: Error code - stable across versions
 - `property`: A string indicating the property in question
@@ -297,6 +304,7 @@ Error object contains some useful properties:
 Indicates that an input parameter is of an incorrect type.
 
 Error object contains some useful properties:
+
 - `expected`: Expected value
 - `received`: Received value
 - `key`: A string indicating the property in question
@@ -306,6 +314,7 @@ Error object contains some useful properties:
 Some keys are _read only_. This error indicates the user is trying to modify a read only property.
 
 Error object contains some useful properties:
+
 - `invalid`: A string indicating the invalid property
 
 ### MissingParam
@@ -313,6 +322,7 @@ Error object contains some useful properties:
 A more general error, used to indicate if something is missing.
 
 Error object contains some useful properties:
+
 - `key`: A string indicating the missing param
 
 ### EBUSYError
@@ -320,6 +330,7 @@ Error object contains some useful properties:
 Triggered usually when there are conflicts with other apps watching the FS.
 
 Error object contains some useful properties:
+
 - `description`: A string indicating the error message
 - `key`: A string indicating the hyperdrive involved
 
@@ -327,7 +338,7 @@ Error object contains some useful properties:
 
 1. create a new branch like `{username}/release-{nextVersion}`
 2. `npm version {nextVersion}`
-    - this will prompt you with a new gh release window, you can mark it as _draft_ until PR is accepted.
+   - this will prompt you with a new gh release window, you can mark it as _draft_ until PR is accepted.
 3. _acceptance_ & _merge_
 4. `git co main`
 5. `git pull`
@@ -335,6 +346,7 @@ Error object contains some useful properties:
 7. :tada:
 
 Requirements:
+
 - 2FA enabled
 - signed git tags (`npm config set sign-git-tag true`)
 
@@ -355,6 +367,7 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
 
 <!-- markdownlint-enable -->
 <!-- prettier-ignore-end -->
+
 <!-- ALL-CONTRIBUTORS-LIST:END -->
 
 This project follows the [all-contributors](https://github.com/all-contributors/all-contributors) specification. Contributions of any kind welcome! See also our [contributing guidelines](CONTRIBUTING.md).

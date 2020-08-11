@@ -16,7 +16,6 @@ const mirror = require('mirror-folder')
 const SDK = require('../')
 const createDHT = require('./utils/dht')
 const vers = require('../lib/spec')
-const { ensureDir } = require('fs-extra')
 
 const testSwarmCreator = (store, opts) => new SwarmNetwoker(store, opts)
 

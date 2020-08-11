@@ -10,7 +10,7 @@
         "logicalType": "title"
       }
     },
-    {"name": "description", "type": "string"},
+    { "name": "description", "type": "string" },
     {
       "name": "url",
       "type": {
@@ -28,7 +28,7 @@
             "name": "license",
             "type": {
               "type": "array",
-              "items" : {
+              "items": {
                 "type": "record",
                 "fields": [
                   {
@@ -43,7 +43,7 @@
             "name": "spec",
             "type": {
               "type": "array",
-              "items" : {
+              "items": {
                 "type": "record",
                 "fields": [
                   {
@@ -69,7 +69,7 @@
               "symbols": ["content", "profile"]
             }
           },
-          {"name": "subtype", "type": "string"},
+          { "name": "subtype", "type": "string" },
           {
             "name": "main",
             "type": {

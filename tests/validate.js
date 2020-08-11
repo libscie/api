@@ -1,24 +1,57 @@
 const test = require('tape')
 const tempy = require('tempy')
-const { promises: { writeFile, rename } } = require('fs')
+const {
+  promises: { writeFile, rename }
+} = require('fs')
 const { join } = require('path')
-const { validate, validatePartial, validateOnRegister, validateOnFollow, validateTitle, validateDescription, validateUrl, validateLinks, validateP2pcommons, validateType, validateSubtype, validateMain, validateAvatar, validateAuthors, validateParents, validateParentsOnUpdate, validateFollows, validateContents } = require('../lib/validate')
+const {
+  validate,
+  validatePartial,
+  validateOnRegister,
+  validateOnFollow,
+  validateTitle,
+  validateDescription,
+  validateUrl,
+  validateLinks,
+  validateP2pcommons,
+  validateType,
+  validateSubtype,
+  validateMain,
+  validateAvatar,
+  validateAuthors,
+  validateParents,
+  validateParentsOnUpdate,
+  validateFollows,
+  validateContents
+} = require('../lib/validate')
 const SDK = require('../')
 const parse = require('../lib/parse-url')
 const { encode } = require('dat-encoding')
 
-const exampleKey1 = '4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f'
-const exampleKey1V5 = '4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f+5'
-const exampleKey1V123 = '4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f+123'
-const exampleKey2 = '8af39eb4a3eb3252141718f876d29220b8d6f539a045e833e9556aff2a5eacd8'
-const exampleKey2V5 = '8af39eb4a3eb3252141718f876d29220b8d6f539a045e833e9556aff2a5eacd8+5'
-const exampleKey2V40 = '8af39eb4a3eb3252141718f876d29220b8d6f539a045e833e9556aff2a5eacd8+40'
-const exampleKey2V123 = '8af39eb4a3eb3252141718f876d29220b8d6f539a045e833e9556aff2a5eacd8+123'
-const exampleKey3 = 'cca6eb69a3ad6104ca31b9fee7832d74068db16ef2169eaaab5b48096e128342'
-const exampleKey3V5 = 'cca6eb69a3ad6104ca31b9fee7832d74068db16ef2169eaaab5b48096e128342+5'
-const exampleKey4 = 'f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4'
-const exampleKey5V12 = 'f0abcd6b1c4fc524e2d48da043b3d8399b96d9374d6606fca51182ee230b6b59+12'
-const exampleKey6V4032 = '527f404aa77756b91cba4e3ba9fe30f72ee3eb5eef0f4da87172745f9389d1e5+4032'
+const exampleKey1 =
+  '4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f'
+const exampleKey1V5 =
+  '4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f+5'
+const exampleKey1V123 =
+  '4e01f6848573dcc0a712bd2482e6a3074310757448cd4a78fe219547fc2e484f+123'
+const exampleKey2 =
+  '8af39eb4a3eb3252141718f876d29220b8d6f539a045e833e9556aff2a5eacd8'
+const exampleKey2V5 =
+  '8af39eb4a3eb3252141718f876d29220b8d6f539a045e833e9556aff2a5eacd8+5'
+const exampleKey2V40 =
+  '8af39eb4a3eb3252141718f876d29220b8d6f539a045e833e9556aff2a5eacd8+40'
+const exampleKey2V123 =
+  '8af39eb4a3eb3252141718f876d29220b8d6f539a045e833e9556aff2a5eacd8+123'
+const exampleKey3 =
+  'cca6eb69a3ad6104ca31b9fee7832d74068db16ef2169eaaab5b48096e128342'
+const exampleKey3V5 =
+  'cca6eb69a3ad6104ca31b9fee7832d74068db16ef2169eaaab5b48096e128342+5'
+const exampleKey4 =
+  'f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4'
+const exampleKey5V12 =
+  'f0abcd6b1c4fc524e2d48da043b3d8399b96d9374d6606fca51182ee230b6b59+12'
+const exampleKey6V4032 =
+  '527f404aa77756b91cba4e3ba9fe30f72ee3eb5eef0f4da87172745f9389d1e5+4032'
 
 const doesNotThrowAsync = async (t, fn) => {
   try {
@@ -103,7 +136,8 @@ test('Title must be between 1 and 300 characters long - is 301 characters', t =>
   t.throws(() => {
     validateTitle({
       indexMetadata: {
-        title: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        title:
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
       }
     })
   }, /title_length/)
@@ -240,7 +274,7 @@ test('URL must contain a valid non-versioned Hyperdrive key - versioned key', t 
   t.end()
 })
 
-test('URL must refer to the module\'s own Hyperdrive key - other key', t => {
+test("URL must refer to the module's own Hyperdrive key - other key", t => {
   t.throws(() => {
     validateUrl({
       indexMetadata: {
@@ -257,7 +291,12 @@ test('Links - valid', t => {
     validateLinks({
       indexMetadata: {
         links: {
-          license: [{ href: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode' }],
+          license: [
+            {
+              href:
+                'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+            }
+          ],
           spec: [{ href: 'https://p2pcommons.com/specs/module/1.0.0' }]
         }
       }
@@ -275,7 +314,11 @@ test('Links is required - missing', t => {
 
 test('Links must be an object - is string', t => {
   t.throws(() => {
-    validateLinks({ indexMetadata: { links: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode' } })
+    validateLinks({
+      indexMetadata: {
+        links: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+      }
+    })
   }, /links_type/)
   t.end()
 })
@@ -285,7 +328,9 @@ test('Links must be an object with array values - has object values', t => {
     validateLinks({
       indexMetadata: {
         links: {
-          license: { href: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode' },
+          license: {
+            href: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+          },
           spec: { href: 'https://p2pcommons.com/specs/module/1.0.0' }
         }
       }
@@ -313,8 +358,14 @@ test('License must contain one object - multiple objects', t => {
       indexMetadata: {
         links: {
           license: [
-            { href: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode' },
-            { href: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode' }
+            {
+              href:
+                'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+            },
+            {
+              href:
+                'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+            }
           ],
           spec: [{ href: 'https://p2pcommons.com/specs/module/1.0.0' }]
         }
@@ -345,7 +396,12 @@ test('License object must have an href key - link key', t => {
     validateLinks({
       indexMetadata: {
         links: {
-          license: [{ link: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode' }],
+          license: [
+            {
+              link:
+                'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+            }
+          ],
           spec: [{ href: 'https://p2pcommons.com/specs/module/1.0.0' }]
         }
       }
@@ -359,7 +415,9 @@ test('License link must be equal to CC0 - CC4 link', t => {
     validateLinks({
       indexMetadata: {
         links: {
-          license: [{ href: 'https://creativecommons.org/licenses/by/4.0/legalcode' }],
+          license: [
+            { href: 'https://creativecommons.org/licenses/by/4.0/legalcode' }
+          ],
           spec: [{ href: 'https://p2pcommons.com/specs/module/1.0.0' }]
         }
       }
@@ -373,7 +431,12 @@ test('Spec is required - missing', t => {
     validateLinks({
       indexMetadata: {
         links: {
-          license: [{ href: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode' }]
+          license: [
+            {
+              href:
+                'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+            }
+          ]
         }
       }
     })
@@ -386,7 +449,12 @@ test('Spec must contain one object - multiple objects', t => {
     validateLinks({
       indexMetadata: {
         links: {
-          license: [{ href: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode' }],
+          license: [
+            {
+              href:
+                'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+            }
+          ],
           spec: [
             { href: 'https://p2pcommons.com/specs/module/1.0.0' },
             { href: 'https://p2pcommons.com/specs/module/1.0.1' }
@@ -403,7 +471,12 @@ test('Spec must contain one object - one array', t => {
     validateLinks({
       indexMetadata: {
         links: {
-          license: [{ href: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode' }],
+          license: [
+            {
+              href:
+                'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+            }
+          ],
           spec: ['https://p2pcommons.com/specs/module/1.0.0']
         }
       }
@@ -417,7 +490,12 @@ test('Spec object must have an href key - link key', t => {
     validateLinks({
       indexMetadata: {
         links: {
-          license: [{ href: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode' }],
+          license: [
+            {
+              href:
+                'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+            }
+          ],
           spec: [{ link: 'https://p2pcommons.com/specs/module/1.0.0' }]
         }
       }
@@ -431,7 +509,12 @@ test('Spec url must refer to a valid p2pcommons module spec - other link', t => 
     validateLinks({
       indexMetadata: {
         links: {
-          license: [{ href: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode' }],
+          license: [
+            {
+              href:
+                'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+            }
+          ],
           spec: [{ href: 'https://notp2pcommons.fake/specs/module/1.0.0' }]
         }
       }
@@ -449,14 +532,8 @@ test('p2pcommons - valid', t => {
           type: 'content',
           subtype: '',
           main: 'test-content.html',
-          authors: [
-            exampleKey3,
-            exampleKey4
-          ],
-          parents: [
-            exampleKey5V12,
-            exampleKey6V4032
-          ]
+          authors: [exampleKey3, exampleKey4],
+          parents: [exampleKey5V12, exampleKey6V4032]
         }
       }
     })
@@ -476,19 +553,15 @@ test('p2pcommons must be an object - is array', t => {
     validateP2pcommons({
       indexMetadata: {
         url: `hyper://${exampleKey1}`,
-        p2pcommons: [{
-          type: 'content',
-          subtype: '',
-          main: 'test-content.html',
-          authors: [
-            exampleKey3,
-            exampleKey4
-          ],
-          parents: [
-            exampleKey5V12,
-            exampleKey6V4032
-          ]
-        }]
+        p2pcommons: [
+          {
+            type: 'content',
+            subtype: '',
+            main: 'test-content.html',
+            authors: [exampleKey3, exampleKey4],
+            parents: [exampleKey5V12, exampleKey6V4032]
+          }
+        ]
       }
     })
   }, /p2pcommons_type/)
@@ -534,7 +607,7 @@ test('Type must be a string - is number', t => {
   t.end()
 })
 
-test('Type must be equal to \'profile\' or \'content\' - other value', t => {
+test("Type must be equal to 'profile' or 'content' - other value", t => {
   t.throws(() => {
     validateType({
       indexMetadata: {
@@ -613,156 +686,200 @@ test('Subtype may only include standard alphanumeric characters - contains space
 })
 
 test('Main - valid', async t => {
-  await throwsAsync(t, async () => {
-    await validateMain({
-      indexMetadata: {
-        p2pcommons: {
-          main: 'folder1/test-content.html'
-        }
-      },
-      key: exampleKey1
-    })
-  }, 'main_exists')
+  await throwsAsync(
+    t,
+    async () => {
+      await validateMain({
+        indexMetadata: {
+          p2pcommons: {
+            main: 'folder1/test-content.html'
+          }
+        },
+        key: exampleKey1
+      })
+    },
+    'main_exists'
+  )
   t.end()
 })
 
 test('Main - empty for content', async t => {
-  await throwsAsync(t, async () => {
-    await validateMain({
-      indexMetadata: {
-        p2pcommons: {
-          type: 'content',
-          main: ''
-        }
-      },
-      key: exampleKey1
-    })
-  }, 'main_notempty')
+  await throwsAsync(
+    t,
+    async () => {
+      await validateMain({
+        indexMetadata: {
+          p2pcommons: {
+            type: 'content',
+            main: ''
+          }
+        },
+        key: exampleKey1
+      })
+    },
+    'main_notempty'
+  )
   t.end()
 })
 
 test('Main is required - missing', async t => {
-  await throwsAsync(t, async () => {
-    await validateMain({
-      indexMetadata: {
-        p2pcommons: {}
-      },
-      key: exampleKey1
-    })
-  }, 'main_required')
+  await throwsAsync(
+    t,
+    async () => {
+      await validateMain({
+        indexMetadata: {
+          p2pcommons: {}
+        },
+        key: exampleKey1
+      })
+    },
+    'main_required'
+  )
   t.end()
 })
 
 test('Main must be a string - is number', async t => {
-  await throwsAsync(t, async () => {
-    await validateMain({
-      indexMetadata: {
-        p2pcommons: {
-          main: 123
-        }
-      },
-      key: exampleKey1
-    })
-  }, 'main_type')
+  await throwsAsync(
+    t,
+    async () => {
+      await validateMain({
+        indexMetadata: {
+          p2pcommons: {
+            main: 123
+          }
+        },
+        key: exampleKey1
+      })
+    },
+    'main_type'
+  )
   t.end()
 })
 
 test('Main may not be a .dotfile - is dotfile', async t => {
-  await throwsAsync(t, async () => {
-    await validateMain({
-      indexMetadata: {
-        p2pcommons: {
-          main: 'folder1/.example.json'
-        }
-      },
-      key: exampleKey1
-    })
-  }, 'main_nodotfile')
+  await throwsAsync(
+    t,
+    async () => {
+      await validateMain({
+        indexMetadata: {
+          p2pcommons: {
+            main: 'folder1/.example.json'
+          }
+        },
+        key: exampleKey1
+      })
+    },
+    'main_nodotfile'
+  )
   t.end()
 })
 
 test('Main may only contain a relative path within the module - URL', async t => {
-  await throwsAsync(t, async () => {
-    await validateMain({
-      indexMetadata: {
-        p2pcommons: {
-          main: 'https://www.lovelywebsite.com/lovelyfile.html'
-        }
-      },
-      key: exampleKey1
-    })
-  }, 'main_relativepath')
+  await throwsAsync(
+    t,
+    async () => {
+      await validateMain({
+        indexMetadata: {
+          p2pcommons: {
+            main: 'https://www.lovelywebsite.com/lovelyfile.html'
+          }
+        },
+        key: exampleKey1
+      })
+    },
+    'main_relativepath'
+  )
   t.end()
 })
 
 test('Main may only contain a relative path within the module - windows absolute path', async t => {
-  await throwsAsync(t, async () => {
-    await validateMain({
-      indexMetadata: {
-        p2pcommons: {
-          main: 'C:\\lovelyfile.html'
-        }
-      },
-      key: exampleKey1
-    })
-  }, 'main_relativepath')
+  await throwsAsync(
+    t,
+    async () => {
+      await validateMain({
+        indexMetadata: {
+          p2pcommons: {
+            main: 'C:\\lovelyfile.html'
+          }
+        },
+        key: exampleKey1
+      })
+    },
+    'main_relativepath'
+  )
   t.end()
 })
 
 test('Main may only contain a relative path within the module - relative path to folder', async t => {
-  await throwsAsync(t, async () => {
-    await validateMain({
-      indexMetadata: {
-        p2pcommons: {
-          main: 'path/to/folder/'
-        }
-      },
-      key: exampleKey1
-    })
-  }, 'main_relativepath')
+  await throwsAsync(
+    t,
+    async () => {
+      await validateMain({
+        indexMetadata: {
+          p2pcommons: {
+            main: 'path/to/folder/'
+          }
+        },
+        key: exampleKey1
+      })
+    },
+    'main_relativepath'
+  )
   t.end()
 })
 
 test('Main may only contain a relative path within the module - mac absolute path', async t => {
-  await throwsAsync(t, async () => {
-    await validateMain({
-      indexMetadata: {
-        p2pcommons: {
-          main: '/home/user/module/lovelyfile.html'
-        }
-      },
-      key: exampleKey1
-    })
-  }, 'main_relativepath')
+  await throwsAsync(
+    t,
+    async () => {
+      await validateMain({
+        indexMetadata: {
+          p2pcommons: {
+            main: '/home/user/module/lovelyfile.html'
+          }
+        },
+        key: exampleKey1
+      })
+    },
+    'main_relativepath'
+  )
   t.end()
 })
 
 test('Main may only contain a relative path within the module - relative path outside module', async t => {
-  await throwsAsync(t, async () => {
-    await validateMain({
-      indexMetadata: {
-        p2pcommons: {
-          main: '../lovelyfile.html'
-        }
-      },
-      key: exampleKey1
-    })
-  }, 'main_relativepath')
+  await throwsAsync(
+    t,
+    async () => {
+      await validateMain({
+        indexMetadata: {
+          p2pcommons: {
+            main: '../lovelyfile.html'
+          }
+        },
+        key: exampleKey1
+      })
+    },
+    'main_relativepath'
+  )
   t.end()
 })
 
 test('Main may only be empty for profiles - empty for content', async t => {
-  await throwsAsync(t, async () => {
-    await validateMain({
-      indexMetadata: {
-        p2pcommons: {
-          type: 'content',
-          main: ''
-        }
-      },
-      key: exampleKey1
-    })
-  }, 'main_notempty')
+  await throwsAsync(
+    t,
+    async () => {
+      await validateMain({
+        indexMetadata: {
+          p2pcommons: {
+            type: 'content',
+            main: ''
+          }
+        },
+        key: exampleKey1
+      })
+    },
+    'main_notempty'
+  )
   t.end()
 })
 
@@ -824,17 +941,21 @@ test('Main must refer to an existing file - does not exist', async t => {
     console.log(err)
   }
 
-  await throwsAsync(t, async () => {
-    await validateMain({
-      indexMetadata: {
-        p2pcommons: {
-          main: 'main.txt'
-        }
-      },
-      key,
-      p2pcommonsDir: p2p.baseDir
-    })
-  }, /main_exists/)
+  await throwsAsync(
+    t,
+    async () => {
+      await validateMain({
+        indexMetadata: {
+          p2pcommons: {
+            main: 'main.txt'
+          }
+        },
+        key,
+        p2pcommonsDir: p2p.baseDir
+      })
+    },
+    /main_exists/
+  )
 
   await p2p.destroy()
   t.end()
@@ -971,10 +1092,7 @@ test('Authors - valid', t => {
       indexMetadata: {
         p2pcommons: {
           type: 'content',
-          authors: [
-            exampleKey1,
-            exampleKey2
-          ]
+          authors: [exampleKey1, exampleKey2]
         }
       }
     })
@@ -1014,10 +1132,7 @@ test('Authors may only exist for content - exists for profile', t => {
       indexMetadata: {
         p2pcommons: {
           type: 'profile',
-          authors: [
-            exampleKey1,
-            exampleKey2
-          ]
+          authors: [exampleKey1, exampleKey2]
         }
       }
     })
@@ -1045,11 +1160,7 @@ test('Authors must be unique - contains duplicates', t => {
       indexMetadata: {
         p2pcommons: {
           type: 'content',
-          authors: [
-            exampleKey1,
-            exampleKey2,
-            exampleKey2
-          ]
+          authors: [exampleKey1, exampleKey2, exampleKey2]
         }
       }
     })
@@ -1063,10 +1174,7 @@ test('Authors may only contain non-versioned Hyperdrive keys - contains versione
       indexMetadata: {
         p2pcommons: {
           type: 'content',
-          authors: [
-            exampleKey1,
-            exampleKey2V5
-          ]
+          authors: [exampleKey1, exampleKey2V5]
         }
       }
     })
@@ -1080,10 +1188,7 @@ test('Authors may only contain non-versioned Hyperdrive keys - contains names', 
       indexMetadata: {
         p2pcommons: {
           type: 'content',
-          authors: [
-            exampleKey1,
-            'James Lomas'
-          ]
+          authors: [exampleKey1, 'James Lomas']
         }
       }
     })
@@ -1097,10 +1202,7 @@ test('Parents - valid', t => {
       indexMetadata: {
         p2pcommons: {
           type: 'content',
-          parents: [
-            exampleKey2V5,
-            exampleKey2V123
-          ]
+          parents: [exampleKey2V5, exampleKey2V123]
         }
       },
       dbMetadata: {
@@ -1152,10 +1254,7 @@ test('Parents may only exist for content - exists for profile', t => {
       indexMetadata: {
         p2pcommons: {
           type: 'profile',
-          parents: [
-            exampleKey1V5,
-            exampleKey2V123
-          ]
+          parents: [exampleKey1V5, exampleKey2V123]
         }
       },
       dbMetadata: {
@@ -1191,11 +1290,7 @@ test('Parents must be unique - contains multiple versions of same key', t => {
       indexMetadata: {
         p2pcommons: {
           type: 'content',
-          parents: [
-            exampleKey1V5,
-            exampleKey2V40,
-            exampleKey2V123
-          ]
+          parents: [exampleKey1V5, exampleKey2V40, exampleKey2V123]
         }
       },
       dbMetadata: {
@@ -1213,11 +1308,7 @@ test('Parents must be unique - contains duplicates', t => {
       indexMetadata: {
         p2pcommons: {
           type: 'content',
-          parents: [
-            exampleKey1V5,
-            exampleKey2V123,
-            exampleKey2V123
-          ]
+          parents: [exampleKey1V5, exampleKey2V123, exampleKey2V123]
         }
       },
       dbMetadata: {
@@ -1235,10 +1326,7 @@ test('Parents may only contain versioned Hyperdrive keys - contains non-versione
       indexMetadata: {
         p2pcommons: {
           type: 'content',
-          parents: [
-            exampleKey1,
-            exampleKey2V5
-          ]
+          parents: [exampleKey1, exampleKey2V5]
         }
       },
       dbMetadata: {
@@ -1256,11 +1344,7 @@ test('Parents may not refer to current or future versions of itself - contains p
       indexMetadata: {
         p2pcommons: {
           type: 'content',
-          parents: [
-            exampleKey1V5,
-            exampleKey2V40,
-            exampleKey2V123
-          ]
+          parents: [exampleKey1V5, exampleKey2V40, exampleKey2V123]
         }
       },
       dbMetadata: {
@@ -1278,11 +1362,7 @@ test('Parents may not refer to current or future versions of itself - contains v
       indexMetadata: {
         p2pcommons: {
           type: 'content',
-          parents: [
-            exampleKey1V5,
-            exampleKey2V40,
-            exampleKey2V123
-          ]
+          parents: [exampleKey1V5, exampleKey2V40, exampleKey2V123]
         }
       },
       dbMetadata: {
@@ -1300,11 +1380,7 @@ test('Parents may not refer to current or future versions of itself - contains f
       indexMetadata: {
         p2pcommons: {
           type: 'content',
-          parents: [
-            exampleKey1V123,
-            exampleKey2V40,
-            exampleKey2V123
-          ]
+          parents: [exampleKey1V123, exampleKey2V40, exampleKey2V123]
         }
       },
       dbMetadata: {
@@ -1343,7 +1419,10 @@ test('Parents must be registered by at least one author - 1 parent, 1 author, re
   }))
 
   try {
-    await p2p.register(`${encode(parent.url)}+${parentMetadata.version}`, encode(profile.url))
+    await p2p.register(
+      `${encode(parent.url)}+${parentMetadata.version}`,
+      encode(profile.url)
+    )
   } catch (err) {
     t.fail(err.message)
   }
@@ -1400,7 +1479,6 @@ test('Parents must be registered by at least one author - 2 parents, 2 authors, 
     main: 'main.txt',
     authors: [encode(profile1.url), encode(profile2.url)]
   }))
-
   ;({ rawJSON: parent2, metadata: parent2Metadata } = await p2p.set({
     url: parent2.url,
     main: 'main.txt',
@@ -1408,12 +1486,18 @@ test('Parents must be registered by at least one author - 2 parents, 2 authors, 
   }))
 
   try {
-    await p2p.register(`${encode(parent1.url)}+${parent1Metadata.version}`, encode(profile2.url))
+    await p2p.register(
+      `${encode(parent1.url)}+${parent1Metadata.version}`,
+      encode(profile2.url)
+    )
   } catch (err) {
     t.fail(err.message)
   }
   try {
-    await p2p.register(`${encode(parent2.url)}+${parent2Metadata.version}`, encode(profile2.url))
+    await p2p.register(
+      `${encode(parent2.url)}+${parent2Metadata.version}`,
+      encode(profile2.url)
+    )
   } catch (err) {
     t.fail(err.message)
   }
@@ -1423,8 +1507,8 @@ test('Parents must be registered by at least one author - 2 parents, 2 authors, 
       indexMetadata: {
         p2pcommons: {
           parents: [
-          `${parent1Key}+${parent1Metadata.version}`,
-          `${parent2Key}+${parent2Metadata.version}`
+            `${parent1Key}+${parent1Metadata.version}`,
+            `${parent2Key}+${parent2Metadata.version}`
           ]
         }
       },
@@ -1462,18 +1546,20 @@ test('Parents must be registered by at least one author - 1 parent, 1 author, no
     authors: [encode(profile1.url)]
   }))
 
-  await throwsAsync(t, async () => {
-    await validateParentsOnUpdate({
-      indexMetadata: {
-        p2pcommons: {
-          parents: [
-          `${parent1Key}+${parent1Metadata.version}`
-          ]
-        }
-      },
-      p2pcommons: p2p
-    })
-  }, 'parents_registered')
+  await throwsAsync(
+    t,
+    async () => {
+      await validateParentsOnUpdate({
+        indexMetadata: {
+          p2pcommons: {
+            parents: [`${parent1Key}+${parent1Metadata.version}`]
+          }
+        },
+        p2pcommons: p2p
+      })
+    },
+    'parents_registered'
+  )
 
   await p2p.destroy()
   t.end()
@@ -1516,7 +1602,6 @@ test('Parents must be registered by at least one author - 2 parents, 2 authors, 
     main: 'main.txt',
     authors: [encode(profile1.url), encode(profile2.url)]
   }))
-
   ;({ rawJSON: parent2, metadata: parent2Metadata } = await p2p.set({
     url: parent2.url,
     main: 'main.txt',
@@ -1524,24 +1609,31 @@ test('Parents must be registered by at least one author - 2 parents, 2 authors, 
   }))
 
   try {
-    await p2p.register(`${encode(parent1.url)}+${parent1Metadata.version}`, encode(profile1.url))
+    await p2p.register(
+      `${encode(parent1.url)}+${parent1Metadata.version}`,
+      encode(profile1.url)
+    )
   } catch (err) {
     t.fail(err.message)
   }
 
-  await throwsAsync(t, async () => {
-    await validateParentsOnUpdate({
-      indexMetadata: {
-        p2pcommons: {
-          parents: [
-          `${parent1Key}+${parent1Metadata.version}`,
-          `${parent2Key}+${parent2Metadata.version}`
-          ]
-        }
-      },
-      p2pcommons: p2p
-    })
-  }, 'parents_registered')
+  await throwsAsync(
+    t,
+    async () => {
+      await validateParentsOnUpdate({
+        indexMetadata: {
+          p2pcommons: {
+            parents: [
+              `${parent1Key}+${parent1Metadata.version}`,
+              `${parent2Key}+${parent2Metadata.version}`
+            ]
+          }
+        },
+        p2pcommons: p2p
+      })
+    },
+    'parents_registered'
+  )
 
   await p2p.destroy()
   t.end()
@@ -1553,11 +1645,7 @@ test('Follows - valid', t => {
       indexMetadata: {
         p2pcommons: {
           type: 'profile',
-          follows: [
-            exampleKey2,
-            exampleKey2V123,
-            exampleKey3
-          ]
+          follows: [exampleKey2, exampleKey2V123, exampleKey3]
         }
       },
       key: exampleKey1
@@ -1600,10 +1688,7 @@ test('Follows may only exist for profiles - exists for content', t => {
       indexMetadata: {
         p2pcommons: {
           type: 'content',
-          follows: [
-            exampleKey3V5,
-            exampleKey2V123
-          ]
+          follows: [exampleKey3V5, exampleKey2V123]
         }
       },
       key: exampleKey1
@@ -1633,11 +1718,7 @@ test('Follows must be unique - contains multiple versions of same key', t => {
       indexMetadata: {
         p2pcommons: {
           type: 'profile',
-          follows: [
-            exampleKey3V5,
-            exampleKey2,
-            exampleKey2V123
-          ]
+          follows: [exampleKey3V5, exampleKey2, exampleKey2V123]
         }
       },
       key: exampleKey1
@@ -1652,11 +1733,7 @@ test('Follows must be unique - contains duplicates', t => {
       indexMetadata: {
         p2pcommons: {
           type: 'profile',
-          follows: [
-            exampleKey3V5,
-            exampleKey2,
-            exampleKey2
-          ]
+          follows: [exampleKey3V5, exampleKey2, exampleKey2]
         }
       },
       key: exampleKey1
@@ -1671,10 +1748,7 @@ test('Follows may only contain Hyperdrive keys (versioned or non-versioned) - co
       indexMetadata: {
         p2pcommons: {
           type: 'profile',
-          follows: [
-            exampleKey3,
-          `hyper://${exampleKey2V5}`
-          ]
+          follows: [exampleKey3, `hyper://${exampleKey2V5}`]
         }
       },
       key: exampleKey1
@@ -1683,17 +1757,13 @@ test('Follows may only contain Hyperdrive keys (versioned or non-versioned) - co
   t.end()
 })
 
-test('Follows may not refer to the profile\'s own Hyperdrive key - contains unversioned key', t => {
+test("Follows may not refer to the profile's own Hyperdrive key - contains unversioned key", t => {
   t.throws(() => {
     validateFollows({
       indexMetadata: {
         p2pcommons: {
           type: 'profile',
-          follows: [
-            exampleKey1,
-            exampleKey2V40,
-            exampleKey2V123
-          ]
+          follows: [exampleKey1, exampleKey2V40, exampleKey2V123]
         }
       },
       key: exampleKey1
@@ -1702,17 +1772,13 @@ test('Follows may not refer to the profile\'s own Hyperdrive key - contains unve
   t.end()
 })
 
-test('Follows may not refer to the profile\'s own Hyperdrive key - contains versioned key', t => {
+test("Follows may not refer to the profile's own Hyperdrive key - contains versioned key", t => {
   t.throws(() => {
     validateFollows({
       indexMetadata: {
         p2pcommons: {
           type: 'profile',
-          follows: [
-            exampleKey1V5,
-            exampleKey2,
-            exampleKey2V123
-          ]
+          follows: [exampleKey1V5, exampleKey2, exampleKey2V123]
         }
       },
       key: exampleKey1
@@ -1727,11 +1793,7 @@ test('Contents - valid', t => {
       indexMetadata: {
         p2pcommons: {
           type: 'profile',
-          contents: [
-            exampleKey2,
-            exampleKey2V123,
-            exampleKey3
-          ]
+          contents: [exampleKey2, exampleKey2V123, exampleKey3]
         }
       },
       key: exampleKey1
@@ -1774,10 +1836,7 @@ test('Contents may only exist for profiles - exists for content', t => {
       indexMetadata: {
         p2pcommons: {
           type: 'content',
-          contents: [
-            exampleKey3V5,
-            exampleKey2V123
-          ]
+          contents: [exampleKey3V5, exampleKey2V123]
         }
       },
       key: exampleKey1
@@ -1807,11 +1866,7 @@ test('Contents must be unique - contains multiple versions of same key', t => {
       indexMetadata: {
         p2pcommons: {
           type: 'profile',
-          contents: [
-            exampleKey3V5,
-            exampleKey2,
-            exampleKey2V123
-          ]
+          contents: [exampleKey3V5, exampleKey2, exampleKey2V123]
         }
       },
       key: exampleKey1
@@ -1826,11 +1881,7 @@ test('Contents must be unique - contains duplicates', t => {
       indexMetadata: {
         p2pcommons: {
           type: 'profile',
-          contents: [
-            exampleKey3V5,
-            exampleKey2,
-            exampleKey2
-          ]
+          contents: [exampleKey3V5, exampleKey2, exampleKey2]
         }
       },
       key: exampleKey1
@@ -1858,70 +1909,76 @@ test('Contents may only contain Hyperdrive keys (versioned or non-versioned) - c
 })
 
 test('Validate draft - valid content', async t => {
-  await throwsAsync(t, async () => {
-    await validatePartial({
-      indexMetadata: {
-        title: 'Content example',
-        description: '',
-        url: `hyper://${exampleKey1}`,
-        links: {
-          license: [{ href: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode' }],
-          spec: [{ href: 'https://p2pcommons.com/specs/module/1.0.0' }]
+  await throwsAsync(
+    t,
+    async () => {
+      await validatePartial({
+        indexMetadata: {
+          title: 'Content example',
+          description: '',
+          url: `hyper://${exampleKey1}`,
+          links: {
+            license: [
+              {
+                href:
+                  'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+              }
+            ],
+            spec: [{ href: 'https://p2pcommons.com/specs/module/1.0.0' }]
+          },
+          p2pcommons: {
+            type: 'content',
+            subtype: '',
+            main: 'test-content.html',
+            authors: [exampleKey3, exampleKey4],
+            parents: [exampleKey5V12, exampleKey6V4032]
+          }
         },
-        p2pcommons: {
-          type: 'content',
-          subtype: '',
-          main: 'test-content.html',
-          authors: [
-            exampleKey3,
-            exampleKey4
-          ],
-          parents: [
-            exampleKey5V12,
-            exampleKey6V4032
-          ]
-        }
-      },
-      dbMetadata: {
-        version: 50
-      },
-      key: exampleKey1
-    })
-  }, /main_exists/)
+        dbMetadata: {
+          version: 50
+        },
+        key: exampleKey1
+      })
+    },
+    /main_exists/
+  )
   t.end()
 })
 
 test('Validate draft - invalid content (future self-reference parent)', async t => {
-  await throwsAsync(t, async () => {
-    await validatePartial({
-      indexMetadata: {
-        title: 'Content example',
-        description: '',
-        url: `hyper://${exampleKey1}`,
-        links: {
-          license: [{ href: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode' }],
-          spec: [{ href: 'https://p2pcommons.com/specs/module/1.0.0' }]
+  await throwsAsync(
+    t,
+    async () => {
+      await validatePartial({
+        indexMetadata: {
+          title: 'Content example',
+          description: '',
+          url: `hyper://${exampleKey1}`,
+          links: {
+            license: [
+              {
+                href:
+                  'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+              }
+            ],
+            spec: [{ href: 'https://p2pcommons.com/specs/module/1.0.0' }]
+          },
+          p2pcommons: {
+            type: 'content',
+            subtype: '',
+            main: 'test-content.html',
+            authors: [exampleKey3, exampleKey4],
+            parents: [exampleKey5V12, exampleKey1V123]
+          }
         },
-        p2pcommons: {
-          type: 'content',
-          subtype: '',
-          main: 'test-content.html',
-          authors: [
-            exampleKey3,
-            exampleKey4
-          ],
-          parents: [
-            exampleKey5V12,
-            exampleKey1V123
-          ]
-        }
-      },
-      dbMetadata: {
-        version: 5
-      },
-      key: exampleKey1
-    })
-  }, /parents_noselfreference/)
+        dbMetadata: {
+          version: 5
+        },
+        key: exampleKey1
+      })
+    },
+    /parents_noselfreference/
+  )
   t.end()
 })
 
@@ -1933,7 +1990,12 @@ test('Validate draft - valid profile', async t => {
         description: '',
         url: `hyper://${exampleKey3}`,
         links: {
-          license: [{ href: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode' }],
+          license: [
+            {
+              href:
+                'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+            }
+          ],
           spec: [{ href: 'https://p2pcommons.com/specs/module/1.0.0' }]
         },
         p2pcommons: {
@@ -1941,9 +2003,7 @@ test('Validate draft - valid profile', async t => {
           subtype: '',
           main: '',
           avatar: './test.png',
-          follows: [
-            exampleKey4
-          ],
+          follows: [exampleKey4],
           contents: [
             '00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23+12'
           ]
@@ -1959,35 +2019,38 @@ test('Validate draft - valid profile', async t => {
 })
 
 test('Validate - flattened index.json', async t => {
-  await throwsAsync(t, async () => {
-    await validate({
-      indexMetadata: {
-        title: 'Content example',
-        description: '',
-        url: `hyper://${exampleKey1}`,
-        links: {
-          license: [{ href: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode' }],
-          spec: [{ href: 'https://p2pcommons.com/specs/module/1.0.0' }]
+  await throwsAsync(
+    t,
+    async () => {
+      await validate({
+        indexMetadata: {
+          title: 'Content example',
+          description: '',
+          url: `hyper://${exampleKey1}`,
+          links: {
+            license: [
+              {
+                href:
+                  'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+              }
+            ],
+            spec: [{ href: 'https://p2pcommons.com/specs/module/1.0.0' }]
+          },
+          type: 'content',
+          subtype: '',
+          main: 'test-content.html',
+          authors: [exampleKey3, exampleKey4],
+          parents: [exampleKey5V12, exampleKey6V4032]
         },
-        type: 'content',
-        subtype: '',
-        main: 'test-content.html',
-        authors: [
-          exampleKey3,
-          exampleKey4
-        ],
-        parents: [
-          exampleKey5V12,
-          exampleKey6V4032
-        ]
-      },
-      dbMetadata: {
-        version: 50
-      },
-      key: exampleKey1,
-      _flat: false
-    })
-  }, /p2pcommons_required/)
+        dbMetadata: {
+          version: 50
+        },
+        key: exampleKey1,
+        _flat: false
+      })
+    },
+    /p2pcommons_required/
+  )
   t.end()
 })
 
@@ -2014,13 +2077,17 @@ test('Validate before init - only type profile, flattened', async t => {
 })
 
 test('Validate before init - type missing', async t => {
-  await throwsAsync(t, async () => {
-    await validatePartial({
-      indexMetadata: {
-        title: 'Profile example'
-      }
-    })
-  }, /type_required/)
+  await throwsAsync(
+    t,
+    async () => {
+      await validatePartial({
+        indexMetadata: {
+          title: 'Profile example'
+        }
+      })
+    },
+    /type_required/
+  )
   t.end()
 })
 
@@ -2111,17 +2178,21 @@ test('Registration - no main file', async t => {
     console.log(err)
   }
 
-  await throwsAsync(t, async () => {
-    await validateOnRegister({
-      contentIndexMetadata: content,
-      contentDbMetadata: contentMetadata,
-      contentKey: encode(content.url),
-      profileIndexMetadata: profile,
-      profileDbMetadata: profileMetadata,
-      profileKey: encode(profile.url),
-      p2pcommonsDir: p2p.baseDir
-    })
-  }, /main_exists/)
+  await throwsAsync(
+    t,
+    async () => {
+      await validateOnRegister({
+        contentIndexMetadata: content,
+        contentDbMetadata: contentMetadata,
+        contentKey: encode(content.url),
+        profileIndexMetadata: profile,
+        profileDbMetadata: profileMetadata,
+        profileKey: encode(profile.url),
+        p2pcommonsDir: p2p.baseDir
+      })
+    },
+    /main_exists/
+  )
   await p2p.destroy()
 
   t.end()
@@ -2142,7 +2213,10 @@ test('Only content may be registered to a profile - register profile', async t =
   })
 
   try {
-    await writeFile(join(p2p.baseDir, encode(profile2.url), 'main.txt'), 'hello')
+    await writeFile(
+      join(p2p.baseDir, encode(profile2.url), 'main.txt'),
+      'hello'
+    )
   } catch (err) {
     console.log(err)
   }
@@ -2152,17 +2226,21 @@ test('Only content may be registered to a profile - register profile', async t =
     main: 'main.txt'
   }))
 
-  await throwsAsync(t, async () => {
-    await validateOnRegister({
-      contentIndexMetadata: profile2,
-      contentDbMetadata: profile2Metadata,
-      contentKey: encode(profile2.url),
-      profileIndexMetadata: profile,
-      profileDbMetadata: profileMetadata,
-      profileKey: encode(profile.url),
-      p2pcommonsDir: p2p.baseDir
-    })
-  }, /onregister_moduletype/)
+  await throwsAsync(
+    t,
+    async () => {
+      await validateOnRegister({
+        contentIndexMetadata: profile2,
+        contentDbMetadata: profile2Metadata,
+        contentKey: encode(profile2.url),
+        profileIndexMetadata: profile,
+        profileDbMetadata: profileMetadata,
+        profileKey: encode(profile.url),
+        p2pcommonsDir: p2p.baseDir
+      })
+    },
+    /onregister_moduletype/
+  )
   await p2p.destroy()
 
   t.end()
@@ -2192,17 +2270,21 @@ test('Authors must contain profile key upon registration - does not contain auth
     main: 'main.txt'
   }))
 
-  await throwsAsync(t, async () => {
-    await validateOnRegister({
-      contentIndexMetadata: content,
-      contentDbMetadata: contentMetadata,
-      contentKey: encode(content.url),
-      profileIndexMetadata: profile,
-      profileDbMetadata: profileMetadata,
-      profileKey: encode(profile.url),
-      p2pcommonsDir: p2p.baseDir
-    })
-  }, /onregister_authorscontainsprofilekey/)
+  await throwsAsync(
+    t,
+    async () => {
+      await validateOnRegister({
+        contentIndexMetadata: content,
+        contentDbMetadata: contentMetadata,
+        contentKey: encode(content.url),
+        profileIndexMetadata: profile,
+        profileDbMetadata: profileMetadata,
+        profileKey: encode(profile.url),
+        p2pcommonsDir: p2p.baseDir
+      })
+    },
+    /onregister_authorscontainsprofilekey/
+  )
   await p2p.destroy()
 
   t.end()
@@ -2272,7 +2354,7 @@ test('Validate (full) - valid', async t => {
   t.end()
 })
 
-test('Validate (full) - invalid (main file doesn\'t exist)', async t => {
+test("Validate (full) - invalid (main file doesn't exist)", async t => {
   const p2p = createDb()
 
   const { rawJSON: profile } = await p2p.init({
@@ -2299,14 +2381,18 @@ test('Validate (full) - invalid (main file doesn\'t exist)', async t => {
 
   content.main = 'main.txt'
 
-  await throwsAsync(t, async () => {
-    await validate({
-      indexMetadata: content,
-      dbMetadata: metadata,
-      key,
-      p2pcommonsDir: p2p.baseDir
-    })
-  }, /main_exists/)
+  await throwsAsync(
+    t,
+    async () => {
+      await validate({
+        indexMetadata: content,
+        dbMetadata: metadata,
+        key,
+        p2pcommonsDir: p2p.baseDir
+      })
+    },
+    /main_exists/
+  )
   await p2p.destroy()
   t.end()
 })

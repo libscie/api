@@ -2,7 +2,8 @@ const P2PCommons = require('..') // liberate science constructor function
 const tempy = require('tempy')
 const commons = new P2PCommons({
   verbose: true,
-  persist: false
+  persist: false,
+  baseDir: tempy.directory()
 })
 
 process.once('SIGINT', () => commons.destroy())

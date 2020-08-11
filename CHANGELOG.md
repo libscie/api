@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Fixed
 - listProfiles() only returned writable profiles
+- Improve formatting #207
 
 ### Changed
 - Bump module specification version to `0.9.3`
@@ -20,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove hyper:// protocol from p2pcommons keys #179
 - ValidationError parameters to fit with new validations #154
 - Improved readability of some parts of the readme
-- bump lodash from 4.17.15 to 4.17.19 
+- bump lodash from 4.17.15 to 4.17.19
 - Eagerly call networker listen, remove await from swarm.join call #193
 
 ### Fixed

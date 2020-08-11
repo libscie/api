@@ -1,6 +1,6 @@
 # Contributing to @p2pcommons/sdk-js
 
-Welcome! We *love* that you're interested in contributing to p2pcommons :purple_heart:
+Welcome! We _love_ that you're interested in contributing to p2pcommons :purple_heart:
 
 We recognize all our contributors using the [all-contributors](https://github.com/all-contributors/all-contributors) bot. Contributions of any kind welcome!
 
@@ -8,7 +8,7 @@ Come and join us on [Slack](https://join.slack.com/t/libscie/shared_invite/zt-9l
 
 ## Code of conduct
 
-Please note we adhere to a [Code of Conduct](https://github.com/hypergraph-xyz/cli/blob/main/CODE_OF_CONDUCT.md) and any contributions not in line with it (*tl;dr* be an empathetic, considerate person) will not be accepted. Please notify [@chartgerink](mailto:chris@libscie.org) if anything happens.
+Please note we adhere to a [Code of Conduct](https://github.com/hypergraph-xyz/cli/blob/main/CODE_OF_CONDUCT.md) and any contributions not in line with it (_tl;dr_ be an empathetic, considerate person) will not be accepted. Please notify [@chartgerink](mailto:chris@libscie.org) if anything happens.
 
 ## Feature requests & bug reports
 
@@ -28,7 +28,7 @@ Our work is organized on [GitHub Issues](https://github.com/p2pcommons/sdk-js/is
 
 Technical improvements, bug fixes, documentation and other non-feature work is also totally welcome.
 
-***Please note that we have [specs](https://github.com/p2pcommons/specs/issues) that the application must adhere to. If you believe these specs need amending, submit an issue to that repo.***
+**_Please note that we have [specs](https://github.com/p2pcommons/specs/issues) that the application must adhere to. If you believe these specs need amending, submit an issue to that repo._**
 
 ### Git guidelines
 
@@ -57,7 +57,7 @@ $ git checkout -b my-feature-branch -t origin/master
 
 #### Step 3: Test
 
-Bug fixes and features **should come with tests**. 
+Bug fixes and features **should come with tests**.
 
 ```bash
 $ npm test
