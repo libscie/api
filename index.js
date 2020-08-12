@@ -95,7 +95,7 @@ const DEFAULT_SDK_OPTS = {
 const DEFAULT_GLOBAL_SETTINGS = {
   networkDepth: 2,
   defaultProfile: '',
-  keys: '~/.p2pcommons/.dat',
+  keys: '~/.p2pcommons/.hyperdrive',
   sparse: true,
   sparseMetadata: true
 }
