@@ -1698,7 +1698,7 @@ class SDK extends EventEmitter {
         await drive.close()
       }
       if (!this.disableSwarm) {
-        await this.networker.leave(dkeyString)
+        this.networker.leave(dkeyString)
       }
     } catch (err) {
       debug('delete: %O', err)
