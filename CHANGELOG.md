@@ -6,14 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- listProfiles() only returned writable profiles
+- Track external updates #206
+- delete() remove await from swarm leave call #209
+- Improve formatting #207
+
 ### Changed
 - Location of keys is now `~/.p2pcommons/.hyperdrive` instead of `~/.p2pcommons/.dat` 
 - Bump module specification version to `0.9.3`
-
-### Fixed
-- listProfiles() only returned writable profiles
-- delete() remove await from swarm leave call #209
-- Improve formatting #207
 
 ## [0.7.0] - 2020-07-29
 ### Added

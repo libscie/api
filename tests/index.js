@@ -1765,6 +1765,56 @@ test('cancel clone', async t => {
   t.end()
 })
 
+test('clone updates localdb', async t => {
+  const dir = tempy.directory()
+  const dir2 = tempy.directory()
+
+  const p2p = new SDK({
+    persist: true,
+    baseDir: dir,
+    dhtBootstrap
+  })
+
+  const p2p2 = new SDK({
+    persist: true,
+    baseDir: dir2,
+    dhtBootstrap
+  })
+
+
+  const profile = {
+    type: 'profile',
+    title: 'professor'
+  }
+
+  const { rawJSON } = await p2p.init(profile)
+
+  // clone
+  const { rawJSON: module1 } = await p2p2.clone(rawJSON.url)
+
+  t.same(module1.title, profile.title, '1 st clone works OK (title)')
+  t.same(module1.description, '', '1 st clone works OK (empty description)')
+
+  // update original profile
+  const description = 'some description'
+  await p2p.set({ url: rawJSON.url, description })
+
+  // be notified about updates
+  await once(p2p2, 'update-profile')
+
+  const { rawJSON: updatedProfile } = await p2p2.get(rawJSON.url)
+
+  t.same(
+    updatedProfile.description,
+    description,
+    '2nd clone works OK, localdb is updated'
+  )
+
+  await p2p.destroy()
+  await p2p2.destroy()
+  t.end()
+})
+
 test('leveldb open error', async t => {
   const dir = tempy.directory()
   const db = level(`${dir}/db`)

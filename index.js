@@ -118,6 +118,7 @@ class SDK extends EventEmitter {
     this.drives = new Map()
     this.drivesToWatch = new Map()
     this.dls = new Map()
+    this.externalUpdates = new Map()
 
     this.dht = finalOpts.dht
     this.bootstrap = finalOpts.bootstrap
@@ -769,11 +770,10 @@ class SDK extends EventEmitter {
       archive = drive
     }
 
-    const driveWatcher = this.drivesToWatch.get(dkey)
-    if (main && driveWatcher) {
+    const driveWatch = this.drivesToWatch.get(dkey)
+    if (main && driveWatch) {
       debug(`saveItem: waiting for main file: ${main}...`)
-
-      await driveWaitForFile(archive, main)
+      await driveWaitForFile(archive, driveWatch, main)
     }
 
     let stat, mtime
@@ -1223,6 +1223,7 @@ class SDK extends EventEmitter {
       return
     }
 
+    const dkey = DatEncoding.encode(moduleHyper.discoveryKey)
     try {
       // 3 - after fetching module we still need to read the index.json file
       if (version !== 0) {
@@ -1252,7 +1253,6 @@ class SDK extends EventEmitter {
 
       module = JSON.parse(content)
       // NOTE (dk): we can consider have another map for checkouts only
-      const dkey = DatEncoding.encode(moduleVersion.discoveryKey)
 
       if (!moduleVersion.isCheckout) {
         this.drives.set(dkey, moduleVersion)
@@ -1275,7 +1275,6 @@ class SDK extends EventEmitter {
     if (download) {
       dlHandle = dat.downloadFiles(moduleVersion, folderPath)
 
-      const dkey = DatEncoding.encode(moduleVersion.discoveryKey)
       this.dls.set(dkey, dlHandle)
 
       if (module.p2pcommons.main) {
@@ -1287,6 +1286,42 @@ class SDK extends EventEmitter {
         await dlWaitForFile(dlHandle, filePath)
       }
     }
+
+    // hook listen for updates
+    if (!this.externalUpdates.has(dkey)) {
+      const unwatcher = moduleHyper.watch('index.json', async () => {
+        const file = JSON.parse(
+          await moduleHyper.readFile('index.json', 'utf-8')
+        )
+        const stat = await moduleHyper.stat('index.json')
+        const mtime = stat[0].mtime
+        try {
+          const {
+            metadata: { lastModified }
+          } = await this.get(module.url)
+
+          if (mtime > lastModified) {
+            // update localdb
+            const metadata = {
+              isWritable: moduleHyper.writable,
+              lastModified: mtime,
+              version: Number(moduleHyper.version)
+            }
+
+            await this.localdb.put(DatEncoding.encode(module.url), {
+              ...metadata,
+              rawJSON: file,
+              avroType: this._getAvroType(file.p2pcommons.type).name
+            })
+
+            // emit update-profile|content event
+            this.emit(`update-${file.p2pcommons.type}`, file)
+          }
+        } catch (_) {}
+      })
+      this.externalUpdates.set(dkey, unwatcher)
+    }
+    // END listen for updates
 
     let lastMeta
     try {
@@ -1718,10 +1753,17 @@ class SDK extends EventEmitter {
     for (const mirror of this.drivesToWatch.values()) {
       mirror.destroy()
     }
+    this.drivesToWatch = new Map()
 
     for (const mirror of this.dls.values()) {
       mirror.destroy()
     }
+    this.dls = new Map()
+
+    for (const unwatch of this.externalUpdates.values()) {
+      unwatch.destroy()
+    }
+    this.externalUpdates = new Map()
 
     if (db) {
       debug('closing db...')
@@ -1735,11 +1777,10 @@ class SDK extends EventEmitter {
       debug('db successfully closed')
     }
 
-    for (const drive of this.drives.values()) {
-      await drive.close()
-    }
-
     if (swarm && this.networker) {
+      await Promise.all(Array.from(this.drives, ([_, drive]) => drive.close()))
+      this.drives = new Map()
+
       debug('closing swarm...')
       try {
         await this.networker.close()

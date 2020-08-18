@@ -47,6 +47,51 @@ const p2p = new P2PCommons()
 })()
 ```
 
+## Table of Contents
+<details>
+<summary>Contents</summary>
+
+- [@p2pcommons/sdk-js](#-p2pcommons-sdk-js)
+  * [Install](#install)
+  * [Usage](#usage)
+    + [Example](#example)
+  * [API](#api)
+    + [constructor](#constructor)
+    + [init](#init)
+    + [get](#get)
+    + [set](#set)
+    + [filter](#filter)
+    + [listContent](#listcontent)
+    + [listProfiles](#listprofiles)
+    + [list](#list)
+    + [openFile](#openfile)
+    + [register](#register)
+    + [deregister](#deregister)
+    + [follow](#follow)
+    + [unfollow](#unfollow)
+    + [verify](#verify)
+    + [clone](#clone)
+    + [delete](#delete)
+    + [destroy](#destroy)
+  * [Validations](#validations)
+    + [Full validations](#full-validations)
+    + [Partial validations](#partial-validations)
+    + [Special validations](#special-validations)
+  * [Events](#events)
+    + [Update Profile](#update-profile)
+    + [update Content](#update-content)
+    + [Warning](#warn)
+    + [Error](#error)
+  * [Errors](#errors)
+    + [ValidationError](#validationerror)
+    + [TypeError](#typeerror)
+    + [InvalidKeyError](#invalidkeyerror)
+    + [MissingParam](#missingparam)
+    + [EBUSYError](#ebusyerror)
+  * [Release](#release)
+  * [Contributors](#contributors)
+</details>
+
 ## API
 
 `const P2PCommons = require('@p2pcommons/sdk-js')`
@@ -285,6 +330,30 @@ Validates whether parents are registered. This validation is only relevant at ti
 
 - p2pcommons: active instance of the p2pcommons SDK
 
+## Events
+
+The following events are emitted by the SDK:
+
+### update-profile
+> `update-profile` `(rawJSON)`
+
+Emitted when an external profile has been updated. This will automatically update the local db. You don't need to do anything special. The event also emits the updated profile with the same rawJSON format.
+
+### update-content
+> `update-content` `(rawJSON)`
+
+Emitted when an external content module has been updated. This will automatically update the local db. You don't need to do anything special. The event also emits the updated content with the same rawJSON format.
+
+### warn
+> `warn` `(msg)`
+
+Emitted on unusual ocassions when a soft error happens. Used for logging purposes mostly.
+
+### error
+> `error` `(err)`
+
+Emitted on unexpected circumstances, this can be emitted by our local db if something goes wrong.
+
 ## Errors
 
 The SDK exports some custom errors: `SDK.errors`
@@ -350,7 +419,7 @@ Requirements:
 - 2FA enabled
 - signed git tags (`npm config set sign-git-tag true`)
 
-## Contributors ✨
+## Contributors
 
 Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/docs/en/emoji-key)):
 
