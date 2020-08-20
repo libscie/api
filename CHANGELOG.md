@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Location of keys is now `~/.p2pcommons/.hyperdrive` instead of `~/.p2pcommons/.dat` 
 - Bump module specification version to `0.9.3`
+- Bump interoperability specification version to `0.9.1`
 
 ## [0.7.0] - 2020-07-29
 ### Added
