@@ -251,6 +251,9 @@ Returns a [cancelable promise](https://github.com/sindresorhus/p-cancelable). Wh
 
 > _async_ `delete(key: string or buffer, deleteFiles: boolean)`
 
+Note: if key is a `string` then it can include a `version`. Eg: `6161616161616161616161616161616161616161616161616161616161616161+4`
+
+
 Remove module from local db and seed db. If it was open in memory, its closed. Note: While this will stop the file from being seeded, that does not means that the content won't still be available on the network. This is due to the P2P file sharing dynamics.
 
 If `deleteFiles` option is true, then the target folder will be moved to the trash bin.

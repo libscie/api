@@ -1713,10 +1713,21 @@ class SDK extends EventEmitter {
 
     await this.ready()
 
-    const keyString = DatEncoding.encode(key)
+    let keyString, keyVersion
+
+    if (Buffer.isBuffer(key)) {
+      keyString = DatEncoding.encode(key)
+    } else {
+      // key is a string, it may contain a version
+      const { host, version } = parse(key)
+      keyString = host
+      keyVersion = version
+    }
+
     const dkeyString = DatEncoding.encode(
-      crypto.discoveryKey(DatEncoding.decode(key))
+      crypto.discoveryKey(DatEncoding.decode(keyString))
     )
+
     const { rawJSON: module, metadata } = await this.get(key)
     if (!metadata.isWritable) {
       this._log('delete: drive is not writable')
@@ -1734,10 +1745,13 @@ class SDK extends EventEmitter {
       await this.localdb.del(keyString)
       await this.seeddb.del(dkeyString)
 
-      const drivePath = join(this.baseDir, keyString)
+      const drivePath = join(
+        this.baseDir,
+        keyVersion ? `${keyString}+${keyVersion}` : keyString
+      )
 
       if (deleteFiles) {
-        debug(`Moving drive folde ${drivePath} to trash bin`)
+        debug(`Moving drive folder ${drivePath} to trash bin`)
         await trash(drivePath)
       }
 
@@ -1747,7 +1761,7 @@ class SDK extends EventEmitter {
       if (drive) {
         await drive.close()
       }
-      if (!this.disableSwarm) {
+      if (!this.disableSwarm && !keyVersion) {
         this.networker.leave(dkeyString)
       }
     } catch (err) {
