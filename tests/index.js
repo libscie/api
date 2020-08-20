@@ -500,6 +500,72 @@ test('set: should throw validation error with invalid main', async t => {
   t.end()
 })
 
+test('set: should throw validation error with invalid main extension', async t => {
+  const p2p = createDb()
+
+  const sampleContent = {
+    type: 'content',
+    title: 'intro to magic',
+    description: 'd'
+  }
+
+  const { rawJSON: content } = await p2p.init(sampleContent)
+
+  // manually writing a dummy file
+  await writeFile(
+    join(p2p.baseDir, encode(content.url), 'file.txt333'),
+    'hola mundo'
+  )
+
+  try {
+    await p2p.set({
+      url: content.url,
+      main: 'file.txt333'
+    })
+    t.fail('should throw validation error')
+  } catch (err) {
+    t.ok(
+      err instanceof SDK.errors.ValidationError,
+      'invalid extension should throw ValidationError'
+    )
+    t.ok(err.code === 'main_extension', 'err.code should be main_extension')
+  }
+
+  await p2p.destroy()
+  t.end()
+})
+
+test('set: main extension is case insensitive', async t => {
+  const p2p = createDb()
+
+  const sampleContent = {
+    type: 'content',
+    title: 'intro to magic',
+    description: 'd'
+  }
+
+  const { rawJSON: content } = await p2p.init(sampleContent)
+
+  // manually writing a dummy file
+  await writeFile(
+    join(p2p.baseDir, encode(content.url), 'file.TXT'),
+    'hola mundo'
+  )
+
+  try {
+    await p2p.set({
+      url: content.url,
+      main: 'file.TXT'
+    })
+    t.pass('main extension check is case insensitive')
+  } catch (err) {
+    t.fail(err.message)
+  }
+
+  await p2p.destroy()
+  t.end()
+})
+
 test('set: can update main', async t => {
   const p2p = createDb()
   const sampleProfile = {
@@ -1920,7 +1986,6 @@ test('clone updates localdb', async t => {
     baseDir: dir2,
     dhtBootstrap
   })
-
 
   const profile = {
     type: 'profile',

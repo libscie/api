@@ -33,6 +33,11 @@
   "bugs": {
     "url": "https://github.com/p2pcommons/sdk-js/issues"
   },
+  "standard": {
+    "ignore": [
+      "CHANGELOG.md"
+    ]
+  },
   "homepage": "https://github.com/p2pcommons/sdk-js#readme",
   "dependencies": {
     "@avro/types": "^1.0.5",

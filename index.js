@@ -5,7 +5,6 @@ const {
   promises: { open, writeFile, readFile, stat: statFn }
 } = require('fs')
 const { ensureDir } = require('fs-extra')
-const once = require('events.once')
 const assert = require('nanocustomassert')
 const level = require('level')
 const sub = require('subleveldown')
@@ -927,10 +926,16 @@ class SDK extends EventEmitter {
           const {
             rawJSON: contentJSON,
             metadata: contentMetadata,
-            dwldHandle
+            dlHandle
           } = await this.clone(unversionedContentKey, contentVersion)
-          if (dwldHandle !== undefined) {
-            await once(dwldHandle, 'end')
+          if (dlHandle) {
+            if (params.main) {
+              const dirName = contentVersion
+                ? `${unversionedContentKey}+${contentVersion}`
+                : unversionedContentKey
+              const mainFile = join(this.baseDir, dirName, params.main)
+              await dlWaitForFile(dlHandle, mainFile)
+            }
           }
           await validateOnRegister({
             contentIndexMetadata: contentJSON,
