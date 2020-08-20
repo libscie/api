@@ -190,9 +190,6 @@ test('init: create content module', async t => {
     description: 'lorem ipsum',
     authors: [
       '3f70fe6b663b960a43a2c6c5a254c432196e2efa695e4b4e39779ae22e860e9d'
-    ],
-    parents: [
-      'be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
     ]
   }
   const { rawJSON: output, metadata } = await p2p.init(init)
@@ -216,7 +213,6 @@ test('init: create content module', async t => {
     'main property can not be set on init (default: empty)'
   )
   t.same(output.authors, init.authors)
-  t.same(output.parents, init.parents)
   t.same(typeof metadata, 'object')
   t.ok(metadata.version)
   t.ok(metadata.isWritable)
@@ -592,30 +588,12 @@ test('set: content, follows, authors, parents idempotent with repeated values', 
     title: 'followed2'
   }
 
-  const parentContent1 = {
-    type: 'content',
-    title: 'parent1'
-  }
-
-  const parentContent2 = {
-    type: 'content',
-    title: 'parent2'
-  }
-
   const {
     rawJSON: { url: followedProfile1Url }
   } = await p2p.init(followedProfile1)
   const {
     rawJSON: { url: followedProfile2Url }
   } = await p2p.init(followedProfile2)
-  const {
-    rawJSON: { url: parentContent1Url },
-    metadata: { version: parentContent1Version }
-  } = await p2p.init(parentContent1)
-  const {
-    rawJSON: { url: parentContent2Url },
-    metadata: { version: parentContent2Version }
-  } = await p2p.init(parentContent2)
 
   const sampleProfile = {
     type: 'profile',
@@ -627,6 +605,55 @@ test('set: content, follows, authors, parents idempotent with repeated values', 
 
   const { rawJSON: profile } = await p2p.init(sampleProfile)
   const profileKey = encode(profile.url)
+
+  const parentContent1 = {
+    type: 'content',
+    title: 'parent1',
+    authors: [profileKey]
+  }
+
+  const parentContent2 = {
+    type: 'content',
+    title: 'parent2',
+    authors: [profileKey]
+  }
+
+  const {
+    rawJSON: { url: parentContent1Url }
+  } = await p2p.init(parentContent1)
+  const {
+    rawJSON: { url: parentContent2Url }
+  } = await p2p.init(parentContent2)
+
+  await writeFile(
+    join(p2p.baseDir, encode(parentContent1Url), 'file.txt'),
+    'hola mundo'
+  )
+  const {
+    metadata: { version: parentContent1Version }
+  } = await p2p.set({
+    url: parentContent1Url,
+    main: 'file.txt'
+  })
+  await writeFile(
+    join(p2p.baseDir, encode(parentContent2Url), 'file.txt'),
+    'hola mundo'
+  )
+  const {
+    metadata: { version: parentContent2Version }
+  } = await p2p.set({
+    url: parentContent2Url,
+    main: 'file.txt'
+  })
+
+  await p2p.register(
+    `${encode(parentContent1Url)}+${parentContent1Version}`,
+    profileKey
+  )
+  await p2p.register(
+    `${encode(parentContent2Url)}+${parentContent2Version}`,
+    profileKey
+  )
 
   const sampleData = {
     type: 'content',
@@ -753,32 +780,145 @@ test('follows: must not self-reference', async t => {
 
 test('set: dont allow future parents versions nor self-reference', async t => {
   const p2p = createDb()
+  const {
+    rawJSON: { url: profileUrl }
+  } = await p2p.init({
+    type: 'profile',
+    title: 'Profile'
+  })
   const sampleData = {
     type: 'content',
     title: 'sample content',
     description: 'lorem ipsum',
-    parents: [
-      'be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
-    ]
+    authors: [encode(profileUrl)]
   }
-  const { rawJSON } = await p2p.init(sampleData)
-  const ckey = rawJSON.url
+  const {
+    rawJSON: { url }
+  } = await p2p.init(sampleData)
+
+  await writeFile(join(p2p.baseDir, encode(url), 'file.txt'), 'hola mundo')
+  const {
+    metadata: { version }
+  } = await p2p.set({
+    url,
+    main: 'file.txt'
+  })
+
+  await p2p.register(`${encode(url)}+${version}`, profileUrl)
 
   try {
     await p2p.set({
-      url: ckey,
-      parents: [
-        'be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4',
-        'be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4',
-        'be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a+4'
-      ]
+      url,
+      parents: [`${encode(url)}+${version + 2}`]
     })
+    t.fail('invalid parents should throw ValidationError')
   } catch (err) {
     t.ok(
       err instanceof SDK.errors.ValidationError,
       'invalid parents should throw ValidationError'
     )
   }
+  try {
+    await p2p.set({
+      url,
+      parents: [`${encode(url)}+${version + 1}`]
+    })
+    t.fail('invalid parents should throw ValidationError')
+  } catch (err) {
+    t.ok(
+      err instanceof SDK.errors.ValidationError,
+      'invalid parents should throw ValidationError'
+    )
+  }
+  await p2p.destroy()
+  t.end()
+})
+
+test('init + set: versioned parent for unversioned registration', async t => {
+  const p2p = createDb()
+
+  const {
+    rawJSON: { url: profileUrl }
+  } = await p2p.init({
+    type: 'profile',
+    title: 'author'
+  })
+
+  const {
+    rawJSON: { url: parent1Url }
+  } = await p2p.init({
+    type: 'content',
+    title: 'parent',
+    authors: [encode(profileUrl)]
+  })
+  await writeFile(
+    join(p2p.baseDir, encode(parent1Url), 'file.txt'),
+    'hola mundo'
+  )
+  const {
+    metadata: { version: parent1Version }
+  } = await p2p.set({
+    url: parent1Url,
+    main: 'file.txt'
+  })
+  await p2p.register(`${parent1Url}+${parent1Version}`, profileUrl)
+
+  const {
+    rawJSON: { url: parent2Url }
+  } = await p2p.init({
+    type: 'content',
+    title: 'parent',
+    authors: [encode(profileUrl)]
+  })
+  await writeFile(
+    join(p2p.baseDir, encode(parent2Url), 'file.txt'),
+    'hola mundo'
+  )
+  const {
+    metadata: { version: parent2Version }
+  } = await p2p.set({
+    url: parent2Url,
+    main: 'file.txt'
+  })
+  await p2p.register(parent2Url, profileUrl)
+
+  try {
+    await p2p.init({
+      type: 'content',
+      title: 'child',
+      parents: [`${encode(parent2Url)}+${parent2Version}`]
+    })
+    t.fail(
+      'Init versioned parent with unversioned registration should not succeed'
+    )
+  } catch (err) {
+    t.pass('Init versioned parent with unversioned registration fails')
+  }
+
+  try {
+    const {
+      rawJSON: { url: childUrl }
+    } = await p2p.init({
+      type: 'content',
+      title: 'child',
+      parents: [`${encode(parent1Url)}+${parent1Version}`]
+    })
+
+    try {
+      await p2p.set({
+        url: childUrl,
+        parents: [`${encode(parent2Url)}+${parent2Version}`]
+      })
+      t.fail(
+        'Set versioned parent with unversioned registration should not succeed'
+      )
+    } catch (err) {
+      t.pass('Set versioned parent with unversioned registration fails')
+    }
+  } catch (err) {
+    t.fail('Could not set versioned registered parent')
+  }
+
   await p2p.destroy()
   t.end()
 })

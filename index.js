@@ -668,7 +668,17 @@ class SDK extends EventEmitter {
       url: `hyper://${publicKeyString}`
     })
 
-    await validatePartial({ indexMetadata: indexJSON })
+    await validatePartial({
+      indexMetadata: indexJSON,
+      _flat: false
+    })
+    if (parents) {
+      await validateParentsOnUpdate({
+        indexMetadata: indexJSON,
+        p2pcommons: this,
+        _flat: false
+      })
+    }
 
     // Note(dk): validate earlier
     const avroType = this._getAvroType(type)
