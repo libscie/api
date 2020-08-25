@@ -236,6 +236,8 @@ Returns a boolean indicating whether the module is verified.
 
 Get a module from the local db or the swarm. If the module is not present on the local db and the swarm is enabled (`disableSwarm === false`) then it will query the swarm.
 
+:warning: NOTE: **versioned** module directories are `read-only`.
+
 - mKey: module url
 - mVersion: module version. [OPTIONAL]
 - download: a boolean indicating if module directory needs to be saved on disk. [DEFAULT=TRUE]
@@ -252,7 +254,6 @@ Returns a [cancelable promise](https://github.com/sindresorhus/p-cancelable). Wh
 > _async_ `delete(key: string or buffer, deleteFiles: boolean)`
 
 Note: if key is a `string` then it can include a `version`. Eg: `6161616161616161616161616161616161616161616161616161616161616161+4`
-
 
 Remove module from local db and seed db. If it was open in memory, its closed. Note: While this will stop the file from being seeded, that does not means that the content won't still be available on the network. This is due to the P2P file sharing dynamics.
 

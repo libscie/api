@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Validation: add check for open format extension
+- Read only permission for versioned modules #210
 
 ## [0.7.0] - 2020-07-29
 

@@ -2,8 +2,10 @@ const { EventEmitter } = require('events')
 const { join, isAbsolute } = require('path')
 const { platform } = require('os')
 const {
-  promises: { open, writeFile, readFile, stat: statFn }
+  promises: { open, writeFile, readFile, stat: statFn, mkdir, chmod }
 } = require('fs')
+const { promisify } = require('util')
+const chmodrcb = require('chmodr')
 const { ensureDir } = require('fs-extra')
 const assert = require('nanocustomassert')
 const level = require('level')
@@ -47,6 +49,8 @@ const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
 const ValidationTypes = require('./schemas/validation') // avro related validations
 const { driveWaitForFile, dlWaitForFile } = require('./lib/utils')
+
+const chmodr = promisify(chmodrcb)
 
 /**
  * @typedef {Object} Module
@@ -492,13 +496,27 @@ class SDK extends EventEmitter {
 
         // update index.json file
 
-        // If an external drive have changed, update it locally
-        const dlHandle = dat.downloadFiles(drive, moduleDir)
-        debug('refreshMTimes: waiting for index.json...')
-        await dlWaitForFile(dlHandle, join(moduleDir, 'index.json'))
+        let dlHandle
+        try {
+          // If an external drive have changed, update it locally
+          dlHandle = dat.downloadFiles(drive, moduleDir)
+          debug('refreshMTimes: waiting for index.json...')
+          await dlWaitForFile(dlHandle, join(moduleDir, 'index.json'))
 
-        const dkey = DatEncoding.encode(drive.discoveryKey)
-        this.dls.set(dkey, dlHandle)
+          const dkey = DatEncoding.encode(drive.discoveryKey)
+          this.dls.set(dkey, dlHandle)
+        } catch (err) {
+          this._log(err.msg, 'warn')
+        } finally {
+          // make it read only again
+          if (drive.isCheckout) {
+            if (dlHandle) {
+              dlHandle.once('end', () => this.makeReadOnly(moduleDir))
+            } else {
+              await this.makeReadOnly(moduleDir)
+            }
+          }
+        }
 
         const module = overwriteIndex
           ? dirIndexJSON
@@ -1210,6 +1228,82 @@ class SDK extends EventEmitter {
   }
 
   /**
+   * makeWritable.
+   *
+   * @description Performs a chmodr (recursive) on a module directory, making it writable (mode: 777)
+   * @private
+   * @async
+   * @param {string} moduleDir -  path to module directory
+   */
+  async makeWritable (moduleDir) {
+    assert(typeof moduleDir === 'string', 'moduleDir should be a path')
+    debug('makeWritable: %s', moduleDir)
+    const mode = 0o777 // write, read and execute
+    // await access(moduleDir)
+
+    const stat = await statFn(moduleDir)
+    // NOTE(dk): based on chmodr tests: https://github.com/isaacs/chmodr/blob/master/test/basic.js#L49
+    // and from this comment from isaacs: https://github.com/nodejs/node-v0.x-archive/issues/3045#issuecomment-4863596
+    // We are converting the stats mode into octals for easy comparison.
+    const permString = stat.mode & 0o777
+
+    if (permString === mode) {
+      this._log('module directory is already writable', 'warn')
+      return
+    }
+
+    await chmodr(moduleDir, mode)
+  }
+
+  /**
+   * makeReadOnly.
+   *
+   * @description Performs a chmodr (recursive) on a module directory making it readable only (mode: 0555 when possible, otherwise 0444)
+   * @private
+   * @async
+   * @param {string} moduleDir - path to module directory
+   */
+  async makeReadOnly (moduleDir) {
+    assert(typeof moduleDir === 'string', 'moduleDir should be a path')
+    const mode = 0o555 // read and execute
+    const stat = await statFn(moduleDir)
+
+    // NOTE(dk): based on chmodr tests: https://github.com/isaacs/chmodr/blob/master/test/basic.js#L49
+    const permString = stat.mode & 0o777
+
+    if (permString === mode) {
+      this._log('module directory is already read only', 'warn')
+      return
+    }
+    await chmodr(moduleDir, mode)
+    this.emit('module-readonly', moduleDir)
+  }
+
+  /**
+   * createModuleDir.
+   *
+   * @description creates a module directory. Emits a warn if directory already exists or if it is read-only
+   * @async
+   * @param {string} moduleDir - a path to the new module dir
+   * @returns {boolean} - Indicates if the module directory has been created (true) or not (false)
+   */
+  async createModuleDir (moduleDir) {
+    assert(typeof moduleDir === 'string', 'moduleDir is required')
+    debug('createModuleDir: creating module dir %s', moduleDir)
+    try {
+      await mkdir(moduleDir)
+      return true
+    } catch (err) {
+      if (err.code === 'EEXIST' || err.code === 'EACCESS') {
+        this._log('moduleDir already exists', 'warn')
+      } else {
+        this._log(err.message, 'error')
+      }
+      return false
+    }
+  }
+
+  /**
    * getFromSwarm
    *
    * @description if module isn't found locally, then fetch it from swarm
@@ -1232,7 +1326,7 @@ class SDK extends EventEmitter {
     const moduleHyper = await this.getDrive(mKeyString, version)
 
     version = version || moduleHyper.version
-    debug('clone: Module version', version)
+    debug('getFromSwarm: Module version', version)
 
     if (this.canceledClone) {
       return
@@ -1246,7 +1340,7 @@ class SDK extends EventEmitter {
       } else {
         moduleVersion = moduleHyper
       }
-      debug('clone: Reading modules index.json...')
+      debug('getFromSwarm: Reading modules index.json...')
 
       const getFile = async () => {
         try {
@@ -1277,18 +1371,27 @@ class SDK extends EventEmitter {
       if (this.canceledClone) return
       throw new Error('clone: Problems fetching external module')
     }
-    // 4 - clone new module (move into its own method)
+    // 4 - write module into the fs (create directory)
     const modulePath = version ? `${mKeyString}+${version}` : `${mKeyString}`
     const folderPath = join(this.baseDir, modulePath)
-    await ensureDir(folderPath)
-    await writeFile(
-      join(folderPath, 'index.json'),
-      JSON.stringify(module, null, 2)
-    )
+
+    const moduleDirCreated = await this.createModuleDir(folderPath)
+
+    if (moduleDirCreated) {
+      await writeFile(
+        join(folderPath, 'index.json'),
+        JSON.stringify(module, null, 2)
+      )
+    }
+
     const stat = await moduleHyper.stat('index.json')
 
-    if (download) {
+    if (download && moduleDirCreated) {
       dlHandle = dat.downloadFiles(moduleVersion, folderPath)
+
+      if (moduleVersion.isCheckout) {
+        dlHandle.once('end', () => this.makeReadOnly(folderPath))
+      }
 
       this.dls.set(dkey, dlHandle)
 
@@ -1709,8 +1812,6 @@ class SDK extends EventEmitter {
       'key'
     )
 
-    debug('delete')
-
     await this.ready()
 
     let keyString, keyVersion
@@ -1723,6 +1824,8 @@ class SDK extends EventEmitter {
       keyString = host
       keyVersion = version
     }
+
+    debug('delete %s', keyString)
 
     const dkeyString = DatEncoding.encode(
       crypto.discoveryKey(DatEncoding.decode(keyString))
@@ -1751,6 +1854,11 @@ class SDK extends EventEmitter {
       )
 
       if (deleteFiles) {
+        if (keyVersion) {
+          // make parent writable
+          const mode = 0o777 // write, read and execute
+          await chmod(drivePath, mode)
+        }
         debug(`Moving drive folder ${drivePath} to trash bin`)
         await trash(drivePath)
       }
@@ -1766,7 +1874,7 @@ class SDK extends EventEmitter {
       }
     } catch (err) {
       debug('delete: %O', err)
-      console.error('Something went wrong with delete')
+      console.error('Something went wrong with delete: %s', err.message)
     }
   }
 
@@ -1782,7 +1890,6 @@ class SDK extends EventEmitter {
     for (const mirror of this.drivesToWatch.values()) {
       mirror.destroy()
     }
-    this.drivesToWatch = new Map()
 
     for (const mirror of this.dls.values()) {
       mirror.destroy()

@@ -1,6 +1,6 @@
 const {
   existsSync,
-  promises: { writeFile, readdir }
+  promises: { writeFile, readdir, stat }
 } = require('fs')
 const { join } = require('path')
 const execa = require('execa')
@@ -80,10 +80,10 @@ test('sdk re-start', async t => {
   await p2p2.init(localProfile)
 
   // p2p2 clones the module
-  const { rawJSON: remoteJSON } = await p2p2.clone(rawJSON.url)
+  const { rawJSON: remoteJSON } = await p2p2.clone(rawJSON.url, remoteVersion)
   t.same(remoteJSON, rawJSON, 'cloned module')
   // some other peer clone the content module too
-  await p2p3.clone(rawJSON.url)
+  await p2p3.clone(rawJSON.url, remoteVersion)
 
   // shutdown sdk instances
   await p2p2.destroy()
@@ -100,13 +100,15 @@ test('sdk re-start', async t => {
     bootstrap: dhtBootstrap,
     baseDir: p2p3.baseDir
   })
+  await new Promise(resolve => {
+    setTimeout(resolve, 200)
+  })
   await otherPeer.ready()
 
   // now instantiate back p2p2 sdk (same storage, same db)
   const p2p4 = new SDK({
     bootstrap: dhtBootstrap,
-    baseDir: p2p2.baseDir,
-    versose: true
+    baseDir: p2p2.baseDir
   })
 
   try {
@@ -114,6 +116,7 @@ test('sdk re-start', async t => {
   } catch (err) {
     t.fail(err)
   }
+
   t.pass('all good')
   await otherPeer.destroy()
   await p2p.destroy()
@@ -1139,7 +1142,7 @@ test('multiple writes with persistance', async t => {
       watch: false,
       baseDir: dir
     })
-    await p2p1.ready()
+
     const { rawJSON } = await p2p1.init({ type: 'content', title: 'title' })
     t.same(typeof rawJSON.url, 'string')
     await p2p1.destroy()
@@ -1150,13 +1153,12 @@ test('multiple writes with persistance', async t => {
       disableSwarm: true,
       baseDir: dir
     })
-    await p2p2.ready()
-    const metadata = { url: rawJSON.url, title: 'beep' }
-    await p2p2.set(metadata)
+
+    await p2p2.set({ url: rawJSON.url, title: 'beep' })
     await p2p2.set({ url: rawJSON.url, description: 'boop' })
     const { rawJSON: updated } = await p2p2.get(rawJSON.url)
 
-    t.same(updated.title, metadata.title)
+    t.same(updated.title, 'beep')
     t.same(updated.description, 'boop')
     await p2p2.destroy()
 
@@ -1990,6 +1992,69 @@ test('clone a module', async t => {
   t.end()
 })
 
+test('cloned versioned module directory is readonly', async t => {
+  const dir = tempy.directory()
+  const dir2 = tempy.directory()
+
+  const p2p = new SDK({
+    baseDir: dir,
+    bootstrap: dhtBootstrap
+  })
+
+  const p2p2 = new SDK({
+    baseDir: dir2,
+    bootstrap: dhtBootstrap
+  })
+
+  await p2p2.ready()
+
+  const content = {
+    type: 'content',
+    title: 'test'
+  }
+
+  const { rawJSON } = await p2p.init(content)
+  const rawJSONKey = encode(rawJSON.url)
+
+  // write main.txt
+  await writeFile(join(dir, rawJSONKey, 'main.txt'), 'hello')
+
+  await p2p.set({
+    url: rawJSON.url,
+    main: 'main.txt'
+  })
+
+  const {
+    metadata: { version }
+  } = await p2p.get(rawJSON.url)
+
+  const { rawJSON: module } = await p2p2.clone(rawJSONKey, version)
+
+  t.same(module.title, content.title)
+  const externalContentPath = join(p2p2.baseDir, `${rawJSONKey}+${version}`)
+
+  await once(p2p2, 'module-readonly')
+
+  const st = await stat(externalContentPath)
+  const permString = st.mode & 0o777
+
+  // NOTE(dk): here we are comparing against 0555 (read and exec) and 0444 (pure read only)
+  // because on windows exec permissions bits are sometimes lost.
+  // See more here: https://github.com/nodejs/node/issues/9380
+  if (permString === 0o555 || permString === 0o444) {
+    t.pass('cloned module is not writable')
+  } else {
+    t.fail('cloned module is writable')
+  }
+
+  const clonedDir = await readdir(externalContentPath)
+  t.ok(clonedDir.includes('main.txt'), 'clone downloaded content successfully')
+
+  await p2p.destroy()
+  await p2p2.destroy()
+  t.end()
+})
+
 test('cancel clone', async t => {
   const dir = tempy.directory()
   const dir2 = tempy.directory()
@@ -2072,15 +2137,15 @@ test('clone updates localdb', async t => {
   await p2p.set({ url: rawJSON.url, description })
 
   // be notified about updates
-  await once(p2p2, 'update-profile')
-
-  const { rawJSON: updatedProfile } = await p2p2.get(rawJSON.url)
-
-  t.same(
-    updatedProfile.description,
-    description,
-    '2nd clone works OK, localdb is updated'
-  )
+  let updatedProfile = await p2p2.get(rawJSON.url)
+  if (updatedProfile.description !== description) {
+    while (([updatedProfile] = await once(p2p2, 'update-profile'))) {
+      if (updatedProfile.description === description) {
+        t.pass('2nd clone works OK, localdb is updated')
+        break
+      }
+    }
+  }
 
   await p2p.destroy()
   await p2p2.destroy()
