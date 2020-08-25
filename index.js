@@ -442,13 +442,17 @@ class SDK extends EventEmitter {
         const moduleDir = join(this.baseDir, urlString)
 
         const statDrive = await drive.stat('/')
+        debug('refreshMTimes statDrive %O', statDrive)
         const statDir = await statFn(moduleDir)
+        debug('refreshMTimes statDir %O', statDir)
         const statDriveIndex = await drive.stat('index.json')
         const statDirIndex = await statFn(join(moduleDir, 'index.json'))
         const statDriveMtime = statDrive[0].mtime
         const statDirMtime = statDir.mtime
         const statDriveIndexMtime = statDriveIndex[0].mtime
+        debug('refreshMTimes statDriveIndexMtime %s', statDriveIndexMtime)
         const statDirIndexMtime = statDirIndex.mtime
+        debug('refreshMTimes statDirIndexMtime %s', statDirIndexMtime)
         const dirIndexJSON = await readFile(join(moduleDir, 'index.json'), {
           encoding: 'utf-8'
         })
@@ -467,13 +471,24 @@ class SDK extends EventEmitter {
             : statDirIndexMtime
 
         let mtime, overwriteIndex
+        debug('refreshMTimes dirIndexJSON %O', dirIndexJSON)
+        debug('refreshMTimes driveIndexJSON %O', driveIndexJSON)
+        debug(
+          'refreshMTimes driveIndexJSON === dirIndexJSON %s',
+          dirIndexJSON === driveIndexJSON
+        )
         if (dirIndexJSON !== driveIndexJSON) {
           mtime = mtimePerIndex
+          debug('refreshMTimes mtimePerIndex %s', mtime)
           if (statDirIndexMtime > statDriveIndexMtime) {
+            debug('refreshMTimes overwriteIndex OK')
             overwriteIndex = true
           }
         } else {
+          overwriteIndex = false
           mtime = mtimePerRoot
+          debug('refreshMTimes mtimePerRoot %s', mtime)
+          continue
         }
 
         if (drive.writable) {
@@ -492,6 +507,11 @@ class SDK extends EventEmitter {
           }
         }
 
+        debug(
+          'refreshMTimes lastModified getTime %s',
+          metadata.lastModified.getTime()
+        )
+        debug('refreshMTimes mtime getTime %s', mtime.getTime())
         if (metadata.lastModified.getTime() >= mtime.getTime()) continue
 
         // update index.json file
@@ -803,7 +823,7 @@ class SDK extends EventEmitter {
       await driveWaitForFile(archive, driveWatch, main)
     }
 
-    let stat, mtime
+    let stat, driveVersion, driveMtime
     if (isWritable) {
       await writeFile(
         join(indexJSONDir, 'index.json'),
@@ -811,9 +831,9 @@ class SDK extends EventEmitter {
       )
       await dat.importFiles(archive, indexJSONDir)
 
-      version = archive.version
+      driveVersion = archive.version
       stat = await archive.stat('index.json')
-      mtime = stat[0].mtime
+      driveMtime = stat[0].mtime
     }
 
     debug('updating cache value')
@@ -822,14 +842,12 @@ class SDK extends EventEmitter {
       this.drives.set(dkey, archive)
     }
 
-    const lastM =
-      mtime && mtime.getTime() >= lastModified.getTime() ? mtime : lastModified
     debug('saving item on local db')
 
     const metadata = {
       isWritable,
-      lastModified: lastM,
-      version: Number(version)
+      lastModified: isWritable ? driveMtime : lastModified,
+      version: isWritable ? Number(driveVersion) : Number(version)
     }
 
     this.assertMetadata(metadata)

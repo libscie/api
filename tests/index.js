@@ -1036,14 +1036,55 @@ test('list content', async t => {
     { type: 'content', title: 'sample' }
   ]
 
-  const sampleDataProfile = [{ type: 'profile', title: 'Professor X' }]
+  const sampleDataProfile = { type: 'profile', title: 'Professor X' }
 
-  const modules = [].concat(sampleDataContent).concat(sampleDataProfile)
+  await Promise.all(sampleDataContent.map(d => p2p.init(d)))
 
-  await Promise.all(modules.map(d => p2p.init(d)))
+  const { rawJSON: profile } = await p2p.init(sampleDataProfile)
 
   const result = await p2p.listContent()
-  t.same(result.length, sampleDataContent.length)
+  t.same(result.length, sampleDataContent.length, 'content list length OK')
+  const profiles = await p2p.listProfiles()
+  t.same(profiles.length, 1, 'profiles list length OK')
+
+  const content1 = result[0].rawJSON
+  // update content1
+  await p2p.set({
+    url: content1.url,
+    description: 'A MORE ACCURATE DESCRIPTION'
+  })
+
+  const result2 = await p2p.listContent()
+  t.same(
+    result2.length,
+    sampleDataContent.length,
+    'content list length stays the same'
+  )
+
+  // update content1
+  await p2p.set({
+    url: content1.url,
+    authors: [encode(profile.url)]
+  })
+
+  await p2p.set({
+    url: content1.url,
+    title: 'demo 1'
+  })
+
+  await p2p.listContent()
+  const result4 = await p2p.listContent()
+
+  t.ok(
+    result2[0].metadata.version < result4[0].metadata.version,
+    'latest metadata version should be bigger'
+  )
+  t.same(
+    result4.length,
+    sampleDataContent.length,
+    'content list length stays the same'
+  )
+
   await p2p.destroy()
   t.end()
 })
@@ -1212,6 +1253,57 @@ test('register - local contents', async t => {
     'registration results in the addition of a dat key to the contents property of the target profile'
   )
   await p2p.destroy()
+  t.end()
+})
+
+test('register, restart and list contents', async t => {
+  const dir = tempy.directory()
+  const p2p = new SDK({ baseDir: dir, disableSwarm: true })
+  // create profile
+  const { rawJSON: profile } = await p2p.init({
+    type: 'profile',
+    title: 'Professor X'
+  })
+  // create content
+  const { rawJSON: content1 } = await p2p.init({
+    type: 'content',
+    title: 'demo',
+    description: 'lorem ipsum'
+  })
+
+  const authors = [encode(profile.url)]
+  // update author on content module
+  await p2p.set({ url: content1.url, authors })
+  // manually writing a dummy file
+  await writeFile(
+    join(p2p.baseDir, encode(content1.url), 'file.txt'),
+    'hola mundo'
+  )
+  await p2p.set({
+    url: content1.url,
+    main: 'file.txt'
+  })
+  const { metadata } = await p2p.get(content1.url)
+  const contentKeyVersion = `${encode(content1.url)}+${metadata.version}`
+  try {
+    // do the register
+    await p2p.register(contentKeyVersion, encode(profile.url))
+  } catch (err) {
+    t.fail(err.message)
+  }
+  const { rawJSON } = await p2p.get(profile.url)
+  t.same(
+    rawJSON.contents,
+    [contentKeyVersion],
+    'registration results in the addition of a dat key to the contents property of the target profile'
+  )
+  await p2p.destroy()
+
+  const code = join(__dirname, 'childProcessListContent.js')
+  const { stdout } = await execa.node(code, [dir])
+
+  t.same(Number(stdout), 1, 'Expect only one content module')
+
   t.end()
 })
 
@@ -2174,7 +2266,7 @@ test('leveldb open error', async t => {
   t.end()
 })
 
-test('check lastModified on ready', async t => {
+test('check lastModified on ready (refreshMTimes)', async t => {
   const dir = tempy.directory()
 
   const p2p = new SDK({
