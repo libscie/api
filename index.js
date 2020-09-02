@@ -2,7 +2,7 @@ const { EventEmitter } = require('events')
 const { join, isAbsolute } = require('path')
 const { platform } = require('os')
 const {
-  promises: { open, writeFile, readFile, stat: statFn, mkdir, chmod }
+  promises: { open, writeFile, readFile, readdir, stat: statFn, mkdir, chmod }
 } = require('fs')
 const { promisify } = require('util')
 const chmodrcb = require('chmodr')
@@ -1651,6 +1651,22 @@ class SDK extends EventEmitter {
   }
 
   /**
+   * getAllVersions.
+   *
+   * @description List all versions related to a key that are found in p2pcommons dir
+   * @private
+   * @param {String|Buffer} key
+   * @returns {Array<String>} - Returns an array of versioned keys
+   */
+  async getAllVersions (key) {
+    // get all versions in local fs as a list
+    const keyString = DatEncoding.encode(key)
+    const dirList = await readdir(this.baseDir)
+    const expr = RegExp(`^(${keyString})(\\+\\d+)$`, 'i')
+    return dirList.filter(d => d.match(expr))
+  }
+
+  /**
    * deregister content from a user's profile
    *
    * @param {(String|Buffer)} contentKey - version that is registered
@@ -1814,8 +1830,9 @@ class SDK extends EventEmitter {
   }
 
   /**
-   * delete a module. This method will remove the module from the localdb and seeddb. It will also close the drive.
+   * delete a module.
    *
+   * @description This method will remove the module from the localdb and seeddb. It will also close the drive.
    * @public
    * @async
    * @param {(String|Buffer)} key - a valid hyper url
@@ -1832,7 +1849,7 @@ class SDK extends EventEmitter {
 
     await this.ready()
 
-    let keyString, keyVersion
+    let keyString, keyVersion, allVersions
 
     if (Buffer.isBuffer(key)) {
       keyString = DatEncoding.encode(key)
@@ -1841,6 +1858,13 @@ class SDK extends EventEmitter {
       const { host, version } = parse(key)
       keyString = host
       keyVersion = version
+      if (keyVersion) {
+        throw new ValidationError(
+          'Only unversioned keys are accepted',
+          'only_unversioned',
+          'key'
+        )
+      }
     }
 
     debug('delete %s', keyString)
@@ -1859,26 +1883,38 @@ class SDK extends EventEmitter {
         // deregister from profiles
         const profiles = await this.listProfiles()
 
-        for (const { rawJSON: prof } of profiles) {
-          await this.deregister(key, prof.url)
+        allVersions = await this.getAllVersions(keyString)
+
+        for (const { rawJSON: prof, metadata: profMeta } of profiles) {
+          if (!profMeta.isWritable) {
+            continue
+          }
+          await this.deregister(keyString, prof.url)
+          // Note(dk): we also call deregister per each content version found in p2pcommons dir
+          for (const contentVersion of allVersions) {
+            await this.deregister(contentVersion, prof.url)
+          }
         }
       }
+
       await this.localdb.del(keyString)
       await this.seeddb.del(dkeyString)
 
-      const drivePath = join(
-        this.baseDir,
-        keyVersion ? `${keyString}+${keyVersion}` : keyString
-      )
-
       if (deleteFiles) {
-        if (keyVersion) {
-          // make parent writable
-          const mode = 0o777 // write, read and execute
-          await chmod(drivePath, mode)
+        try {
+          for (const version of allVersions) {
+            const drivePath = join(this.baseDir, version)
+            const mode = 0o777 // write, read and execute
+            await chmod(drivePath, mode)
+            debug(`Moving versioned drive folder ${drivePath} to trash bin`)
+            await trash(drivePath)
+          }
+        } finally {
+          // delete unversioned path
+          const drivePath = join(this.baseDir, keyString)
+          debug(`Moving unversioned drive folder ${drivePath} to trash bin`)
+          await trash(drivePath)
         }
-        debug(`Moving drive folder ${drivePath} to trash bin`)
-        await trash(drivePath)
       }
 
       const drive = this.drives.get(dkeyString) // if drive is open in memory we can close it

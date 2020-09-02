@@ -1256,6 +1256,60 @@ test('register - local contents', async t => {
   t.end()
 })
 
+test('register - list versions', async t => {
+  const p2p = createDb({ persist: true })
+
+  const { rawJSON: profile } = await p2p.init({
+    type: 'profile',
+    title: 'Professor X'
+  })
+  const { rawJSON: content1 } = await p2p.init({
+    type: 'content',
+    title: 'demo',
+    description: 'lorem ipsum'
+  })
+
+  const versionsInitial = await p2p.getAllVersions(content1.url)
+  t.same(versionsInitial.length, 0, 'No versions created yed')
+
+  const authors = [encode(profile.url)]
+
+  // update author on content module
+  await p2p.set({ url: content1.url, authors })
+
+  // manually writing a dummy file
+  await writeFile(
+    join(p2p.baseDir, encode(content1.url), 'file.txt'),
+    'hola mundo'
+  )
+
+  await p2p.set({
+    url: content1.url,
+    main: 'file.txt'
+  })
+
+  const { metadata } = await p2p.get(content1.url)
+  const contentKeyVersion = `${encode(content1.url)}+${metadata.version}`
+
+  try {
+    await p2p.register(contentKeyVersion, encode(profile.url))
+  } catch (err) {
+    t.fail(err.message)
+  }
+  const { rawJSON } = await p2p.get(profile.url)
+  t.same(
+    rawJSON.contents,
+    [contentKeyVersion],
+    'registration results in the addition of a dat key to the contents property of the target profile'
+  )
+
+  const versionsFinal = await p2p.getAllVersions(content1.url)
+  t.same(versionsFinal.length, 1, '1 version created')
+
+  await p2p.destroy()
+  t.end()
+})
+
 test('register, restart and list contents', async t => {
   const dir = tempy.directory()
   const p2p = new SDK({ baseDir: dir, disableSwarm: true })
@@ -1615,6 +1669,85 @@ test('delete a module from local db', async t => {
   t.end()
 })
 
+test('delete registered module with multiple authors', async t => {
+  const dir = tempy.directory()
+  const p2p = new SDK({
+    baseDir: dir
+  })
+
+  const p2p2 = new SDK({
+    baseDir: tempy.directory()
+  })
+
+  const modules = await p2p.list()
+  t.equal(modules.length, 0, 'Modules list is empty')
+
+  // create content
+  const { rawJSON: content } = await p2p.init({
+    type: 'content',
+    title: 'demo',
+    description: 'lorem ipsum'
+  })
+
+  // create profile
+  const { rawJSON: profile } = await p2p.init({
+    type: 'profile',
+    title: 'professor X',
+    description: 'd'
+  })
+
+  // create external profile
+  const { rawJSON: externalProfile } = await p2p2.init({
+    type: 'profile',
+    title: 'mystique',
+    description: 'm'
+  })
+
+  const contentModules = await p2p.listContent()
+  t.equal(contentModules.length, 1, '1 content module exists')
+  // follow remote profile
+  await p2p.follow(encode(profile.url), encode(externalProfile.url))
+
+  // register with multiple authors
+  const authors = [encode(profile.url), encode(externalProfile.url)]
+  // manually writing a dummy file
+  await writeFile(join(dir, encode(content.url), 'file.txt'), 'hola mundo')
+
+  await p2p.set({
+    url: content.url,
+    authors,
+    main: 'file.txt'
+  })
+
+  try {
+    await p2p.register(encode(content.url), encode(profile.url))
+  } catch (err) {
+    t.fail(err.message)
+  }
+  const { rawJSON: updatedProfile } = await p2p.get(profile.url)
+  t.same(updatedProfile.contents.length, 1, 'content registered')
+
+  // hard delete
+  await p2p.delete(content.url, true)
+
+  const { rawJSON: finalProfile } = await p2p.get(profile.url)
+  t.same(finalProfile.contents.length, 0, 'content deregistered after delete')
+
+  const baseDir = await readdir(join(p2p.baseDir))
+
+  const contentModulesFinal = await p2p.listContent()
+  t.equal(contentModulesFinal.length, 0, '0 content module remains')
+
+  t.notok(
+    baseDir.includes(encode(content.url)),
+    'Module folder has been removed (deleteFiles)'
+  )
+
+  await p2p.destroy()
+  await p2p2.destroy()
+  t.end()
+})
+
 test('delete registered module', async t => {
   const dir = tempy.directory()
   const p2p = new SDK({
@@ -1729,19 +1862,24 @@ test('delete versioned module', async t => {
   t.same(updatedProfile.contents.length, 1, 'content registered')
 
   // hard delete
-  await p2p.delete(moduleVersioned, true)
-
-  const { rawJSON: finalProfile } = await p2p.get(profile.url)
-  t.same(finalProfile.contents.length, 0, 'content deregistered after delete')
+  try {
+    await p2p.delete(moduleVersioned, true)
+    t.fail('versioned keys should throw')
+  } catch (err) {
+    t.ok(
+      err.code === 'only_unversioned',
+      'only unversioned keys can be deleted'
+    )
+  }
 
   const baseDir = await readdir(join(p2p.baseDir))
 
   const contentModulesFinal = await p2p.listContent()
-  t.equal(contentModulesFinal.length, 0, '0 content module remains')
+  t.equal(contentModulesFinal.length, 1, 'content list remains the same')
 
-  t.notok(
+  t.ok(
     baseDir.includes(moduleVersioned),
-    'Module folder has been removed (deleteFiles)'
+    'Module folder has not been removed (deleteFiles)'
   )
 
   await p2p.destroy()
