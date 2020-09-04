@@ -961,6 +961,40 @@ test('Main must refer to an existing file - does not exist', async t => {
   t.end()
 })
 
+test('Main must have a valid extension even if its not listed', async t => {
+  const p2p = createDb()
+  const { rawJSON: content } = await p2p.init({
+    type: 'content',
+    title: 'Test main file - exists'
+  })
+  const { host: key } = parse(content.url)
+
+  try {
+    // valid main file even if its extension is not listed on open formats
+    await writeFile(
+      join(p2p.baseDir, key, 'main.js'),
+      'console.log("hola mundo")'
+    )
+  } catch (err) {
+    t.fail(err.message)
+  }
+
+  t.doesNotThrow(() => {
+    validateMain({
+      indexMetadata: {
+        p2pcommons: {
+          main: 'main.js'
+        }
+      },
+      key,
+      p2pcommonsDir: p2p.baseDir
+    })
+  })
+
+  await p2p.destroy()
+  t.end()
+})
+
 test('Avatar - valid', t => {
   t.doesNotThrow(() => {
     validateAvatar({

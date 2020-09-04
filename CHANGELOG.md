@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump interoperability specification version to `0.9.1`
 - Delete: allow versioned keys
 - delete: check if dir exists before call trash to avoid process freeze
+- validation: main file validation checks for text content not only extensions
 
 ### Added
 - Validation: add check for open format extension

@@ -503,7 +503,7 @@ test('set: should throw validation error with invalid main', async t => {
   t.end()
 })
 
-test('set: should throw validation error with invalid main extension', async t => {
+test('set: should throw validation error with invalid main (not text)', async t => {
   const p2p = createDb()
 
   const sampleContent = {
@@ -514,10 +514,12 @@ test('set: should throw validation error with invalid main extension', async t =
 
   const { rawJSON: content } = await p2p.init(sampleContent)
 
-  // manually writing a dummy file
+  // manually writing a dummy binary file
+  const buffer = Buffer.alloc(8)
   await writeFile(
     join(p2p.baseDir, encode(content.url), 'file.txt333'),
-    'hola mundo'
+    buffer,
+    'binary'
   )
 
   try {
