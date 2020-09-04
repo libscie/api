@@ -1623,6 +1623,51 @@ test('re-open SDK (child process)', async t => {
   t.end()
 })
 
+test('edit content outside SDK, while SDK is running', async t => {
+  const dir = tempy.directory()
+
+  const commons = new SDK({
+    disableSwarm: true,
+    baseDir: dir,
+    verbose: true
+  })
+
+  // create content
+  const { rawJSON: contentDat } = await commons.init({
+    type: 'content',
+    title: 'demo',
+    description: 'lorem ipsum'
+  })
+  // manually writing a file
+  await writeFile(
+    join(commons.baseDir, encode(contentDat.url), 'file.txt'),
+    'hola mundo'
+  )
+  // set main file
+  const { metadata: metadataInitial } = await commons.set({
+    url: contentDat.url,
+    main: 'file.txt'
+  })
+
+  // edit content externally
+  const code = join(__dirname, 'childProcessEdit.js')
+  await execa.node(code, [encode(contentDat.url), dir, 'file.txt'])
+
+  // sync manually
+  await commons.refreshDrive(contentDat.url)
+
+  // finally we check everything is updated correctly
+
+  const { metadata: metadataFinal } = await commons.get(contentDat.url)
+
+  t.ok(
+    metadataFinal.version > metadataInitial.version,
+    'latest metadata version is bigger than initial'
+  )
+  await commons.destroy()
+  t.end()
+})
+
 test('delete a module from local db', async t => {
   const dir = tempy.directory()
   const p2p = new SDK({

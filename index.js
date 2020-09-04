@@ -477,19 +477,6 @@ class SDK extends EventEmitter {
           'refreshMTimes driveIndexJSON === dirIndexJSON %s',
           dirIndexJSON === driveIndexJSON
         )
-        if (dirIndexJSON !== driveIndexJSON) {
-          mtime = mtimePerIndex
-          debug('refreshMTimes mtimePerIndex %s', mtime)
-          if (statDirIndexMtime > statDriveIndexMtime) {
-            debug('refreshMTimes overwriteIndex OK')
-            overwriteIndex = true
-          }
-        } else {
-          overwriteIndex = false
-          mtime = mtimePerRoot
-          debug('refreshMTimes mtimePerRoot %s', mtime)
-          continue
-        }
 
         if (drive.writable) {
           // If local modules (fs) have changed, update the drives
@@ -504,16 +491,34 @@ class SDK extends EventEmitter {
               DatEncoding.encode(drive.discoveryKey),
               driveWatch
             )
+
+            driveWatch.on('put-end', (src, dst) =>
+              this._updateLocalDB(urlString, dst).catch(err =>
+                this._log(err.message, 'error')
+              )
+            )
           }
         }
 
+        if (dirIndexJSON !== driveIndexJSON) {
+          mtime = mtimePerIndex
+          debug('refreshMTimes mtimePerIndex %s', mtime)
+          if (statDirIndexMtime > statDriveIndexMtime) {
+            debug('refreshMTimes overwriteIndex OK')
+            overwriteIndex = true
+          }
+        } else {
+          overwriteIndex = false
+          mtime = mtimePerRoot
+          debug('refreshMTimes mtimePerRoot %s', mtime)
+          continue
+        }
         debug(
           'refreshMTimes lastModified getTime %s',
           metadata.lastModified.getTime()
         )
         debug('refreshMTimes mtime getTime %s', mtime.getTime())
         if (metadata.lastModified.getTime() >= mtime.getTime()) continue
-
         // update index.json file
 
         let dlHandle
@@ -521,7 +526,8 @@ class SDK extends EventEmitter {
           // If an external drive have changed, update it locally
           dlHandle = dat.downloadFiles(drive, moduleDir)
           debug('refreshMTimes: waiting for index.json...')
-          await dlWaitForFile(dlHandle, join(moduleDir, 'index.json'))
+          const indexPath = join(moduleDir, 'index.json')
+          await dlWaitForFile(dlHandle, statDriveIndexMtime, indexPath)
 
           const dkey = DatEncoding.encode(drive.discoveryKey)
           this.dls.set(dkey, dlHandle)
@@ -632,6 +638,47 @@ class SDK extends EventEmitter {
     }
   }
 
+  async _updateLocalDB (moduleUrl, file) {
+    debug('_updateLocalDB: moduleUrl', moduleUrl)
+    debug('_updateLocalDB: file', file.name)
+    const keyBuffer = DatEncoding.decode(moduleUrl)
+    const dkey = DatEncoding.encode(crypto.discoveryKey(keyBuffer))
+    let moduleHyper = this.drives.get(dkey)
+    if (!moduleHyper) {
+      this._log(`module url (${moduleUrl}) not found, calling open`, 'warn')
+      // call open
+      moduleHyper = dat.open(this.store, keyBuffer, {
+        sparse: true,
+        sparseMetadata: true
+      })
+      await moduleHyper.ready()
+    }
+
+    const { rawJSON: localRawJSON } = await this.get(moduleUrl)
+    const [driveStat] = await moduleHyper.stat(file.name)
+    // update localdb
+    const metadata = {
+      isWritable: moduleHyper.writable,
+      lastModified: driveStat.mtime,
+      version: Number(moduleHyper.version)
+    }
+    const indexJSON = JSON.parse(
+      await moduleHyper.readFile('index.json', 'utf-8')
+    )
+
+    if (indexJSON !== localRawJSON) {
+      this._log('overwriting with index.json from hyperdrive')
+    }
+    await this.localdb.put(DatEncoding.encode(moduleUrl), {
+      ...metadata,
+      rawJSON: indexJSON,
+      avroType: this._getAvroType(indexJSON.p2pcommons.type).name
+    })
+
+    // emit update-profile|content event
+    this.emit(`update-${indexJSON.p2pcommons.type}`, file.name)
+  }
+
   /**
    * initialize a new module. This method will create a specific folder and seed the content if swarm is enabled. Only type is mandatory.
    *
@@ -734,14 +781,6 @@ class SDK extends EventEmitter {
       dereference: true
     })
 
-    if (this.watch) {
-      driveWatch.on('error', err => this._watchErrHandler(err, publicKeyString))
-      this.drivesToWatch.set(
-        DatEncoding.encode(archive.discoveryKey),
-        driveWatch
-      )
-    }
-
     const unwatch = await new Promise(resolve => {
       const unwatch = archive.watch('index.json', () => {
         resolve(unwatch)
@@ -772,7 +811,19 @@ class SDK extends EventEmitter {
     })
 
     await this._seed(archive)
+    if (this.watch) {
+      driveWatch.on('error', err => this._watchErrHandler(err, publicKeyString))
+      this.drivesToWatch.set(
+        DatEncoding.encode(archive.discoveryKey),
+        driveWatch
+      )
 
+      driveWatch.on('put-end', (src, dst) =>
+        this._updateLocalDB(publicKeyString, dst).catch(err =>
+          this._log(err.message, 'error')
+        )
+      )
+    }
     this._log(
       `Saved new ${indexJSON.p2pcommons.type}, with key: ${publicKeyString}`
     )
@@ -820,7 +871,8 @@ class SDK extends EventEmitter {
     const driveWatch = this.drivesToWatch.get(dkey)
     if (main && driveWatch) {
       debug(`saveItem: waiting for main file: ${main}...`)
-      await driveWaitForFile(archive, driveWatch, main)
+      const fullPathMain = join(indexJSONDir, main)
+      await driveWaitForFile(archive, driveWatch, main, fullPathMain)
     }
 
     let stat, driveVersion, driveMtime
@@ -970,7 +1022,11 @@ class SDK extends EventEmitter {
                 ? `${unversionedContentKey}+${contentVersion}`
                 : unversionedContentKey
               const mainFile = join(this.baseDir, dirName, params.main)
-              await dlWaitForFile(dlHandle, mainFile)
+              await dlWaitForFile(
+                dlHandle,
+                contentMetadata.lastModified,
+                mainFile
+              )
             }
           }
           await validateOnRegister({
@@ -1047,6 +1103,57 @@ class SDK extends EventEmitter {
     debug('get', dbitem)
     const { rawJSON, ...metadata } = dbitem
     return { rawJSON: this._flatten(rawJSON), metadata }
+  }
+
+  /**
+   * refreshDrive.
+   *
+   * @description Manually sync your hyperdrive
+   * @async
+   * @public
+   * @param {String|BUffer} key - drives key
+   * @param {Object} [opts] - dft options
+   * @returns {Array<Object>} - diff array, eg: `change: 'mod', type: 'file', path: '/hello.txt'}`
+   */
+  async refreshDrive (key, opts = {}) {
+    const dkey = DatEncoding.encode(
+      crypto.discoveryKey(DatEncoding.decode(key))
+    )
+    let drive = this.drives.get(dkey)
+    if (!drive) {
+      // dat open
+      drive = dat.open(this.store, DatEncoding.decode(key), {
+        sparse: true,
+        sparseMetadata: true
+      })
+
+      await drive.ready()
+    }
+    if (!drive.writable) {
+      this._log('drive is not writable -  nothing to sync')
+      return
+    }
+
+    const moduleDir = join(this.baseDir, DatEncoding.encode(key))
+    const diff = await dat.sync(drive, moduleDir, opts)
+
+    if (diff.length > 0) {
+      const [driveStat] = await drive.stat('index.json')
+      const metadata = {
+        isWritable: drive.writable,
+        lastModified: driveStat.mtime,
+        version: Number(drive.version)
+      }
+      const indexJSON = JSON.parse(await drive.readFile('index.json', 'utf-8'))
+
+      await this.localdb.put(DatEncoding.encode(key), {
+        ...metadata,
+        rawJSON: indexJSON,
+        avroType: this._getAvroType(indexJSON.p2pcommons.type).name
+      })
+    }
+
+    return diff
   }
 
   async filterExact (feature, criteria) {
@@ -1419,7 +1526,7 @@ class SDK extends EventEmitter {
           : join(folderPath, module.p2pcommons.main)
         debug('getFromSwarm: waiting for main file to download...')
         debug('getFromSwarm: filePath %s', filePath)
-        await dlWaitForFile(dlHandle, filePath)
+        await dlWaitForFile(dlHandle, stat[0].mtime, filePath)
       }
     }
 

@@ -61,6 +61,7 @@ const p2p = new P2PCommons()
     - [init](#init)
     - [get](#get)
     - [set](#set)
+    - [refreshDrive](#refreshdrive)
     - [filter](#filter)
     - [listContent](#listcontent)
     - [listProfiles](#listprofiles)
@@ -148,6 +149,12 @@ Returns an object with:
 Used to update an existing module.
 
 - metadata: object with updated or added values. The only required field is the `url` property, which is used to identify the module to update.
+
+### refreshDrive
+
+> _async_ `refreshDrive(key: string|buffer, opts: object)`
+
+Synchronize a hyperdrive with a module directory to ensure that the sdk is aware of the latest changes to files. Optionally accepts an opts object. These are passed to [dft](https://github.com/pfrazee/diff-file-tree).
 
 ### filter
 
