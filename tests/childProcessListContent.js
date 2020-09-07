@@ -8,9 +8,7 @@ const main = async () => {
 
   const commons = new P2PCommons({
     disableSwarm: true,
-    persist: true,
-    baseDir: dir,
-    watch: false
+    baseDir: dir
   })
 
   await commons.ready()

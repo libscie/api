@@ -442,9 +442,7 @@ class SDK extends EventEmitter {
         const moduleDir = join(this.baseDir, urlString)
 
         const statDrive = await drive.stat('/')
-        debug('refreshMTimes statDrive %O', statDrive)
         const statDir = await statFn(moduleDir)
-        debug('refreshMTimes statDir %O', statDir)
         const statDriveIndex = await drive.stat('index.json')
         const statDirIndex = await statFn(join(moduleDir, 'index.json'))
         const statDriveMtime = statDrive[0].mtime
@@ -471,8 +469,6 @@ class SDK extends EventEmitter {
             : statDirIndexMtime
 
         let mtime, overwriteIndex
-        debug('refreshMTimes dirIndexJSON %O', dirIndexJSON)
-        debug('refreshMTimes driveIndexJSON %O', driveIndexJSON)
         debug(
           'refreshMTimes driveIndexJSON === dirIndexJSON %s',
           dirIndexJSON === driveIndexJSON
@@ -676,7 +672,7 @@ class SDK extends EventEmitter {
     })
 
     // emit update-profile|content event
-    this.emit(`update-${indexJSON.p2pcommons.type}`, file.name)
+    this.emit(`update-${indexJSON.p2pcommons.type}`, indexJSON)
   }
 
   /**
@@ -1560,7 +1556,9 @@ class SDK extends EventEmitter {
             // emit update-profile|content event
             this.emit(`update-${file.p2pcommons.type}`, file)
           }
-        } catch (_) {}
+        } catch (err) {
+          this._log(err.message, 'error')
+        }
       })
       this.externalUpdates.set(dkey, unwatcher)
     }

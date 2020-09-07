@@ -9,15 +9,12 @@ const once = require('events.once')
 const test = require('tape')
 const tempy = require('tempy')
 const level = require('level')
-const SwarmNetwoker = require('corestore-swarm-networking')
 const { encode } = require('dat-encoding')
 const proxyquire = require('proxyquire')
 const mirror = require('mirror-folder')
 const SDK = require('../')
 const createDHT = require('./utils/dht')
 const vers = require('../lib/spec')
-
-const testSwarmCreator = (store, opts) => new SwarmNetwoker(store, opts)
 
 let dht, dhtBootstrap
 
@@ -39,7 +36,6 @@ const createDb = opts => {
     persist: finalOpts.persist,
     swarm: finalOpts.swarmFn,
     baseDir: tempy.directory(),
-    dht: finalOpts.dht,
     bootstrap: finalOpts.dhtBootstrap
   })
 }
@@ -304,12 +300,12 @@ test('get: retrieve a value from the sdk', async t => {
     title: 'demo',
     description: 'lorem ipsum'
   }
-  const { rawJSON: metadata } = await p2p.init(sampleData)
-  const key = metadata.url
+  const { rawJSON: init } = await p2p.init(sampleData)
+  const key = init.url
 
-  const { rawJSON } = await p2p.get(key)
+  const { rawJSON: get } = await p2p.get(key)
 
-  t.same(rawJSON, metadata)
+  t.deepLooseEqual(get, init)
   await p2p.destroy()
   t.end()
 })
@@ -319,7 +315,6 @@ test('saveItem: should throw ValidationError with invalid metadata', async t => 
 
   const p2p = new SDK({
     baseDir: dir,
-    dht,
     bootstrap: dhtBootstrap
   })
 
@@ -401,7 +396,7 @@ test('set: update modules', async t => {
   const { rawJSON: contentUpdated } = await p2p.get(contentKey)
   const { rawJSON: profileUpdated } = await p2p.get(profileKey)
 
-  t.same(getOnSet, profileUpdated, 'get on set')
+  t.deepLooseEqual(getOnSet, profileUpdated, 'get on set')
   t.same(contentUpdated.description, contentUpdate.description)
   t.same(profileUpdated.title, profileUpdate.title)
   t.same(profileUpdated.description, profileUpdate.description)
@@ -421,17 +416,20 @@ test('set: should throw InvalidKeyError with invalid update', async t => {
 
   const license = 'anewkey123456'
 
-  p2p.set({ url: key, license }).catch(err => {
+  try {
+    await p2p.set({ url: key, license })
+    t.fail('should throw InvalidKeyError')
+  } catch (err) {
     t.ok(
       err instanceof SDK.errors.InvalidKeyError,
       'error should be instance of InvalidKeyError'
     )
     t.ok(Object.prototype.hasOwnProperty.call(err, 'invalid'))
     t.same(err.invalid, 'license')
-    p2p.destroy().then(() => {
-      t.end()
-    })
-  })
+  } finally {
+    await p2p.destroy()
+    t.end()
+  }
 })
 
 test('set: should throw validation error with extra params', async t => {
@@ -451,14 +449,16 @@ test('set: should throw validation error with extra params', async t => {
         'be53dcece25610c146b1617cf842593aa7ef134c6f771c2c145b9213deecf13a'
       ]
     })
+    t.fail('should throw ValidationError')
   } catch (err) {
     t.ok(
       err instanceof SDK.errors.ValidationError,
       'extra params should throw ValidationError'
     )
+  } finally {
+    await p2p.destroy()
+    t.end()
   }
-  await p2p.destroy()
-  t.end()
 })
 
 test('set: should throw validation error with invalid main', async t => {
@@ -1314,7 +1314,10 @@ test('register - list versions', async t => {
 
 test('register, restart and list contents', async t => {
   const dir = tempy.directory()
-  const p2p = new SDK({ baseDir: dir, disableSwarm: true })
+  const p2p = new SDK({
+    baseDir: dir,
+    disableSwarm: true
+  })
   // create profile
   const { rawJSON: profile } = await p2p.init({
     type: 'profile',
@@ -1356,8 +1359,12 @@ test('register, restart and list contents', async t => {
   await p2p.destroy()
 
   const code = join(__dirname, 'childProcessListContent.js')
-  const { stdout } = await execa.node(code, [dir])
+  const { stdout, stderr, message, exitCode } = await execa.node(code, [dir])
 
+  if (exitCode !== 0) {
+    console.log(message)
+    t.fail(stderr)
+  }
   t.same(Number(stdout), 1, 'Expect only one content module')
 
   t.end()
@@ -1514,15 +1521,11 @@ test('verify multiple authors', async t => {
   const p2p = createDb({
     swarm: true,
     persist: false,
-    swarmFn: testSwarmCreator,
-    dht,
     dhtBootstrap
   })
   const p2p2 = createDb({
     swarm: true,
     persist: false,
-    swarmFn: testSwarmCreator,
-    dht,
     dhtBootstrap
   })
   const sampleData = {
@@ -1606,7 +1609,15 @@ test('re-open SDK (child process)', async t => {
 
   // another sdk instance will update the content
   const code = join(__dirname, 'childProcess.js')
-  await execa.node(code, [contentDat.url, dir])
+  const { stderr, message, exitCode } = await execa.node(code, [
+    contentDat.url,
+    dir
+  ])
+
+  if (exitCode !== 0) {
+    console.log(message)
+    t.fail(stderr)
+  }
 
   const commons2 = new SDK({
     disableSwarm: true,
@@ -1630,8 +1641,7 @@ test('edit content outside SDK, while SDK is running', async t => {
 
   const commons = new SDK({
     disableSwarm: true,
-    baseDir: dir,
-    verbose: true
+    baseDir: dir
   })
 
   // create content
@@ -1653,11 +1663,21 @@ test('edit content outside SDK, while SDK is running', async t => {
 
   // edit content externally
   const code = join(__dirname, 'childProcessEdit.js')
-  await execa.node(code, [encode(contentDat.url), dir, 'file.txt'])
+  const { stderr, message, exitCode } = await execa.node(code, [
+    encode(contentDat.url),
+    dir,
+    'file.txt'
+  ])
+
+  if (exitCode !== 0) {
+    console.log(message)
+    t.fail(stderr)
+  }
 
   // sync manually
-  await commons.refreshDrive(contentDat.url)
-
+  //
+  // await commons.refreshDrive(contentDat.url)
+  await once(commons, 'update-content')
   // finally we check everything is updated correctly
 
   const { metadata: metadataFinal } = await commons.get(contentDat.url)
@@ -1719,11 +1739,13 @@ test('delete a module from local db', async t => {
 test('delete registered module with multiple authors', async t => {
   const dir = tempy.directory()
   const p2p = new SDK({
-    baseDir: dir
+    baseDir: dir,
+    bootstrap: dhtBootstrap
   })
 
   const p2p2 = new SDK({
-    baseDir: tempy.directory()
+    baseDir: tempy.directory(),
+    bootstrap: dhtBootstrap
   })
 
   const modules = await p2p.list()
@@ -1799,7 +1821,6 @@ test('delete registered module', async t => {
   const dir = tempy.directory()
   const p2p = new SDK({
     disableSwarm: true,
-    watch: false,
     baseDir: dir
   })
 
@@ -1993,7 +2014,7 @@ test('deregister content module from profile', async t => {
 })
 
 test('deregister content - more complex case', async t => {
-  const p2p = createDb({ persist: true })
+  const p2p = createDb({ persist: true, verbose: true })
   const sampleContent = {
     type: 'content',
     title: 'demo 1',
@@ -2013,14 +2034,14 @@ test('deregister content - more complex case', async t => {
   }
 
   // create multiple content
-  const { rawJSON: content, driveWatch } = await p2p.init(sampleContent)
   const {
-    rawJSON: { url: url2 },
-    driveWatch: dw2
+    rawJSON: { url: url1 }
+  } = await p2p.init(sampleContent)
+  const {
+    rawJSON: { url: url2 }
   } = await p2p.init(sampleContent2)
   const {
-    rawJSON: { url: url3 },
-    driveWatch: dw3
+    rawJSON: { url: url3 }
   } = await p2p.init(sampleContent3)
 
   const sampleProfile = {
@@ -2033,60 +2054,58 @@ test('deregister content - more complex case', async t => {
 
   const pUrl = encode(profile.url)
   // Manually setting the author profile
-  await p2p.set({ url: content.url, authors: [pUrl] })
+  await p2p.set({ url: url1, authors: [pUrl] })
   await p2p.set({ url: url2, authors: [pUrl] })
   await p2p.set({ url: url3, authors: [pUrl] })
 
-  // manually writing a dummy file 1
-  await writeFile(join(p2p.baseDir, encode(content.url), 'file.txt'), 'main1')
+  // manually writing a file A
+  await writeFile(join(p2p.baseDir, encode(url1), 'fileA.txt'), 'main1')
 
   await p2p.set({
-    url: content.url,
-    main: 'file.txt'
+    url: url1,
+    main: 'fileA.txt'
   })
-  // manually writing a dummy file 2
-  await writeFile(join(p2p.baseDir, encode(url2), 'file.txt'), 'main2')
-  await once(dw2, 'put-end')
+
+  // manually writing file B
+  await writeFile(join(p2p.baseDir, encode(url2), 'fileB.txt'), 'main2')
+
   const {
     metadata: { version: v2 }
   } = await p2p.set({
     url: url2,
-    main: 'file.txt'
+    main: 'fileB.txt'
   })
-  // manually writing a dummy file 3
-  await writeFile(join(p2p.baseDir, encode(url3), 'file.txt'), 'main3')
-  await once(dw3, 'put-end')
+  // manually writing file C
+  await writeFile(join(p2p.baseDir, encode(url3), 'fileC.txt'), 'main3')
+
   const {
     metadata: { version: v3 }
   } = await p2p.set({
     url: url3,
-    main: 'file.txt'
+    main: 'fileC.txt'
   })
 
   // register the modules (unversioned)
-  await p2p.register(content.url, profile.url)
+  await p2p.register(url1, profile.url)
   await p2p.register(url2, profile.url)
   await p2p.register(url3, profile.url)
 
   const { rawJSON: updatedProfile } = await p2p.get(profile.url)
   t.equal(updatedProfile.contents.length, 3, '3 registrations')
   // make some changes
-  await writeFile(
-    join(p2p.baseDir, encode(content.url), 'new_file.txt'),
-    'hallo'
-  )
-  await once(driveWatch, 'put-end')
+  await writeFile(join(p2p.baseDir, encode(url1), 'new_file.txt'), 'hallo')
+  await p2p.refreshDrive(url1)
 
   // deregister all modules
-  await p2p.deregister(content.url, profile.url)
+  await p2p.deregister(url1, profile.url)
   await p2p.deregister(url2, profile.url)
   await p2p.deregister(url3, profile.url)
 
   // register all modules again (versioned)
   const {
     metadata: { version: v1 }
-  } = await p2p.get(content.url)
-  const versioned = `${content.url}+${v1}`
+  } = await p2p.get(url1)
+  const versioned = `${url1}+${v1}`
   const versioned2 = `${url2}+${v2}`
   const versioned3 = `${url3}+${v3}`
 
@@ -2104,9 +2123,6 @@ test('deregister content - more complex case', async t => {
     'should deregister specific key'
   )
 
-  driveWatch.destroy()
-  dw2.destroy()
-  dw3.destroy()
   await p2p.destroy()
   t.end()
 })
@@ -2115,13 +2131,11 @@ test('follow and unfollow a profile', async t => {
   const p2p = createDb({
     swarm: true,
     persist: false,
-    dht,
     dhtBootstrap
   })
   const p2p2 = createDb({
     swarm: true,
     persist: false,
-    dht,
     dhtBootstrap
   })
 
@@ -2232,13 +2246,11 @@ test('clone a module', async t => {
 
   const p2p = new SDK({
     baseDir: dir,
-    dht,
     bootstrap: dhtBootstrap
   })
 
   const p2p2 = new SDK({
     baseDir: dir2,
-    dht,
     bootstrap: dhtBootstrap
   })
 
@@ -2340,8 +2352,6 @@ test('cancel clone', async t => {
     disableSwarm: false,
     persist: true,
     baseDir: dir,
-    swarm: testSwarmCreator,
-    dht,
     bootstrap: dhtBootstrap
   })
 
@@ -2349,8 +2359,6 @@ test('cancel clone', async t => {
     disableSwarm: false,
     persist: true,
     baseDir: dir2,
-    swarm: testSwarmCreator,
-    dht,
     bootstrap: dhtBootstrap
   })
 
@@ -2385,13 +2393,11 @@ test('clone updates localdb', async t => {
   const dir2 = tempy.directory()
 
   const p2p = new SDK({
-    persist: true,
     baseDir: dir,
     dhtBootstrap
   })
 
   const p2p2 = new SDK({
-    persist: true,
     baseDir: dir2,
     dhtBootstrap
   })
@@ -2416,12 +2422,15 @@ test('clone updates localdb', async t => {
   // be notified about updates
   let updatedProfile = await p2p2.get(rawJSON.url)
   if (updatedProfile.description !== description) {
-    while (([updatedProfile] = await once(p2p2, 'update-profile'))) {
+    setImmediate(async () => {
+      ;[updatedProfile] = await once(p2p2, 'update-profile')
+
       if (updatedProfile.description === description) {
         t.pass('2nd clone works OK, localdb is updated')
-        break
+      } else {
+        t.fail('profile does not match')
       }
-    }
+    })
   }
 
   await p2p.destroy()
@@ -2469,11 +2478,9 @@ test('check lastModified on ready (refreshMTimes)', async t => {
     description: 'sample content'
   }
 
-  const {
-    rawJSON: content,
-    metadata: cMetadataInitial,
-    driveWatch
-  } = await p2p.init(contentData)
+  const { rawJSON: content, metadata: cMetadataInitial } = await p2p.init(
+    contentData
+  )
 
   await p2p.init(profileData)
 
@@ -2481,7 +2488,7 @@ test('check lastModified on ready (refreshMTimes)', async t => {
 
   // write main.txt
   await writeFile(join(dir, contentPath, 'main.txt'), 'hello')
-  once(driveWatch, 'put-end')
+  await p2p.refreshDrive(contentPath)
 
   await writeFile(join(dir, contentPath, 'main2.txt'), 'hello 2')
   await p2p.set({ url: content.url, main: 'main.txt' })
@@ -2492,7 +2499,6 @@ test('check lastModified on ready (refreshMTimes)', async t => {
       cMetadataUpdate.lastModified.getTime(),
     'content metadata lastModified is updated'
   )
-  driveWatch.destroy()
   await p2p.destroy()
 
   // update main.txt while sdk is off...
@@ -2532,8 +2538,25 @@ test('multiple sdks with child process', async t => {
   const dir = tempy.directory()
   const code = join(__dirname, 'childProcess2.js')
 
-  await execa.node(code, [dir])
-  await execa.node(code, [dir])
+  const { stderr: err1, message: m1, exitCode: exit1 } = await execa.node(
+    code,
+    [dir]
+  )
+
+  if (exit1 !== 0) {
+    console.log(m1)
+    t.fail(err1)
+  }
+
+  const { stderr: err2, message: m2, exitCode: exit2 } = await execa.node(
+    code,
+    [dir]
+  )
+
+  if (exit2) {
+    console.log(m2)
+    t.fail(err2)
+  }
 
   t.pass('all good')
   t.end()

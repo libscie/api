@@ -909,11 +909,11 @@ test('Main must refer to an existing file - exists', async t => {
   try {
     await writeFile(join(p2p.baseDir, key, 'main.txt'), 'hello')
   } catch (err) {
-    console.log(err)
+    t.fail(err.message)
   }
 
-  t.doesNotThrow(() => {
-    validateMain({
+  try {
+    await validateMain({
       indexMetadata: {
         p2pcommons: {
           main: 'main.txt'
@@ -922,7 +922,10 @@ test('Main must refer to an existing file - exists', async t => {
       key,
       p2pcommonsDir: p2p.baseDir
     })
-  })
+    t.pass('validate main OK')
+  } catch (err) {
+    t.fail(err.message)
+  }
   await p2p.destroy()
   t.end()
 })
@@ -938,24 +941,23 @@ test('Main must refer to an existing file - does not exist', async t => {
   try {
     await writeFile(join(p2p.baseDir, key, 'main2.txt'), 'hello')
   } catch (err) {
-    console.log(err)
+    t.fail(err.message)
   }
 
-  await throwsAsync(
-    t,
-    async () => {
-      await validateMain({
-        indexMetadata: {
-          p2pcommons: {
-            main: 'main.txt'
-          }
-        },
-        key,
-        p2pcommonsDir: p2p.baseDir
-      })
-    },
-    /main_exists/
-  )
+  try {
+    await validateMain({
+      indexMetadata: {
+        p2pcommons: {
+          main: 'main.txt'
+        }
+      },
+      key,
+      p2pcommonsDir: p2p.baseDir
+    })
+    t.fail('should throw')
+  } catch (err) {
+    t.same(err.code, 'main_exists', 'should throw error with code main_exists')
+  }
 
   await p2p.destroy()
   t.end()
@@ -979,8 +981,8 @@ test('Main must have a valid extension even if its not listed', async t => {
     t.fail(err.message)
   }
 
-  t.doesNotThrow(() => {
-    validateMain({
+  try {
+    await validateMain({
       indexMetadata: {
         p2pcommons: {
           main: 'main.js'
@@ -989,7 +991,10 @@ test('Main must have a valid extension even if its not listed', async t => {
       key,
       p2pcommonsDir: p2p.baseDir
     })
-  })
+    t.pass('validate main OK')
+  } catch (err) {
+    t.fail(err.message)
+  }
 
   await p2p.destroy()
   t.end()
@@ -1443,7 +1448,7 @@ test('Parents must be registered by at least one author - 1 parent, 1 author, re
   try {
     await writeFile(join(p2p.baseDir, parentKey, 'main.txt'), 'hello')
   } catch (err) {
-    console.log(err)
+    t.fail(err.message)
   }
 
   ;({ rawJSON: parent, metadata: parentMetadata } = await p2p.set({
@@ -1505,7 +1510,7 @@ test('Parents must be registered by at least one author - 2 parents, 2 authors, 
     await writeFile(join(p2p.baseDir, parent1Key, 'main.txt'), 'hello')
     await writeFile(join(p2p.baseDir, parent2Key, 'main.txt'), 'hello')
   } catch (err) {
-    console.log(err)
+    t.fail(err.message)
   }
 
   ;({ rawJSON: parent1, metadata: parent1Metadata } = await p2p.set({
@@ -1571,7 +1576,7 @@ test('Parents must be registered by at least one author - 1 parent, 1 author, no
   try {
     await writeFile(join(p2p.baseDir, parent1Key, 'main.txt'), 'hello')
   } catch (err) {
-    console.log(err)
+    t.fail(err.message)
   }
 
   ;({ rawJSON: parent1, metadata: parent1Metadata } = await p2p.set({
@@ -1628,7 +1633,7 @@ test('Parents must be registered by at least one author - 2 parents, 2 authors, 
     await writeFile(join(p2p.baseDir, parent1Key, 'main.txt'), 'hello')
     await writeFile(join(p2p.baseDir, parent2Key, 'main.txt'), 'hello')
   } catch (err) {
-    console.log(err)
+    t.fail(err.message)
   }
 
   ;({ rawJSON: parent1, metadata: parent1Metadata } = await p2p.set({
@@ -2154,7 +2159,7 @@ test('Registration - valid', async t => {
   try {
     await writeFile(join(p2p.baseDir, encode(content.url), 'main.txt'), 'hello')
   } catch (err) {
-    console.log(err)
+    t.fail(err.message)
   }
 
   ;({ rawJSON: content, metadata: contentMetadata } = await p2p.set({
@@ -2195,7 +2200,7 @@ test('Registration - no main file', async t => {
   try {
     await writeFile(join(p2p.baseDir, encode(content.url), 'main.txt'), 'hello')
   } catch (err) {
-    console.log(err)
+    t.fail(err.message)
   }
 
   ;({ rawJSON: content, metadata: contentMetadata } = await p2p.set({
@@ -2209,7 +2214,7 @@ test('Registration - no main file', async t => {
       join(p2p.baseDir, encode(content.url), 'main_renamed.txt')
     )
   } catch (err) {
-    console.log(err)
+    t.fail(err.message)
   }
 
   await throwsAsync(
@@ -2252,7 +2257,7 @@ test('Only content may be registered to a profile - register profile', async t =
       'hello'
     )
   } catch (err) {
-    console.log(err)
+    t.fail(err.message)
   }
 
   ;({ rawJSON: profile2, metadata: profile2Metadata } = await p2p.set({
@@ -2296,7 +2301,7 @@ test('Authors must contain profile key upon registration - does not contain auth
   try {
     await writeFile(join(p2p.baseDir, encode(content.url), 'main.txt'), 'hello')
   } catch (err) {
-    console.log(err)
+    t.fail(err.message)
   }
 
   ;({ rawJSON: content, metadata: contentMetadata } = await p2p.set({
@@ -2368,7 +2373,7 @@ test('Validate (full) - valid', async t => {
   try {
     await writeFile(join(p2p.baseDir, key, 'main.txt'), 'hello')
   } catch (err) {
-    console.log(err)
+    t.fail(err.message)
   }
 
   ;({ rawJSON: content, metadata } = await p2p.set({
@@ -2405,7 +2410,7 @@ test("Validate (full) - invalid (main file doesn't exist)", async t => {
   try {
     await writeFile(join(p2p.baseDir, key, 'main2.txt'), 'hello')
   } catch (err) {
-    console.log(err)
+    t.fail(err.message)
   }
 
   ;({ rawJSON: content, metadata } = await p2p.set({
