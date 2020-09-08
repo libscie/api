@@ -1826,8 +1826,13 @@ test('delete registered module with multiple authors', async t => {
 test('delete registered module', async t => {
   const dir = tempy.directory()
   const p2p = new SDK({
-    disableSwarm: true,
-    baseDir: dir
+    baseDir: dir,
+    bootstrap: dhtBootstrap
+  })
+
+  const p2p2 = new SDK({
+    baseDir: tempy.directory(),
+    bootstrap: dhtBootstrap
   })
 
   const modules = await p2p.list()
@@ -1844,6 +1849,13 @@ test('delete registered module', async t => {
     type: 'profile',
     title: 'professor X',
     description: 'd'
+  })
+
+  // create remote profile
+  const { rawJSON: remoteProfile } = await p2p2.init({
+    type: 'profile',
+    title: 'mystique',
+    description: 'm'
   })
 
   const contentModules = await p2p.listContent()
@@ -1865,8 +1877,14 @@ test('delete registered module', async t => {
   } catch (err) {
     t.fail(err.message)
   }
+
   const { rawJSON: updatedProfile } = await p2p.get(profile.url)
   t.same(updatedProfile.contents.length, 1, 'content registered')
+
+  await p2p.follow(encode(profile.url), encode(remoteProfile.url))
+
+  const profiles = await p2p.listProfiles()
+  t.equal(profiles.length, 2, '2 profiles in localdb, (local and remote)')
 
   // hard delete
   await p2p.delete(content.url, true)
@@ -1885,6 +1903,7 @@ test('delete registered module', async t => {
   )
 
   await p2p.destroy()
+  await p2p2.destroy()
   t.end()
 })
 
@@ -2020,7 +2039,7 @@ test('deregister content module from profile', async t => {
 })
 
 test('deregister content - more complex case', async t => {
-  const p2p = createDb({ persist: true, verbose: true })
+  const p2p = createDb({ persist: true })
   const sampleContent = {
     type: 'content',
     title: 'demo 1',
