@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improve formatting #207
 - Parents validated upon init()
 - tests: clean up #237
+- tests: tweak edit content test #238
 
 ### Changed
 - Location of keys is now `~/.p2pcommons/.hyperdrive` instead of `~/.p2pcommons/.dat`

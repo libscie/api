@@ -1675,17 +1675,23 @@ test('edit content outside SDK, while SDK is running', async t => {
   }
 
   // sync manually
-  //
-  // await commons.refreshDrive(contentDat.url)
-  await once(commons, 'update-content')
-  // finally we check everything is updated correctly
+  await commons.refreshDrive(contentDat.url)
 
+  // finally we check everything is updated correctly
   const { metadata: metadataFinal } = await commons.get(contentDat.url)
 
-  t.ok(
-    metadataFinal.version > metadataInitial.version,
-    'latest metadata version is bigger than initial'
-  )
+  if (metadataFinal.version > metadataInitial.version) {
+    t.pass('latest metadata version is bigger than initial')
+  } else {
+    if (
+      metadataFinal.lastModified.getTime() >
+      metadataInitial.lastModified.getTime()
+    ) {
+      t.pass('latest metadata lastModified is newer than initial metadata')
+    } else {
+      t.fail('metadata did not update correctly')
+    }
+  }
   await commons.destroy()
   t.end()
 })
