@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add JPEG and JPG extension support
 
+### Fixed
+- listContent() only returned writable modules
+
 ## [0.8.0] - 2020-09-08
 ### Fixed
 - listProfiles() only returned writable profiles

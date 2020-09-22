@@ -1091,6 +1091,43 @@ test('list content', async t => {
   t.end()
 })
 
+test('list read-only content', async t => {
+  const p2p = createDb()
+  const {
+    rawJSON: { url }
+  } = await p2p.init({ type: 'content', title: 'demo' })
+
+  await p2p.saveItem({
+    isWritable: false,
+    lastModified: new Date(),
+    version: '5',
+    indexJSON: {
+      url,
+      title: 'demo',
+      description: '',
+      links: {
+        license: [
+          {
+            href: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+          }
+        ],
+        spec: [{ href: 'https://p2pcommons.com/specs/module/x.x.x' }]
+      },
+      p2pcommons: {
+        type: 'content',
+        subtype: '',
+        main: ''
+      }
+    }
+  })
+
+  const result = await p2p.listContent()
+  t.same(result.length, 1, 'content list length OK')
+
+  await p2p.destroy()
+  t.end()
+})
+
 test('list profiles', async t => {
   const p2p = createDb()
   const sampleDataProfile = [
