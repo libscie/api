@@ -1,4 +1,4 @@
-# @p2pcommons/sdk-js
+# @p2pcommons/sdk-js <img src="https://github.com/p2pcommons/design/raw/main/p2pcommons-logomark-1024-square.png" align="right" height="64" />
 
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
 
@@ -7,6 +7,7 @@
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 
 ![npm version](https://img.shields.io/npm/v/@p2pcommons/sdk-js?color=4F2D84)
+
 ![ci](https://github.com/p2pcommons/sdk-js/workflows/ci/badge.svg)
 
 NodeJS development kit (`sdk-js`) for the peer-to-peer commons (p2pcommons). More
