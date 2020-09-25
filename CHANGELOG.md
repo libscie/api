@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - listContent() only returned writable modules
+- refreshMTimes() hangs on unavailable modules
 
 ## [0.8.0] - 2020-09-08
 ### Fixed

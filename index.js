@@ -20,6 +20,7 @@ const deepMerge = require('deepmerge')
 const pRetry = require('p-retry')
 const PCancelable = require('p-cancelable')
 const pMemoize = require('p-memoize')
+const pTimeout = require('p-timeout')
 const Swarm = require('corestore-swarm-networking')
 const dat = require('./lib/dat-helper')
 const parse = require('./lib/parse-url')
@@ -441,7 +442,7 @@ class SDK extends EventEmitter {
       try {
         const moduleDir = join(this.baseDir, urlString)
 
-        const statDrive = await drive.stat('/')
+        const statDrive = await pTimeout(drive.stat('/'), 100)
         const statDir = await statFn(moduleDir)
         const statDriveIndex = await drive.stat('index.json')
         const statDirIndex = await statFn(join(moduleDir, 'index.json'))
@@ -521,14 +522,13 @@ class SDK extends EventEmitter {
         try {
           // If an external drive have changed, update it locally
           dlHandle = dat.downloadFiles(drive, moduleDir)
+          const dkey = DatEncoding.encode(drive.discoveryKey)
+          this.dls.set(dkey, dlHandle)
           debug('refreshMTimes: waiting for index.json...')
           const indexPath = join(moduleDir, 'index.json')
           await dlWaitForFile(dlHandle, statDriveIndexMtime, indexPath)
-
-          const dkey = DatEncoding.encode(drive.discoveryKey)
-          this.dls.set(dkey, dlHandle)
         } catch (err) {
-          this._log(err.msg, 'warn')
+          this._log(`refreshMTimes: downloadFiles error - ${err.msg}`, 'warn')
         } finally {
           // make it read only again
           if (drive.isCheckout) {
