@@ -77,6 +77,7 @@ test('sdk re-start', async t => {
 
   // p2p2 clones the module
   const { rawJSON: remoteJSON } = await p2p2.clone(rawJSON.url, remoteVersion)
+
   t.same(remoteJSON, rawJSON, 'cloned module')
   // some other peer clone the content module too
   await p2p3.clone(rawJSON.url, remoteVersion)
@@ -2333,7 +2334,12 @@ test('clone a module', async t => {
 
   t.same(module.title, content.title)
 
-  await once(dlHandle, 'end')
+  let target
+  while (([target] = await once(dlHandle, 'put-end'))) {
+    if (target && target.name && target.name.includes('main.txt')) {
+      break
+    }
+  }
 
   const clonedDir = await readdir(join(p2p2.baseDir, `${rawJSONpath}`))
   t.ok(clonedDir.includes('main.txt'), 'clone downloaded content successfully')

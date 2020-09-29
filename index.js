@@ -100,8 +100,7 @@ const DEFAULT_GLOBAL_SETTINGS = {
   networkDepth: 2,
   defaultProfile: '',
   keys: '~/.p2pcommons/.hyperdrive',
-  sparse: true,
-  sparseMetadata: true
+  sparse: true
 }
 
 class SDK extends EventEmitter {
@@ -122,7 +121,9 @@ class SDK extends EventEmitter {
     this.drives = new Map()
     this.drivesToWatch = new Map()
     this.dls = new Map()
+    this.dws = new Map()
     this.externalUpdates = new Map()
+    this.driveUnwatches = new Map()
 
     this.dht = finalOpts.dht
     this.bootstrap = finalOpts.bootstrap
@@ -434,8 +435,7 @@ class SDK extends EventEmitter {
       const { host: urlString } = parse(rawJSON.url)
 
       const drive = dat.open(this.store, DatEncoding.decode(urlString), {
-        sparse: this.globalOptions.sparse,
-        sparseMetadata: this.globalOptions.sparseMetadata
+        sparse: this.globalOptions.sparse
       })
       await drive.ready()
 
@@ -478,9 +478,7 @@ class SDK extends EventEmitter {
         if (drive.writable) {
           // If local modules (fs) have changed, update the drives
           const driveWatch = await dat.importFiles(drive, moduleDir, {
-            watch: this.watch,
-            keepExisting: false,
-            dereference: true
+            watch: this.watch
           })
 
           if (this.watch) {
@@ -516,27 +514,24 @@ class SDK extends EventEmitter {
         )
         debug('refreshMTimes mtime getTime %s', mtime.getTime())
         if (metadata.lastModified.getTime() >= mtime.getTime()) continue
-        // update index.json file
 
-        let dlHandle
         try {
-          // If an external drive have changed, update it locally
-          dlHandle = dat.downloadFiles(drive, moduleDir)
+          debug('refreshMTimes: re-attaching drive watcher...')
           const dkey = DatEncoding.encode(drive.discoveryKey)
-          this.dls.set(dkey, dlHandle)
-          debug('refreshMTimes: waiting for index.json...')
-          const indexPath = join(moduleDir, 'index.json')
-          await dlWaitForFile(dlHandle, statDriveIndexMtime, indexPath)
+          if (!drive.isCheckout) {
+            const unwatch = drive.watch('/', () => {
+              this.refreshFS(moduleDir, drive).catch(err =>
+                this._log(err, 'warn')
+              )
+            })
+            this.driveUnwatches.set(dkey, unwatch)
+          }
         } catch (err) {
           this._log(`refreshMTimes: downloadFiles error - ${err.msg}`, 'warn')
         } finally {
           // make it read only again
           if (drive.isCheckout) {
-            if (dlHandle) {
-              dlHandle.once('end', () => this.makeReadOnly(moduleDir))
-            } else {
-              await this.makeReadOnly(moduleDir)
-            }
+            await this.makeReadOnly(moduleDir)
           }
         }
 
@@ -644,8 +639,7 @@ class SDK extends EventEmitter {
       this._log(`module url (${moduleUrl}) not found, calling open`, 'warn')
       // call open
       moduleHyper = dat.open(this.store, keyBuffer, {
-        sparse: true,
-        sparseMetadata: true
+        sparse: true
       })
       await moduleHyper.ready()
     }
@@ -720,8 +714,7 @@ class SDK extends EventEmitter {
 
     const archive = await dat.create(this.store, publicKey, {
       hyperdrive: {
-        sparse: this.globalOptions.sparse,
-        sparseMetadata: this.globalOptions.sparseMetadata
+        sparse: this.globalOptions.sparse
       }
     })
 
@@ -772,9 +765,7 @@ class SDK extends EventEmitter {
     )
 
     const driveWatch = await dat.importFiles(archive, moduleDir, {
-      watch: this.watch,
-      keepExisting: false,
-      dereference: true
+      watch: this.watch
     })
 
     const unwatch = await new Promise(resolve => {
@@ -857,8 +848,7 @@ class SDK extends EventEmitter {
     if (!archive) {
       debug(`saveItem: calling hyper open ${keyString}`)
       const drive = dat.open(this.store, DatEncoding.decode(indexJSON.url), {
-        sparse: this.globalOptions.sparse,
-        sparseMetadata: this.globalOptions.sparseMetadata
+        sparse: this.globalOptions.sparse
       })
       await drive.ready()
       archive = drive
@@ -1102,6 +1092,24 @@ class SDK extends EventEmitter {
   }
 
   /**
+   * refreshFS.
+   *
+   * @description Manually sync your module directory with the hyperdrive content
+   * @async
+   * @private
+   * @param {String} moduleDir - path to the module directory
+   * @param {Object} drive - hyperdrive instance
+   * @param {Object} [opts] - dft options
+   * @returns {Array<Object>} - diff array, eg: `change: 'mod', type: 'file', path: '/hello.txt'}`
+   */
+  async refreshFS (moduleDir, drive, opts = {}) {
+    const diff = await dat.syncFS(moduleDir, drive, opts)
+    this._log(`Applying diff to FS (path: ${moduleDir})`)
+    this._log({ diff })
+    return diff
+  }
+
+  /**
    * refreshDrive.
    *
    * @description Manually sync your hyperdrive
@@ -1119,8 +1127,7 @@ class SDK extends EventEmitter {
     if (!drive) {
       // dat open
       drive = dat.open(this.store, DatEncoding.decode(key), {
-        sparse: true,
-        sparseMetadata: true
+        sparse: true
       })
 
       await drive.ready()
@@ -1131,7 +1138,7 @@ class SDK extends EventEmitter {
     }
 
     const moduleDir = join(this.baseDir, DatEncoding.encode(key))
-    const diff = await dat.sync(drive, moduleDir, opts)
+    const diff = await dat.syncDrive(drive, moduleDir, opts)
 
     if (diff.length > 0) {
       const [driveStat] = await drive.stat('index.json')
@@ -1335,8 +1342,7 @@ class SDK extends EventEmitter {
     }
 
     const drive = dat.open(this.store, keyBuffer, {
-      sparse: true,
-      sparseMetadata: true
+      sparse: true
     })
 
     debug(`getDrive: Found archive key ${key}`)
@@ -1440,14 +1446,17 @@ class SDK extends EventEmitter {
   async getFromSwarm (key, version = 0, download = true) {
     // if module isn't found locally, then fetch from swarm
     // something like:
-    debug('clone: Module was not found in localdb.')
+    debug('getFromSwarm: Module was not found in localdb.')
+    debug('getFromSwarm: fetching from swarm')
+    version = parseInt(version)
     const mKeyString = DatEncoding.encode(key)
     let moduleVersion, module, dlHandle
+    debug(`getFromSwarm: fetching key ${mKeyString.substr(0, 6)}`)
+    debug(`getFromSwarm: fetching version ${version}`)
 
     const moduleHyper = await this.getDrive(mKeyString, version)
 
-    version = version || moduleHyper.version
-    debug('getFromSwarm: Module version', version)
+    debug('getFromSwarm: Module version', moduleHyper.version)
 
     if (this.canceledClone) {
       return
@@ -1456,11 +1465,13 @@ class SDK extends EventEmitter {
     const dkey = DatEncoding.encode(moduleHyper.discoveryKey)
     try {
       // 3 - after fetching module we still need to read the index.json file
-      if (version !== 0) {
+      if (Number.isFinite(version) && version !== 0) {
         moduleVersion = moduleHyper.checkout(version)
       } else {
         moduleVersion = moduleHyper
       }
+
+      moduleVersion.download('/')
       debug('getFromSwarm: Reading modules index.json...')
 
       const getFile = async () => {
@@ -1510,10 +1521,24 @@ class SDK extends EventEmitter {
     if (download && moduleDirCreated) {
       dlHandle = dat.downloadFiles(moduleVersion, folderPath)
 
-      if (moduleVersion.isCheckout) {
-        dlHandle.once('end', () => this.makeReadOnly(folderPath))
+      debug('getFromSwarm: downloading module...')
+      if (!moduleVersion.isCheckout) {
+        // watch files
+        const unwatch = moduleVersion.watch('/', async () => {
+          await this.refreshFS(folderPath, moduleVersion).catch(err => {
+            this._log(err, 'warn')
+          })
+        })
+        this.driveUnwatches.set(dkey, unwatch)
       }
 
+      dlHandle.on('error', err => {
+        this._log(err, 'warn')
+      })
+
+      if (moduleVersion.isCheckout && dlHandle) {
+        dlHandle.once('end', () => this.makeReadOnly(folderPath))
+      }
       this.dls.set(dkey, dlHandle)
 
       if (module.p2pcommons.main) {
@@ -1641,6 +1666,7 @@ class SDK extends EventEmitter {
     // this fn will also call seed() after retrieving the module from the swarm
 
     this.assertHyperUrl(mKey)
+
     if (typeof mVersion === 'boolean') {
       download = mVersion
       mVersion = null
@@ -1658,7 +1684,8 @@ class SDK extends EventEmitter {
         this.canceledClone = true
       })
     }
-
+    debug(`clone: mKey: ${mKey}`)
+    debug(`clone: mVersion: ${mVersion}`)
     await this.ready()
 
     let module
@@ -2050,12 +2077,21 @@ class SDK extends EventEmitter {
       mirror.destroy()
     }
 
+    for (const dw of this.dws.values()) {
+      if (dw) {
+        dw.close()
+      }
+    }
+
     for (const mirror of this.dls.values()) {
       mirror.destroy()
     }
     this.dls = new Map()
 
     for (const unwatch of this.externalUpdates.values()) {
+      unwatch.destroy()
+    }
+    for (const unwatch of this.driveUnwatches.values()) {
       unwatch.destroy()
     }
     this.externalUpdates = new Map()
