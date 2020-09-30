@@ -50,6 +50,7 @@ class Codec {
       isWritable: obj.isWritable,
       lastModified: obj.lastModified,
       version: obj.version,
+      isCheckout: obj.isCheckout,
       rawJSON: raw
     })
   }

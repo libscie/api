@@ -81,6 +81,11 @@ const p2p = new P2PCommons()
     - [Partial validations](#partial-validations)
     - [Special validations](#special-validations)
   - [Events](#events)
+    - [Download Started](#download-started)
+    - [Download Progress](#download-progress)
+    - [Download Drive Completed](#update-drive-completed)
+    - [Download Resume Started](#download-resume)
+    - [Download Resume Completed](#download-resume-completed)
     - [Update Profile](#update-profile)
     - [update Content](#update-content)
     - [Warning](#warn)
@@ -347,6 +352,36 @@ Validates whether parents are registered. This validation is only relevant at ti
 ## Events
 
 The following events are emitted by the SDK:
+
+### download-started
+
+> `download-started` `({key})`
+
+Emitted usually after cloning a new module. It passes the key of the drive.
+
+### download-progress
+
+> `download-progress` `({key})`
+
+Event used to track download progress of a new module.
+
+### download-drive-completed
+
+> `download-drive-completed` `({key})`
+
+Emitted when a drive has finished downloading. Drive has not been synced yet.
+
+### download-resume
+
+> `download-resume` `({key})`
+
+Emitted at SDK restart if some module has not finished its download. This means that the download is resuming.
+
+### download-resume-completed
+
+> `download-resume-completed` `({key})`
+
+Emitted when a resume download has been completed and the drive is synced to the disk.
 
 ### update-profile
 

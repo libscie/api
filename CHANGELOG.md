@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Update specification versions
-
+- Update: download fixes (resume, info, progress, events) [wip] #252
 
 ## [0.8.0] - 2020-09-08
 ### Fixed

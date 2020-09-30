@@ -18,6 +18,11 @@
       "name": "version"
     },
     {
+      "type": "boolean",
+      "name": "isCheckout",
+      "default": false
+    },
+    {
       "type": "bytes",
       "name": "rawJSON"
     }

@@ -124,6 +124,8 @@ class SDK extends EventEmitter {
     this.dws = new Map()
     this.externalUpdates = new Map()
     this.driveUnwatches = new Map()
+    this.downloadListeners = new Map()
+    this.resumeDlHandles = new Map()
 
     this.dht = finalOpts.dht
     this.bootstrap = finalOpts.bootstrap
@@ -495,6 +497,32 @@ class SDK extends EventEmitter {
           }
         }
 
+        try {
+          debug('refreshMTimes: re-attaching drive watcher...')
+          const dkey = DatEncoding.encode(drive.discoveryKey)
+          if (!metadata.isCheckout) {
+            const unwatch = drive.watch('/', () => {
+              this.refreshFS(moduleDir, drive).catch(err =>
+                this._log(err, 'warn')
+              )
+            })
+            this.driveUnwatches.set(dkey, unwatch)
+          }
+        } catch (err) {
+          this._log(`refreshMTimes: downloadFiles error - ${err.msg}`, 'warn')
+        }
+
+        // resume downloads
+        try {
+          await this.resumeDownload(
+            urlString,
+            metadata.version,
+            metadata.isCheckout
+          )
+        } catch (err) {
+          this._log(`Unable to resume download. Err: ${err.message}`)
+        }
+
         if (dirIndexJSON !== driveIndexJSON) {
           mtime = mtimePerIndex
           debug('refreshMTimes mtimePerIndex %s', mtime)
@@ -513,26 +541,9 @@ class SDK extends EventEmitter {
           metadata.lastModified.getTime()
         )
         debug('refreshMTimes mtime getTime %s', mtime.getTime())
-        if (metadata.lastModified.getTime() >= mtime.getTime()) continue
-
-        try {
-          debug('refreshMTimes: re-attaching drive watcher...')
-          const dkey = DatEncoding.encode(drive.discoveryKey)
-          if (!drive.isCheckout) {
-            const unwatch = drive.watch('/', () => {
-              this.refreshFS(moduleDir, drive).catch(err =>
-                this._log(err, 'warn')
-              )
-            })
-            this.driveUnwatches.set(dkey, unwatch)
-          }
-        } catch (err) {
-          this._log(`refreshMTimes: downloadFiles error - ${err.msg}`, 'warn')
-        } finally {
-          // make it read only again
-          if (drive.isCheckout) {
-            await this.makeReadOnly(moduleDir)
-          }
+        if (metadata.lastModified.getTime() >= mtime.getTime()) {
+          debug(`refreshMTimes: skip update ${urlString}`)
+          continue
         }
 
         const module = overwriteIndex
@@ -594,6 +605,67 @@ class SDK extends EventEmitter {
     }
   }
 
+  async resumeDownload (key, version, isCheckout) {
+    debug(
+      `resumeDownload: checking for incomplete download - key ${key} - version ${version} - isCheckout ${isCheckout}`
+    )
+    assert(typeof key === 'string', 'string is expected')
+
+    const moduleDir = isCheckout
+      ? join(this.baseDir, key, `+${version}`)
+      : join(this.baseDir, key)
+
+    let dlInfo, drive
+    try {
+      const out = await this.getDownloadInfo(key, version, isCheckout)
+      dlInfo = out.dlInfo
+    } catch (err) {
+      console.log(err)
+    }
+    if (isCheckout) {
+      await this.makeWritable(moduleDir)
+    }
+    if (!dlInfo.complete) {
+      this.emit('download-resume', {
+        key,
+        percentage: dlInfo.percentage
+      })
+      debug(`resumeDownload: resuming key ${key}`)
+
+      const downloadStats = () => {
+        this.emit('download-progress', {
+          key
+        })
+      }
+
+      const downloadComplete = () => {
+        this.emit('download-resume-completed', { key })
+      }
+
+      dlInfo.resume()
+
+      try {
+        drive = await this.getDrive(key, version)
+      } catch (err) {
+        console.log(err)
+        return
+      }
+      const dlHandle = dat.downloadFiles(drive, moduleDir)
+      dlHandle.on('put-end', downloadStats)
+      dlHandle.on('end', downloadComplete)
+      const clean = () => {
+        dlHandle.off('put-end', downloadStats)
+        dlHandle.off('end', downloadComplete)
+      }
+      this.resumeDlHandles.set(DatEncoding.encode(key), { dlHandle, clean })
+    } else {
+      await this.refreshFS(moduleDir, drive)
+    }
+    if (isCheckout) {
+      // await this.makeReadOnly(moduleDir)
+    }
+  }
+
   async ready () {
     if (this.start) {
       this._log('already started')
@@ -644,13 +716,17 @@ class SDK extends EventEmitter {
       await moduleHyper.ready()
     }
 
-    const { rawJSON: localRawJSON } = await this.get(moduleUrl)
+    const {
+      rawJSON: localRawJSON,
+      metadata: { isCheckout }
+    } = await this.get(moduleUrl)
     const [driveStat] = await moduleHyper.stat(file.name)
     // update localdb
     const metadata = {
       isWritable: moduleHyper.writable,
       lastModified: driveStat.mtime,
-      version: Number(moduleHyper.version)
+      version: Number(moduleHyper.version),
+      isCheckout
     }
     const indexJSON = JSON.parse(
       await moduleHyper.readFile('index.json', 'utf-8')
@@ -786,7 +862,8 @@ class SDK extends EventEmitter {
       // start hyperswarm
       isWritable: archive.writable,
       lastModified: stat[0].mtime,
-      version: Number(archive.version)
+      version: Number(archive.version),
+      isCheckout: false
     }
 
     this.assertMetadata(metadata)
@@ -818,7 +895,14 @@ class SDK extends EventEmitter {
     return { rawJSON: this._flatten(indexJSON), metadata, driveWatch }
   }
 
-  async saveItem ({ isWritable, lastModified, version, indexJSON, main }) {
+  async saveItem ({
+    isWritable,
+    lastModified,
+    version,
+    isCheckout,
+    indexJSON,
+    main
+  }) {
     debug('saveItem', indexJSON)
     assert(
       typeof isWritable === 'boolean',
@@ -885,7 +969,8 @@ class SDK extends EventEmitter {
     const metadata = {
       isWritable,
       lastModified: isWritable ? driveMtime : lastModified,
-      version: isWritable ? Number(driveVersion) : Number(version)
+      version: isWritable ? Number(driveVersion) : Number(version),
+      isCheckout
     }
 
     this.assertMetadata(metadata)
@@ -1106,6 +1191,7 @@ class SDK extends EventEmitter {
     const diff = await dat.syncFS(moduleDir, drive, opts)
     this._log(`Applying diff to FS (path: ${moduleDir})`)
     this._log({ diff })
+    this.emit('update-module', { diff, key: DatEncoding.encode(drive.key) })
     return diff
   }
 
@@ -1145,7 +1231,8 @@ class SDK extends EventEmitter {
       const metadata = {
         isWritable: drive.writable,
         lastModified: driveStat.mtime,
-        version: Number(drive.version)
+        version: Number(drive.version),
+        isCheckout: false
       }
       const indexJSON = JSON.parse(await drive.readFile('index.json', 'utf-8'))
 
@@ -1407,6 +1494,33 @@ class SDK extends EventEmitter {
   }
 
   /**
+   * finishDownload.
+   *
+   * @description this is called when the drive download method has finished for current version
+   * @private
+   * @param {String} key
+   */
+  async finishDownload (key, version, isCheckout) {
+    debug('finishDownload: download resume completed')
+    const keyString = DatEncoding.encode(key)
+    const moduleDir = isCheckout
+      ? join(this.baseDir, keyString, `+${version}`)
+      : join(this.baseDir, keyString)
+
+    await this.makeWritable(moduleDir)
+    const drive = await this.getDrive(key, version)
+    // if (isCheckout) {
+    //  drive = drive.checkout(version)
+    // }
+    await this.refreshFS(moduleDir, drive)
+    this.emit('download-resume-completed', { key })
+    debug(`finishDownload: fs moduleDir ${moduleDir} synced OK`)
+    if (isCheckout) {
+      // await this.makeReadOnly(moduleDir)
+    }
+  }
+
+  /**
    * createModuleDir.
    *
    * @description creates a module directory. Emits a warn if directory already exists or if it is read-only
@@ -1450,7 +1564,10 @@ class SDK extends EventEmitter {
     debug('getFromSwarm: fetching from swarm')
     version = parseInt(version)
     const mKeyString = DatEncoding.encode(key)
-    let moduleVersion, module, dlHandle
+    let moduleVersion
+    let module
+    let dlHandle
+    let isCheckout = false
     debug(`getFromSwarm: fetching key ${mKeyString.substr(0, 6)}`)
     debug(`getFromSwarm: fetching version ${version}`)
 
@@ -1459,7 +1576,7 @@ class SDK extends EventEmitter {
     debug('getFromSwarm: Module version', moduleHyper.version)
 
     if (this.canceledClone) {
-      return
+      return { canceled: true }
     }
 
     const dkey = DatEncoding.encode(moduleHyper.discoveryKey)
@@ -1467,10 +1584,12 @@ class SDK extends EventEmitter {
       // 3 - after fetching module we still need to read the index.json file
       if (Number.isFinite(version) && version !== 0) {
         moduleVersion = moduleHyper.checkout(version)
+        isCheckout = true
       } else {
         moduleVersion = moduleHyper
       }
 
+      this.emit('download-started', { key: mKeyString, percentage: 0 })
       moduleVersion.download('/')
       debug('getFromSwarm: Reading modules index.json...')
 
@@ -1500,7 +1619,9 @@ class SDK extends EventEmitter {
       }
     } catch (err) {
       this._log(err.message, 'error')
-      if (this.canceledClone) return
+      if (this.canceledClone) {
+        return { canceled: true }
+      }
       throw new Error('clone: Problems fetching external module')
     }
     // 4 - write module into the fs (create directory)
@@ -1537,7 +1658,7 @@ class SDK extends EventEmitter {
       })
 
       if (moduleVersion.isCheckout && dlHandle) {
-        dlHandle.once('end', () => this.makeReadOnly(folderPath))
+        // dlHandle.once('end', () => this.makeReadOnly(folderPath))
       }
       this.dls.set(dkey, dlHandle)
 
@@ -1561,7 +1682,7 @@ class SDK extends EventEmitter {
         const mtime = stat[0].mtime
         try {
           const {
-            metadata: { lastModified }
+            metadata: { lastModified, isCheckout: oldIsCheckout }
           } = await this.get(module.url)
 
           if (mtime > lastModified) {
@@ -1569,7 +1690,8 @@ class SDK extends EventEmitter {
             const metadata = {
               isWritable: moduleHyper.writable,
               lastModified: mtime,
-              version: Number(moduleHyper.version)
+              version: Number(moduleHyper.version),
+              isCheckout: oldIsCheckout
             }
 
             await this.localdb.put(DatEncoding.encode(module.url), {
@@ -1599,7 +1721,8 @@ class SDK extends EventEmitter {
     const metadata = {
       isWritable: moduleVersion.writable,
       lastModified: stat[0].mtime,
-      version: Number(moduleVersion.version)
+      version: Number(moduleVersion.version),
+      isCheckout
     }
     if (
       !lastMeta ||
@@ -1645,6 +1768,75 @@ class SDK extends EventEmitter {
       rawJSON,
       metadata
     }
+  }
+
+  /**
+   * getDownloadInfo.
+   *
+   * @description
+   * @private
+   * @param {String} key - drive key
+   * @param {Number} [version] - optional drive version
+   * @param {Boolean} [isCheckout] - isCheckout indicator
+   */
+  async getDownloadInfo (key, version, isCheckout) {
+    const dkey = DatEncoding.encode(
+      crypto.discoveryKey(DatEncoding.decode(key))
+    )
+    let drive = this.drives.get(dkey)
+    if (!drive) {
+      drive = await this.getDrive(key)
+      this.drives.set(dkey, drive)
+    }
+
+    const getContentFeed = async () => {
+      return new Promise((resolve, reject) => {
+        drive.getContent((err, feed) => {
+          if (err) return reject(err)
+          return resolve(feed)
+        })
+      })
+    }
+
+    const contentFeed = await getContentFeed()
+
+    const total = contentFeed.length
+
+    const downloadStats = (index, data) => {
+      this.emit('download-progress', {
+        key,
+        index
+      })
+    }
+
+    const downloadComplete = () => {
+      this.emit('download-drive-completed', { key, percentage: 100 })
+    }
+
+    if (!this.downloadListeners.has(dkey)) {
+      contentFeed.on('download', downloadStats)
+      contentFeed.on('sync', downloadComplete)
+      contentFeed.on('close', () => {
+        contentFeed.off('download', downloadStats)
+        contentFeed.off('sync', downloadComplete)
+      })
+      this.downloadListeners.set(dkey)
+    }
+
+    const dlInfo = {
+      downloaded: contentFeed.downloaded(),
+      downloading: contentFeed.downloading,
+      total,
+      complete: contentFeed.downloaded() >= total,
+      percentage: (contentFeed.downloaded() * 100) / total,
+      resume: cb =>
+        contentFeed.download(
+          { start: contentFeed.downloaded(), end: total, linear: true },
+          cb
+        ),
+      cancel: downloadID => contentFeed.undownload(downloadID)
+    }
+    return { dlInfo }
   }
 
   /**
@@ -1696,25 +1888,57 @@ class SDK extends EventEmitter {
     const mKeyString = DatEncoding.encode(mKey)
 
     if (!mVersion) {
-      const out = await this.getModule(mKeyString)
-      if (this.canceledClone) return
-      module = out.rawJSON
-      meta = out.metadata
+      try {
+        const out = await this.getModule(mKeyString)
+        if (out.canceled) {
+          this.canceledClone = false
+          return Promise.reject(
+            new Error({ canceled: true, msg: 'canceled by the user' })
+          )
+        }
+        module = out.rawJSON
+        meta = out.metadata
+      } catch (_) {
+        console.log('module not found in db')
+      }
     }
 
     if (!module) {
       const out = await this.getFromSwarm(mKey, mVersion, download)
-      if (this.canceledClone) return
+      if (out.canceled) {
+        this.canceledClone = false
+        return Promise.reject(
+          new Error({ canceled: true, msg: 'canceled by the user' })
+        )
+      }
+
       module = out.rawJSON
       meta = out.metadata
       dlHandle = out.dlHandle
+    }
+
+    const dkey = DatEncoding.encode(
+      crypto.discoveryKey(DatEncoding.decode(mKey))
+    )
+
+    if (!dlHandle) {
+      dlHandle = this.dls.get(dkey)
+    }
+
+    // NEW: check download info
+    let dlInfo
+    try {
+      dlInfo = await this.getDownloadInfo(mKeyString, mVersion, meta.isCheckout)
+    } catch (err) {
+      console.log(err)
     }
 
     return {
       rawJSON: this._flatten(module),
       versionedKey: `${mKeyString}+${version}`,
       metadata: meta,
-      dlHandle
+      dlHandle,
+      dlInfo
     }
   }
 
@@ -2095,6 +2319,11 @@ class SDK extends EventEmitter {
       unwatch.destroy()
     }
     this.externalUpdates = new Map()
+
+    for (const { destroy, clean } of this.resumeDlHandles.values()) {
+      destroy()
+      clean()
+    }
 
     if (db) {
       debug('closing db...')
