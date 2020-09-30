@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - listContent() only returned writable modules
 - refreshMTimes() hangs on unavailable modules
 - Better tracking of external changes using dft #245
+- Only read main file when necessary #253
 
 ### Changed
 - Update specification versions
