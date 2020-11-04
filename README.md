@@ -1,9 +1,7 @@
 # @p2pcommons/sdk-js <img src="https://github.com/p2pcommons/design/raw/main/p2pcommons-logomark-1024-square.png" align="right" height="64" />
 
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
-
-[![All Contributors](https://img.shields.io/badge/all_contributors-3-orange.svg?style=flat-square)](#contributors-)
-
+[![All Contributors](https://img.shields.io/badge/all_contributors-4-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 
 ![npm version](https://img.shields.io/npm/v/@p2pcommons/sdk-js?color=4F2D84)
@@ -484,12 +482,12 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
     <td align="center"><a href="http://dpaez.github.io/"><img src="https://avatars0.githubusercontent.com/u/837500?v=4" width="100px;" alt=""/><br /><sub><b>Diego</b></sub></a><br /><a href="https://github.com/p2pcommons/sdk-js/commits?author=dpaez" title="Code">💻</a> <a href="https://github.com/p2pcommons/sdk-js/commits?author=dpaez" title="Documentation">📖</a> <a href="#ideas-dpaez" title="Ideas, Planning, & Feedback">🤔</a> <a href="#infra-dpaez" title="Infrastructure (Hosting, Build-Tools, etc)">🚇</a></td>
     <td align="center"><a href="http://twitter.com/juliangruber/"><img src="https://avatars2.githubusercontent.com/u/10247?v=4" width="100px;" alt=""/><br /><sub><b>Julian Gruber</b></sub></a><br /><a href="#ideas-juliangruber" title="Ideas, Planning, & Feedback">🤔</a> <a href="https://github.com/p2pcommons/sdk-js/pulls?q=is%3Apr+reviewed-by%3Ajuliangruber" title="Reviewed Pull Requests">👀</a> <a href="https://github.com/p2pcommons/sdk-js/commits?author=juliangruber" title="Tests">⚠️</a> <a href="https://github.com/p2pcommons/sdk-js/issues?q=author%3Ajuliangruber" title="Bug reports">🐛</a></td>
     <td align="center"><a href="https://github.com/jameslibscie"><img src="https://avatars2.githubusercontent.com/u/59870484?v=4" width="100px;" alt=""/><br /><sub><b>James Lomas</b></sub></a><br /><a href="#ideas-jameslibscie" title="Ideas, Planning, & Feedback">🤔</a> <a href="#projectManagement-jameslibscie" title="Project Management">📆</a> <a href="https://github.com/p2pcommons/sdk-js/issues?q=author%3Ajameslibscie" title="Bug reports">🐛</a> <a href="https://github.com/p2pcommons/sdk-js/commits?author=jameslibscie" title="Code">💻</a></td>
+    <td align="center"><a href="https://chjh.nl"><img src="https://avatars0.githubusercontent.com/u/2946344?v=4" width="100px;" alt=""/><br /><sub><b>Chris Hartgerink</b></sub></a><br /><a href="https://github.com/p2pcommons/sdk-js/commits?author=chartgerink" title="Code">💻</a> <a href="#financial-chartgerink" title="Financial">💵</a> <a href="#fundingFinding-chartgerink" title="Funding Finding">🔍</a> <a href="#ideas-chartgerink" title="Ideas, Planning, & Feedback">🤔</a> <a href="#question-chartgerink" title="Answering Questions">💬</a> <a href="https://github.com/p2pcommons/sdk-js/pulls?q=is%3Apr+reviewed-by%3Achartgerink" title="Reviewed Pull Requests">👀</a> <a href="https://github.com/p2pcommons/sdk-js/commits?author=chartgerink" title="Tests">⚠️</a> <a href="#talk-chartgerink" title="Talks">📢</a></td>
   </tr>
 </table>
 
 <!-- markdownlint-enable -->
 <!-- prettier-ignore-end -->
-
 <!-- ALL-CONTRIBUTORS-LIST:END -->
 
 This project follows the [all-contributors](https://github.com/all-contributors/all-contributors) specification. Contributions of any kind welcome! See also our [contributing guidelines](CONTRIBUTING.md).

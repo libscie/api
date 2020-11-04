@@ -40,6 +40,22 @@
         "bug",
         "code"
       ]
+    },
+    {
+      "login": "chartgerink",
+      "name": "Chris Hartgerink",
+      "avatar_url": "https://avatars0.githubusercontent.com/u/2946344?v=4",
+      "profile": "https://chjh.nl",
+      "contributions": [
+        "code",
+        "financial",
+        "fundingFinding",
+        "ideas",
+        "question",
+        "review",
+        "test",
+        "talk"
+      ]
     }
   ],
   "contributorsPerLine": 7,
