@@ -1,8 +1,17 @@
 const { EventEmitter } = require('events')
-const { join, isAbsolute } = require('path')
+const { join, isAbsolute, basename } = require('path')
 const { platform } = require('os')
 const {
-  promises: { open, writeFile, readFile, readdir, stat: statFn, mkdir, chmod }
+  promises: {
+    open,
+    writeFile,
+    readFile,
+    readdir,
+    stat: statFn,
+    mkdir,
+    chmod,
+    copyFile
+  }
 } = require('fs')
 const { promisify } = require('util')
 const chmodrcb = require('chmodr')
@@ -13,6 +22,7 @@ const sub = require('subleveldown')
 const AutoIndex = require('level-auto-index')
 const { Type } = require('@avro/types')
 const crypto = require('hypercore-crypto')
+const HypercoreCache = require('hypercore-cache')
 const DatEncoding = require('dat-encoding')
 const debug = require('debug')('p2pcommons')
 const trash = require('trash')
@@ -96,6 +106,11 @@ const DEFAULT_SDK_OPTS = {
   watch: true
 }
 
+const TOTAL_CACHE_SIZE = 1024 * 1024 * 512
+const CACHE_RATIO = 0.5
+const TREE_CACHE_SIZE = TOTAL_CACHE_SIZE * CACHE_RATIO
+const DATA_CACHE_SIZE = TOTAL_CACHE_SIZE * (1 - CACHE_RATIO)
+
 const DEFAULT_GLOBAL_SETTINGS = {
   networkDepth: 2,
   defaultProfile: '',
@@ -120,12 +135,10 @@ class SDK extends EventEmitter {
 
     this.drives = new Map()
     this.drivesToWatch = new Map()
-    this.dls = new Map()
-    this.dws = new Map()
     this.externalUpdates = new Map()
     this.driveUnwatches = new Map()
     this.downloadListeners = new Map()
-    this.resumeDlHandles = new Map()
+    this.activeFeedDownloads = new Map()
 
     this.dht = finalOpts.dht
     this.bootstrap = finalOpts.bootstrap
@@ -477,6 +490,19 @@ class SDK extends EventEmitter {
           dirIndexJSON === driveIndexJSON
         )
 
+        if (!drive.writable) {
+          // resume downloads
+          try {
+            await this.resumeDownload(
+              urlString,
+              metadata.version,
+              metadata.isCheckout
+            )
+          } catch (err) {
+            this._log(`Unable to resume download. Err: ${err.message}`)
+          }
+        }
+
         if (drive.writable) {
           // If local modules (fs) have changed, update the drives
           const driveWatch = await dat.importFiles(drive, moduleDir, {
@@ -498,29 +524,31 @@ class SDK extends EventEmitter {
         }
 
         try {
-          debug('refreshMTimes: re-attaching drive watcher...')
           const dkey = DatEncoding.encode(drive.discoveryKey)
-          if (!metadata.isCheckout) {
+          if (!metadata.isCheckout && !metadata.isWritable) {
+            debug('refreshMTimes: re-attaching general drive watcher...')
             const unwatch = drive.watch('/', () => {
               this.refreshFS(moduleDir, drive).catch(err =>
                 this._log(err, 'warn')
               )
             })
             this.driveUnwatches.set(dkey, unwatch)
+
+            // specific file watch for profiles index.json
+            if (
+              !this.externalUpdates.has(dkey) &&
+              rawJSON.p2pcommons.type === 'profile'
+            ) {
+              const unwatcher = drive.watch('index.json', async () => {
+                this._updateLocalDB(urlString, { name: 'index.json' }).catch(
+                  err => this._log(err.message, 'error')
+                )
+              })
+              this.externalUpdates.set(dkey, unwatcher)
+            }
           }
         } catch (err) {
           this._log(`refreshMTimes: downloadFiles error - ${err.msg}`, 'warn')
-        }
-
-        // resume downloads
-        try {
-          await this.resumeDownload(
-            urlString,
-            metadata.version,
-            metadata.isCheckout
-          )
-        } catch (err) {
-          this._log(`Unable to resume download. Err: ${err.message}`)
         }
 
         if (dirIndexJSON !== driveIndexJSON) {
@@ -583,7 +611,19 @@ class SDK extends EventEmitter {
       persist: this.persist,
       storageFn: this.storage,
       storageOpts: { storageLocation: this.baseDir },
-      corestoreOpts: {}
+      corestoreOpts: {
+        sparse: this.globalOptions.sparse,
+        cache: {
+          data: new HypercoreCache({
+            maxByteSize: DATA_CACHE_SIZE,
+            estimateSize: val => val.length
+          }),
+          tree: new HypercoreCache({
+            maxByteSize: TREE_CACHE_SIZE,
+            estimateSize: val => 40
+          })
+        }
+      }
     })
 
     this.store.on('error', err => {
@@ -611,55 +651,47 @@ class SDK extends EventEmitter {
     )
     assert(typeof key === 'string', 'string is expected')
 
-    const moduleDir = isCheckout
-      ? join(this.baseDir, key, `+${version}`)
-      : join(this.baseDir, key)
+    const modulePath = isCheckout ? `${key}+${version}` : key
+    const moduleDir = join(this.baseDir, modulePath)
 
-    let dlInfo, drive
-    try {
-      const out = await this.getDownloadInfo(key, version, isCheckout)
-      dlInfo = out.dlInfo
-    } catch (err) {
-      console.log(err)
-    }
+    let drive
+
+    const { dlInfo } = await this.getDownloadInfo(key, version, isCheckout)
     if (isCheckout) {
       await this.makeWritable(moduleDir)
     }
     if (!dlInfo.complete) {
       this.emit('download-resume', {
         key,
-        percentage: dlInfo.percentage
+        downloaded: dlInfo.downloaded
       })
       debug(`resumeDownload: resuming key ${key}`)
 
-      const downloadStats = () => {
-        this.emit('download-progress', {
-          key
-        })
-      }
-
-      const downloadComplete = () => {
-        this.emit('download-resume-completed', { key })
-      }
-
-      dlInfo.resume()
-
       try {
         drive = await this.getDrive(key, version)
+
+        const downloadId = dlInfo.resume(() =>
+          this.finishDownload(key, version, isCheckout).catch(err =>
+            this._log(err, 'warn')
+          )
+        )
+        const cancel = () => {
+          dlInfo.cancel(downloadId)
+        }
+        this.activeFeedDownloads.set(
+          DatEncoding.encode(drive.discoveryKey),
+          cancel
+        )
+
+        if (isCheckout) {
+          drive = drive.checkout(version)
+        }
       } catch (err) {
-        console.log(err)
+        this._log(err, 'error')
         return
       }
-      const dlHandle = dat.downloadFiles(drive, moduleDir)
-      dlHandle.on('put-end', downloadStats)
-      dlHandle.on('end', downloadComplete)
-      const clean = () => {
-        dlHandle.off('put-end', downloadStats)
-        dlHandle.off('end', downloadComplete)
-      }
-      this.resumeDlHandles.set(DatEncoding.encode(key), { dlHandle, clean })
     } else {
-      await this.refreshFS(moduleDir, drive)
+      // await this.refreshFS(moduleDir, drive)
     }
     if (isCheckout) {
       // await this.makeReadOnly(moduleDir)
@@ -718,9 +750,13 @@ class SDK extends EventEmitter {
 
     const {
       rawJSON: localRawJSON,
-      metadata: { isCheckout }
+      metadata: { lastModified, isCheckout }
     } = await this.get(moduleUrl)
+
     const [driveStat] = await moduleHyper.stat(file.name)
+
+    if (driveStat.mtime < lastModified) return
+
     // update localdb
     const metadata = {
       isWritable: moduleHyper.writable,
@@ -742,7 +778,12 @@ class SDK extends EventEmitter {
     })
 
     // emit update-profile|content event
-    this.emit(`update-${indexJSON.p2pcommons.type}`, indexJSON)
+    this.emit('drive-updated', {
+      key: DatEncoding.encode(moduleUrl),
+      type: indexJSON.p2pcommons.type,
+      indexJSON,
+      update: file.name
+    })
   }
 
   /**
@@ -1030,9 +1071,9 @@ class SDK extends EventEmitter {
       }
     }
 
-    const { rawJSON: rawJSONFlatten, metadata } = await this.get(
-      DatEncoding.encode(url)
-    )
+    const keyString = DatEncoding.encode(url)
+
+    const { rawJSON: rawJSONFlatten, metadata } = await this.get(keyString)
     const { host: hyperdriveKey } = parse(rawJSONFlatten.url)
 
     if (!rawJSONFlatten) {
@@ -1407,6 +1448,62 @@ class SDK extends EventEmitter {
     return open(main)
   }
 
+  async addFiles (key, filePaths = []) {
+    this.assertHyperUrl(key)
+    debug(`addFiles: key ${key}`)
+    debug(`addFiles: key ${filePaths}`)
+
+    if (typeof filePaths === 'string') {
+      filePaths = [filePaths]
+    }
+    const keyString = DatEncoding.encode(key)
+
+    const drive = await this.getDrive(keyString)
+    if (!drive.writable) {
+      throw new Error('module is not writable')
+    }
+
+    const moduleDir = join(this.baseDir, keyString)
+
+    for (const file of filePaths) {
+      const destination = join(moduleDir, basename(file))
+      if (!file.includes(moduleDir)) {
+        await copyFile(file, destination)
+      }
+    }
+    await this.refreshDrive(keyString)
+  }
+
+  async removeFile (key, filePaths = []) {
+    this.assertHyperUrl(key)
+    debug(`addFiles: key ${key}`)
+    debug(`addFiles: key ${filePaths}`)
+
+    const files = []
+    if (typeof filePaths === 'string') {
+      files.push(filePaths)
+    } else {
+      files.concat(filePaths)
+    }
+    const keyString = DatEncoding.encode(key)
+
+    const drive = await this.getDrive(keyString)
+    if (!drive.writable) {
+      throw new Error('module is not writable')
+    }
+    const dkey = DatEncoding.encode(drive.discoveryKey)
+    const moduleDir = join(this.baseDir, keyString)
+    const dw = this.drivesToWatch.get(dkey)
+    if (!dw) {
+      await dat.importFiles(drive, moduleDir)
+    }
+
+    for (const file of files) {
+      await drive.unlink(basename(file))
+    }
+    await this.refreshFS(moduleDir, drive)
+  }
+
   /**
    * getDrive
    *
@@ -1502,22 +1599,23 @@ class SDK extends EventEmitter {
    */
   async finishDownload (key, version, isCheckout) {
     debug('finishDownload: download resume completed')
+    this.finishingDownload = true
     const keyString = DatEncoding.encode(key)
-    const moduleDir = isCheckout
-      ? join(this.baseDir, keyString, `+${version}`)
-      : join(this.baseDir, keyString)
-
-    await this.makeWritable(moduleDir)
+    const modulePath = isCheckout ? `${keyString}+${version}` : keyString
+    const moduleDir = join(this.baseDir, modulePath)
     const drive = await this.getDrive(key, version)
-    // if (isCheckout) {
-    //  drive = drive.checkout(version)
-    // }
+    const created = await this.createModuleDir(moduleDir)
+    if (!created) {
+      await this.makeWritable(moduleDir)
+    }
+
     await this.refreshFS(moduleDir, drive)
     this.emit('download-resume-completed', { key })
     debug(`finishDownload: fs moduleDir ${moduleDir} synced OK`)
     if (isCheckout) {
       // await this.makeReadOnly(moduleDir)
     }
+    this.finishingDownload = false
   }
 
   /**
@@ -1535,12 +1633,15 @@ class SDK extends EventEmitter {
       await mkdir(moduleDir)
       return true
     } catch (err) {
-      if (err.code === 'EEXIST' || err.code === 'EACCESS') {
+      if (err.code === 'EEXIST') {
         this._log('moduleDir already exists', 'warn')
+        return true
+      } else if (err.code === 'EACCESS') {
+        this._log('moduleDir is readonly', 'warn')
+        return false
       } else {
-        this._log(err.message, 'error')
+        throw err
       }
-      return false
     }
   }
 
@@ -1566,6 +1667,7 @@ class SDK extends EventEmitter {
     const mKeyString = DatEncoding.encode(key)
     let moduleVersion
     let module
+    let dlInfo
     let dlHandle
     let isCheckout = false
     debug(`getFromSwarm: fetching key ${mKeyString.substr(0, 6)}`)
@@ -1581,24 +1683,26 @@ class SDK extends EventEmitter {
 
     const dkey = DatEncoding.encode(moduleHyper.discoveryKey)
     try {
-      // 3 - after fetching module we still need to read the index.json file
+      ;({ dlInfo } = await this.getDownloadInfo(
+        mKeyString,
+        version,
+        Number.isFinite(version) && version !== 0
+      ))
+
+      // after fetching module we still need to read the index.json file
       if (Number.isFinite(version) && version !== 0) {
+        debug(`getFromSwarm: using checkout ${version}`)
         moduleVersion = moduleHyper.checkout(version)
         isCheckout = true
       } else {
         moduleVersion = moduleHyper
       }
 
-      this.emit('download-started', { key: mKeyString, percentage: 0 })
-      moduleVersion.download('/')
-      debug('getFromSwarm: Reading modules index.json...')
-
       const getFile = async () => {
-        try {
-          return moduleVersion.readFile('index.json', 'utf-8')
-        } catch (_) {}
+        return moduleVersion.readFile('index.json', 'utf-8')
       }
 
+      debug('getFromSwarm: Reading modules index.json...')
       const content = await pRetry(getFile, {
         onFailedAttempt: error => {
           this._log(
@@ -1608,7 +1712,8 @@ class SDK extends EventEmitter {
           )
         },
         retries: 3,
-        minTimeout: 500
+        minTimeout: 500,
+        maxTimeout: 2000
       })
 
       module = JSON.parse(content)
@@ -1640,10 +1745,26 @@ class SDK extends EventEmitter {
     const stat = await moduleHyper.stat('index.json')
 
     if (download && moduleDirCreated) {
-      dlHandle = dat.downloadFiles(moduleVersion, folderPath)
-
       debug('getFromSwarm: downloading module...')
-      if (!moduleVersion.isCheckout) {
+      if (this.activeFeedDownloads.has(dkey)) {
+        if (!dlInfo.complete) {
+          this.emit('download-started', {
+            key: mKeyString,
+            completed: dlInfo.downloaded
+          })
+        }
+        const downloadId = dlInfo.resume(() =>
+          this.finishDownload(mKeyString, version, isCheckout).catch(err =>
+            this._log(err, 'warn')
+          )
+        )
+        const cancel = () => {
+          dlInfo.cancel(downloadId)
+        }
+        this.activeFeedDownloads.set(dkey, cancel)
+      }
+
+      if (!isCheckout && !this.driveUnwatches.has(dkey)) {
         // watch files
         const unwatch = moduleVersion.watch('/', async () => {
           await this.refreshFS(folderPath, moduleVersion).catch(err => {
@@ -1653,14 +1774,9 @@ class SDK extends EventEmitter {
         this.driveUnwatches.set(dkey, unwatch)
       }
 
-      dlHandle.on('error', err => {
-        this._log(err, 'warn')
-      })
-
       if (moduleVersion.isCheckout && dlHandle) {
         // dlHandle.once('end', () => this.makeReadOnly(folderPath))
       }
-      this.dls.set(dkey, dlHandle)
 
       if (module.p2pcommons.main) {
         const filePath = isAbsolute(module.p2pcommons.main)
@@ -1668,44 +1784,17 @@ class SDK extends EventEmitter {
           : join(folderPath, module.p2pcommons.main)
         debug('getFromSwarm: waiting for main file to download...')
         debug('getFromSwarm: filePath %s', filePath)
-        await dlWaitForFile(dlHandle, stat[0].mtime, filePath)
+        await moduleVersion.access(module.p2pcommons.main)
+        await this.refreshFS(folderPath, moduleVersion)
       }
     }
 
     // hook listen for updates
     if (!this.externalUpdates.has(dkey)) {
       const unwatcher = moduleHyper.watch('index.json', async () => {
-        const file = JSON.parse(
-          await moduleHyper.readFile('index.json', 'utf-8')
-        )
-        const stat = await moduleHyper.stat('index.json')
-        const mtime = stat[0].mtime
-        try {
-          const {
-            metadata: { lastModified, isCheckout: oldIsCheckout }
-          } = await this.get(module.url)
-
-          if (mtime > lastModified) {
-            // update localdb
-            const metadata = {
-              isWritable: moduleHyper.writable,
-              lastModified: mtime,
-              version: Number(moduleHyper.version),
-              isCheckout: oldIsCheckout
-            }
-
-            await this.localdb.put(DatEncoding.encode(module.url), {
-              ...metadata,
-              rawJSON: file,
-              avroType: this._getAvroType(file.p2pcommons.type).name
-            })
-
-            // emit update-profile|content event
-            this.emit(`update-${file.p2pcommons.type}`, file)
-          }
-        } catch (err) {
+        this._updateLocalDB(mKeyString, { name: 'index.json' }).catch(err =>
           this._log(err.message, 'error')
-        }
+        )
       })
       this.externalUpdates.set(dkey, unwatcher)
     }
@@ -1757,17 +1846,29 @@ class SDK extends EventEmitter {
     try {
       // 1 - try to get content from localdb
       debug('clone: Fetching module from localdb')
+
       const out = await this.get(mKeyString)
       rawJSON = out.rawJSON
       metadata = out.metadata
     } catch (err) {
       this._log('module not found in local db', 'warn')
+      throw err
     }
 
     return {
       rawJSON,
       metadata
     }
+  }
+
+  async _getContentFeed (drive) {
+    if (!drive) throw new Error('drive is required')
+    return new Promise((resolve, reject) => {
+      drive.getContent((err, feed) => {
+        if (err) return reject(err)
+        return resolve(feed)
+      })
+    })
   }
 
   /**
@@ -1788,52 +1889,46 @@ class SDK extends EventEmitter {
       drive = await this.getDrive(key)
       this.drives.set(dkey, drive)
     }
+    await drive.ready()
 
-    const getContentFeed = async () => {
-      return new Promise((resolve, reject) => {
-        drive.getContent((err, feed) => {
-          if (err) return reject(err)
-          return resolve(feed)
-        })
-      })
-    }
-
-    const contentFeed = await getContentFeed()
+    const contentFeed = await pTimeout(this._getContentFeed(drive), 1000)
 
     const total = contentFeed.length
 
-    const downloadStats = (index, data) => {
-      this.emit('download-progress', {
-        key,
-        index
-      })
-    }
-
-    const downloadComplete = () => {
-      this.emit('download-drive-completed', { key, percentage: 100 })
-    }
-
     if (!this.downloadListeners.has(dkey)) {
+      const downloadStats = (index, data) => {
+        this.emit('download-progress', {
+          key,
+          index
+        })
+      }
+
+      const downloadComplete = () => {
+        this.finishDownload(key, version, isCheckout)
+          .then(() => {
+            this.emit('download-drive-completed', { key })
+          })
+          .catch(err => this._log(err, 'error'))
+      }
+
       contentFeed.on('download', downloadStats)
-      contentFeed.on('sync', downloadComplete)
+      contentFeed.once('sync', downloadComplete)
       contentFeed.on('close', () => {
         contentFeed.off('download', downloadStats)
-        contentFeed.off('sync', downloadComplete)
       })
       this.downloadListeners.set(dkey)
     }
 
     const dlInfo = {
+      key,
       downloaded: contentFeed.downloaded(),
       downloading: contentFeed.downloading,
       total,
-      complete: contentFeed.downloaded() >= total,
-      percentage: (contentFeed.downloaded() * 100) / total,
-      resume: cb =>
-        contentFeed.download(
-          { start: contentFeed.downloaded(), end: total, linear: true },
-          cb
-        ),
+      stats: contentFeed._stats,
+      complete: total !== 0 && contentFeed.downloaded() >= total,
+      resume: cb => {
+        return contentFeed.download(cb)
+      },
       cancel: downloadID => contentFeed.undownload(downloadID)
     }
     return { dlInfo }
@@ -1870,6 +1965,11 @@ class SDK extends EventEmitter {
       download = true
     }
 
+    if (typeof download === 'function') {
+      onCancel = download
+      download = true
+    }
+
     if (onCancel) {
       onCancel.shouldReject = false
       onCancel(() => {
@@ -1881,7 +1981,6 @@ class SDK extends EventEmitter {
     await this.ready()
 
     let module
-    let version
     let meta
     let dlHandle
 
@@ -1899,7 +1998,7 @@ class SDK extends EventEmitter {
         module = out.rawJSON
         meta = out.metadata
       } catch (_) {
-        console.log('module not found in db')
+        this._log('module not found in db', 'warn')
       }
     }
 
@@ -1917,25 +2016,15 @@ class SDK extends EventEmitter {
       dlHandle = out.dlHandle
     }
 
-    const dkey = DatEncoding.encode(
-      crypto.discoveryKey(DatEncoding.decode(mKey))
-    )
-
-    if (!dlHandle) {
-      dlHandle = this.dls.get(dkey)
-    }
-
-    // NEW: check download info
-    let dlInfo
-    try {
-      dlInfo = await this.getDownloadInfo(mKeyString, mVersion, meta.isCheckout)
-    } catch (err) {
-      console.log(err)
-    }
+    const { dlInfo } = await this.getDownloadInfo(
+      mKeyString,
+      mVersion,
+      meta.isCheckout
+    ).catch(err => this._log(err, 'warn'))
 
     return {
       rawJSON: this._flatten(module),
-      versionedKey: `${mKeyString}+${version}`,
+      versionedKey: `${mKeyString}+${meta.version}`,
       metadata: meta,
       dlHandle,
       dlInfo
@@ -2284,7 +2373,7 @@ class SDK extends EventEmitter {
       }
     } catch (err) {
       debug('delete: %O', err)
-      console.error('Something went wrong with delete: %s', err.message)
+      this._log(`Something went wrong with delete: ${err.message}`, 'error')
     }
   }
 
@@ -2297,33 +2386,27 @@ class SDK extends EventEmitter {
    * @param {Boolean} swarm=true - if true it will close the swarm
    */
   async destroy (db = true, swarm = true) {
-    for (const mirror of this.drivesToWatch.values()) {
-      mirror.destroy()
-    }
-
-    for (const dw of this.dws.values()) {
-      if (dw) {
-        dw.close()
-      }
-    }
-
-    for (const mirror of this.dls.values()) {
-      mirror.destroy()
-    }
-    this.dls = new Map()
-
+    // index.json watcher for external drives
     for (const unwatch of this.externalUpdates.values()) {
       unwatch.destroy()
     }
+    this.externalUpdates = new Map()
+    // general drive watch for external drives
     for (const unwatch of this.driveUnwatches.values()) {
       unwatch.destroy()
     }
-    this.externalUpdates = new Map()
-
-    for (const { destroy, clean } of this.resumeDlHandles.values()) {
-      destroy()
-      clean()
+    this.driveUnwatches = new Map()
+    // Close importFiles watches (mirror folder instances)
+    for (const mirror of this.drivesToWatch.values()) {
+      mirror.destroy()
     }
+    this.drivesToWatch = new Map()
+    // cancel active downloads (feed.download calls)
+
+    for (const cancelActiveDl of this.activeFeedDownloads.values()) {
+      cancelActiveDl()
+    }
+    this.activeFeedDownloads = new Map()
 
     if (db) {
       debug('closing db...')

@@ -1,6 +1,6 @@
 const {
   existsSync,
-  promises: { writeFile, readdir, stat, copyFile }
+  promises: { writeFile, readdir, stat }
 } = require('fs')
 const { join } = require('path')
 const execa = require('execa')
@@ -1250,7 +1250,7 @@ test('multiple writes with persistance', async t => {
 })
 
 test('register - local contents', async t => {
-  const p2p = createDb({ persist: true })
+  const p2p = createDb()
 
   const { rawJSON: profile } = await p2p.init({
     type: 'profile',
@@ -1267,18 +1267,18 @@ test('register - local contents', async t => {
   // update author on content module
   await p2p.set({ url: content1.url, authors })
 
-  // manually writing a dummy file
-  await writeFile(
-    join(p2p.baseDir, encode(content1.url), 'file.txt'),
-    'hola mundo'
-  )
+  const { metadata: m1 } = await p2p.get(content1.url)
+
+  await p2p.addFiles(content1.url, './tests/testfile.bin')
 
   await p2p.set({
     url: content1.url,
-    main: 'file.txt'
+    main: 'testfile.bin'
   })
 
   const { metadata } = await p2p.get(content1.url)
+  console.log({ m1version: m1.version })
+  console.log({ m2version: metadata.version })
   const contentKeyVersion = `${encode(content1.url)}+${metadata.version}`
 
   try {
@@ -1310,7 +1310,7 @@ test('register - list versions', async t => {
   })
 
   const versionsInitial = await p2p.getAllVersions(content1.url)
-  t.same(versionsInitial.length, 0, 'No versions created yed')
+  t.same(versionsInitial.length, 0, 'No versions created yet')
 
   const authors = [encode(profile.url)]
 
@@ -2303,7 +2303,7 @@ test('follow and unfollow a profile', async t => {
   t.end()
 })
 
-test('clone a module (using download handle to wait for download complete of module content, not main)', async t => {
+test('clone a module (auto download main file)', async t => {
   const dir = tempy.directory()
   const dir2 = tempy.directory()
 
@@ -2329,18 +2329,20 @@ test('clone a module (using download handle to wait for download complete of mod
 
   // write main.txt
   await writeFile(join(dir, rawJSONpath, 'main.txt'), 'hello')
+  const fileStat = await stat(join(dir, `${rawJSONpath}`, 'main.txt'))
+  await p2p.set({
+    url: rawJSON.url,
+    main: 'main.txt'
+  })
 
-  const { rawJSON: module, dlHandle } = await p2p2.clone(rawJSON.url)
+  const { rawJSON: module } = await p2p2.clone(rawJSON.url)
 
   t.same(module.title, content.title)
 
-  let target
-  while (([target] = await once(dlHandle, 'put-end'))) {
-    if (target && target.name && target.name.includes('main.txt')) {
-      break
-    }
-  }
-
+  const clonedFileStat = await stat(
+    join(p2p2.baseDir, `${rawJSONpath}`, 'main.txt')
+  )
+  t.same(clonedFileStat.size, fileStat.size, 'size should be equal')
   const clonedDir = await readdir(join(p2p2.baseDir, `${rawJSONpath}`))
   t.ok(clonedDir.includes('main.txt'), 'clone downloaded content successfully')
 
@@ -2349,10 +2351,10 @@ test('clone a module (using download handle to wait for download complete of mod
   t.end()
 })
 
-// NOTE(deka): revisit this one
-test.skip('resume download clone', async t => {
+test.skip('clone a module (using download handle to wait for download complete of module content, not main)', async t => {
   const dir = tempy.directory()
   const dir2 = tempy.directory()
+
   await localDHT()
   const p2p = new SDK({
     baseDir: dir,
@@ -2374,20 +2376,62 @@ test.skip('resume download clone', async t => {
   const { rawJSON } = await p2p.init(content)
   const rawJSONpath = encode(rawJSON.url)
 
-  const fileStat = await stat('./tests/cards.pdf')
-  const fileSize = fileStat.size
-  console.log({ fileSize })
-
   // write main.txt
-  // await writeFile(join(dir, rawJSONpath, 'main.txt'), 'hello')
-  await copyFile('./tests/cards.pdf', join(dir, rawJSONpath, 'cards.pdf'))
-  p2p2.on('download-started', console.log)
-  p2p2.on('download-progress', console.log)
+  const filePath = join(dir, rawJSONpath, 'main.txt')
+  await writeFile(filePath, 'hello')
 
-  // const { rawJSON: module, dlInfo } = await p2p2.clone(rawJSON.url)
+  const { rawJSON: module, dlHandle } = await p2p2.clone(rawJSON.url)
+
+  t.same(module.title, content.title)
+
+  let target
+  while (([target] = await once(dlHandle, 'put-end'))) {
+    if (target && target.name && target.name.includes('main.txt')) {
+      break
+    }
+  }
+
+  const clonedDir = await readdir(join(p2p2.baseDir, `${rawJSONpath}`))
+  t.ok(clonedDir.includes('main.txt'), 'clone downloaded content successfully')
+
+  await p2p.destroy()
+  await p2p2.destroy()
+  t.end()
+})
+
+// NOTE(deka): revisit this one
+test('resume download clone', async t => {
+  const dir = tempy.directory()
+  const dir2 = tempy.directory()
+
+  const p2p = new SDK({
+    baseDir: dir,
+    bootstrap: dhtBootstrap
+  })
+
+  const p2p2 = new SDK({
+    baseDir: dir2,
+    bootstrap: dhtBootstrap
+  })
+
+  await p2p2.ready()
+
+  const content = {
+    type: 'content',
+    title: 'test'
+  }
+
+  const { rawJSON } = await p2p.init(content)
+  const keyString = encode(rawJSON.url)
+
+  const fileStat = await stat('./tests/testfile.bin')
+  const fileSize = fileStat.size
+
+  // write some file into the module folder
+  await p2p.addFiles(keyString, './tests/testfile.bin')
+
   await p2p2.clone(rawJSON.url)
 
-  console.log('killing sdk instance')
   await p2p2.destroy()
 
   await new Promise(resolve => setTimeout(resolve, 10))
@@ -2398,26 +2442,93 @@ test.skip('resume download clone', async t => {
     bootstrap: dhtBootstrap
   })
 
-  p2p3.on('download-resume', key => console.log('resuming download', key))
+  // Note(deka): check that download-resume is emitted for key === keyString
   await p2p3.ready()
+
+  await once(p2p3, 'download-drive-completed')
 
   const { rawJSON: module } = await p2p3.get(rawJSON.url)
 
   t.same(module.title, content.title)
 
-  await once(p2p3, 'download-resume-completed')
-
   // validate file size on disk
-  const clonedFileSize = await stat(join(dir2, rawJSONpath, 'cards.pdf'))
-  console.log({ clonedSize: clonedFileSize.size })
-  t.ok(clonedFileSize.size >= fileSize, 'file size is OK')
+  const clonedFileSize = await stat(join(dir2, keyString, 'testfile.bin'))
 
-  const clonedDir = await readdir(join(p2p2.baseDir, `${rawJSONpath}`))
-  console.log({ clonedDir: join(p2p2.baseDir, `${rawJSONpath}`) })
-  t.ok(clonedDir.includes('cards.pdf'), 'clone downloaded content successfully')
+  t.ok(clonedFileSize.size >= fileSize, 'cloned file size is OK')
+
+  const clonedDir = await readdir(join(p2p3.baseDir, `${keyString}`))
+
+  t.ok(
+    clonedDir.includes('testfile.bin'),
+    'clone downloaded content successfully'
+  )
 
   await p2p.destroy()
   await p2p3.destroy()
+  t.end()
+})
+
+test('clone a module (multiple calls)', async t => {
+  const dir = tempy.directory()
+  const dir2 = tempy.directory()
+
+  const p2p = new SDK({
+    baseDir: dir,
+    bootstrap: dhtBootstrap
+  })
+
+  const p2p2 = new SDK({
+    baseDir: dir2,
+    bootstrap: dhtBootstrap
+  })
+
+  await p2p2.ready()
+
+  const content = {
+    type: 'content',
+    title: 'test'
+  }
+
+  const { rawJSON } = await p2p.init(content)
+  const rawJSONpath = encode(rawJSON.url)
+
+  // write some files
+  const filePath = join(dir, rawJSONpath, 'main.txt')
+  await writeFile(filePath, 'hello')
+
+  await p2p.addFiles(rawJSON.url, [filePath, './tests/testfile.bin'])
+
+  const { rawJSON: module, dlInfo } = await p2p2.clone(rawJSON.url)
+
+  if (!dlInfo.complete) {
+    dlInfo.resume()
+    await once(p2p2, 'download-drive-completed')
+  }
+  t.same(module.title, content.title)
+
+  const clonedDir = await readdir(join(p2p2.baseDir, rawJSONpath))
+  t.ok(clonedDir.includes('main.txt'), 'clone downloaded content successfully')
+  t.ok(
+    clonedDir.includes('testfile.bin'),
+    'clone downloaded content successfully'
+  )
+
+  // multiple clone calls
+  const { rawJSON: module2 } = await p2p2.clone(rawJSON.url)
+
+  t.ok(
+    JSON.stringify(module2) === JSON.stringify(module),
+    'clone should return the same value'
+  )
+
+  const { rawJSON: module3 } = await p2p2.clone(rawJSON.url)
+  t.ok(
+    JSON.stringify(module3) === JSON.stringify(module),
+    'clone should return the same value'
+  )
+
+  await p2p.destroy()
+  await p2p2.destroy()
   t.end()
 })
 
@@ -2641,6 +2752,11 @@ test('check lastModified on ready (refreshMTimes)', async t => {
   )
   await p2p.destroy()
 
+  await new Promise(resolve => {
+    setTimeout(() => {
+      return resolve()
+    }, 100)
+  })
   // update main.txt while sdk is off...
   await writeFile(join(dir, contentPath, 'main.txt'), 'hello world')
   rawJSON.description = 'what is this??'
@@ -2656,13 +2772,15 @@ test('check lastModified on ready (refreshMTimes)', async t => {
     disableSwarm: true,
     baseDir: dir
   })
-  await p2p2.ready()
 
-  const { metadata: cMetadataFinal } = await p2p2.get(content.url)
+  const { rawJSON: final, metadata: cMetadataFinal } = await p2p2.get(
+    content.url
+  )
 
   const all = await p2p2.list()
 
-  t.same(all.length, 2)
+  t.same(all.length, 2, 'total number of modules is 2')
+  t.same(final.description, 'what is this??', 'content is updated accordingly')
 
   t.ok(
     cMetadataFinal.lastModified.getTime() >

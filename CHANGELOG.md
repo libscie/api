@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - refreshMTimes() hangs on unavailable modules
 - Better tracking of external changes using dft #245
 - Only read main file when necessary #253
+- Fix: resume downloads and general clone fixes
 
 ### Changed
 - Update specification versions
