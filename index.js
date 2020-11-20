@@ -31,7 +31,7 @@ const pRetry = require('p-retry')
 const PCancelable = require('p-cancelable')
 const pMemoize = require('p-memoize')
 const pTimeout = require('p-timeout')
-const Swarm = require('corestore-swarm-networking')
+const Swarm = require('@corestore/networker')
 const dat = require('./lib/dat-helper')
 const parse = require('./lib/parse-url')
 const baseDir = require('./lib/base-dir')
@@ -306,7 +306,7 @@ class SDK extends EventEmitter {
 
       debug(`swarm seeding ${dkey}`)
 
-      this.networker.join(archive.discoveryKey, { ...finalOpts })
+      this.networker.configure(archive.discoveryKey, { ...finalOpts })
 
       archive.once('close', () => {
         debug(`closing archive ${dkey}...`)
@@ -318,9 +318,8 @@ class SDK extends EventEmitter {
   async _reseed () {
     const driveList = await collect(this.seeddb)
     debug(`re-seeding ${driveList.length} modules...`)
-    // Note(dk): latest corestore-swarm-networking has an async join
     const joins = driveList.map(item => {
-      this.networker.join(item.key, item.opts)
+      this.networker.configure(item.key, item.opts)
     })
     await Promise.all(joins)
   }
@@ -2369,7 +2368,7 @@ class SDK extends EventEmitter {
         await drive.close()
       }
       if (!this.disableSwarm && !keyVersion) {
-        this.networker.leave(dkeyString)
+        this.networker.configure(dkeyString, { announce: false, lookup: false })
       }
     } catch (err) {
       debug('delete: %O', err)
