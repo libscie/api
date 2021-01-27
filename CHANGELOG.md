@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update specification versions
 - Update: download fixes (resume, info, progress, events) [wip] #252
 - Update: corestore-swarm-networker to corestore/networker
+- Upgrade: bump ini from 1.3.5 to 1.3.7
 - Update: Copyright year
 
 ## [0.8.0] - 2020-09-08
