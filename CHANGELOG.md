@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - refreshMTimes() hangs on unavailable modules
 - Better tracking of external changes using dft #245
 - Only read main file when necessary #253
-- Fix: resume downloads and general clone fixes
+- Fix: resume download and general clone fixes
 
 ### Changed
 - Update specification versions
@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update: corestore-swarm-networker to corestore/networker
 - Upgrade: bump ini from 1.3.5 to 1.3.7
 - Update: Copyright year
+- Temporarily skip two tests
 
 ## [0.8.0] - 2020-09-08
 ### Fixed

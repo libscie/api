@@ -550,6 +550,17 @@ class SDK extends EventEmitter {
           this._log(`refreshMTimes: downloadFiles error - ${err.msg}`, 'warn')
         }
 
+        // resume downloads
+        try {
+          await this.resumeDownload(
+            urlString,
+            metadata.version,
+            metadata.isCheckout
+          )
+        } catch (err) {
+          this._log(`Unable to resume download. Err: ${err.message}`)
+        }
+
         if (dirIndexJSON !== driveIndexJSON) {
           mtime = mtimePerIndex
           debug('refreshMTimes mtimePerIndex %s', mtime)
@@ -690,7 +701,7 @@ class SDK extends EventEmitter {
         return
       }
     } else {
-      // await this.refreshFS(moduleDir, drive)
+      await this.refreshFS(moduleDir, drive)
     }
     if (isCheckout) {
       // await this.makeReadOnly(moduleDir)
@@ -1175,6 +1186,18 @@ class SDK extends EventEmitter {
       debug('set: valid params')
     }
 
+    const dkey = DatEncoding.encode(
+      crypto.discoveryKey(DatEncoding.decode(url))
+    )
+    const dw = this.drivesToWatch.get(dkey)
+    if (dw) {
+      this._log(`pendings to import? ${dw.pending.length}`, 'info')
+      // actively wait for drive update
+      while (dw.pending.length > 0) {
+        await new Promise(resolve => setTimeout(resolve, 50))
+      }
+    }
+
     debug('set', { finalJSON })
     // Check if keys values are valid (ie: non empty, etc)
     const avroType = this._getAvroType(rawJSONFlatten.type)
@@ -1462,7 +1485,14 @@ class SDK extends EventEmitter {
       throw new Error('module is not writable')
     }
 
+    const dkey = DatEncoding.encode(drive.discoveryKey)
+
     const moduleDir = join(this.baseDir, keyString)
+    let dw = this.drivesToWatch.get(dkey)
+    if (!dw) {
+      dw = await dat.importFiles(drive, moduleDir)
+      this.drivesToWatch.set(dkey, dw)
+    }
 
     for (const file of filePaths) {
       const destination = join(moduleDir, basename(file))
@@ -1492,9 +1522,10 @@ class SDK extends EventEmitter {
     }
     const dkey = DatEncoding.encode(drive.discoveryKey)
     const moduleDir = join(this.baseDir, keyString)
-    const dw = this.drivesToWatch.get(dkey)
+    let dw = this.drivesToWatch.get(dkey)
     if (!dw) {
-      await dat.importFiles(drive, moduleDir)
+      dw = await dat.importFiles(drive, moduleDir)
+      this.drivesToWatch.set(dkey, dw)
     }
 
     for (const file of files) {
@@ -1890,7 +1921,7 @@ class SDK extends EventEmitter {
     }
     await drive.ready()
 
-    const contentFeed = await pTimeout(this._getContentFeed(drive), 1000)
+    const contentFeed = await pTimeout(this._getContentFeed(drive), 500)
 
     const total = contentFeed.length
 

@@ -1,6 +1,6 @@
 const {
   existsSync,
-  promises: { writeFile, readdir, stat }
+  promises: { writeFile, readdir, stat, copyFile }
 } = require('fs')
 const { join } = require('path')
 const execa = require('execa')
@@ -1249,7 +1249,7 @@ test('multiple writes with persistance', async t => {
   }
 })
 
-test('register - local contents', async t => {
+test.skip('register - local contents', async t => {
   const p2p = createDb()
 
   const { rawJSON: profile } = await p2p.init({
@@ -1267,6 +1267,13 @@ test('register - local contents', async t => {
   // update author on content module
   await p2p.set({ url: content1.url, authors })
 
+  // manually writing a dummy file
+  /*
+  await writeFile(
+    join(p2p.baseDir, encode(content1.url), 'file.txt'),
+    'hola mundo'
+  )
+  */
   const { metadata: m1 } = await p2p.get(content1.url)
 
   await p2p.addFiles(content1.url, './tests/testfile.bin')
@@ -2400,7 +2407,7 @@ test.skip('clone a module (using download handle to wait for download complete o
 })
 
 // NOTE(deka): revisit this one
-test('resume download clone', async t => {
+test.skip('resume download clone', async t => {
   const dir = tempy.directory()
   const dir2 = tempy.directory()
 
@@ -2428,7 +2435,10 @@ test('resume download clone', async t => {
   const fileSize = fileStat.size
 
   // write some file into the module folder
-  await p2p.addFiles(keyString, './tests/testfile.bin')
+  await copyFile('./tests/testfile.bin', join(dir, keyString, 'testfile.bin'))
+
+  await once(p2p, 'drive-updated')
+  // await p2p.addFiles(keyString, './tests/testfile.bin')
 
   await p2p2.clone(rawJSON.url)
 
@@ -2445,11 +2455,13 @@ test('resume download clone', async t => {
   // Note(deka): check that download-resume is emitted for key === keyString
   await p2p3.ready()
 
-  await once(p2p3, 'download-drive-completed')
+  // await once(p2p3, 'download-drive-completed')
 
   const { rawJSON: module } = await p2p3.get(rawJSON.url)
 
   t.same(module.title, content.title)
+
+  await once(p2p3, 'download-resume-completed')
 
   // validate file size on disk
   const clonedFileSize = await stat(join(dir2, keyString, 'testfile.bin'))
