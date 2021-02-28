@@ -1,13 +1,14 @@
 {
   "name": "@p2pcommons/sdk-js",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "The SDK for the p2p commons",
   "main": "index.js",
   "scripts": {
     "test": "prettier-standard && standard && tape tests/*.test.js | tap-spec",
     "format": "prettier-standard --format",
     "version": "chan release ${npm_package_version} --ghrelease && git add CHANGELOG.md",
-    "prepublishOnly": "npm test"
+    "prepublishOnly": "npm test",
+    "release": "np"
   },
   "precommit": "prettier-standard --lint --staged",
   "repository": {
@@ -63,6 +64,7 @@
     "mirror-folder": "^3.0.0",
     "nanocustomassert": "^1.0.0",
     "nanoerror": "^1.2.1",
+    "np": "^7.4.0",
     "p-cancelable": "^2.0.0",
     "p-memoize": "^4.0.0",
     "p-retry": "^4.2.0",
