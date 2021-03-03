@@ -6,7 +6,12 @@
 
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 
-![npm version](https://img.shields.io/npm/v/@p2pcommons/sdk-js?color=4F2D84)
+![npm version](https://img.shields.io/npm/v/@p2pcommons/sdk-js?color=%23BEBAFB&style=flat-square)
+![license](https://img.shields.io/npm/l/@p2pcommons/sdk-js?color=01A38A&style=flat-square)
+![downloads total](https://img.shields.io/npm/dt/@p2pcommons/sdk-js?color=%23033C76&style=flat-square)
+![downloads yearly](https://img.shields.io/npm/dy/@p2pcommons/sdk-js?color=%230669CD&style=flat-square)
+![downloads monthly](https://img.shields.io/npm/dm/@p2pcommons/sdk-js?color=%233096FE&style=flat-square)
+![downloads weekly](https://img.shields.io/npm/dw/@p2pcommons/sdk-js?color=%239BCDFF&style=flat-square)
 
 ![ci](https://github.com/p2pcommons/sdk-js/workflows/ci/badge.svg)
 
