@@ -1,4 +1,5 @@
 const createSdk = require('./utils/create-sdk')
+const testSdk = require('./test-sdk')
 
 const {
   existsSync,
@@ -21,77 +22,10 @@ const localDHT = async () => {
   dhtBootstrap = url
 }
 
-test('sdk re-start', async t => {
+;(async () => {
   await localDHT()
-  // issue arise when we have external content in our db, lets fix that
-
-  const p2p = createSdk({ swarm: true, persist: true, dhtBootstrap })
-
-  const p2p2 = createSdk({ swarm: true, persist: true, dhtBootstrap })
-
-  const p2p3 = createSdk({ swarm: true, persist: true, dhtBootstrap })
-
-  const externalContent = {
-    type: 'content',
-    title: 'demo content',
-    description: 'something remote'
-  }
-  const {
-    rawJSON,
-    metadata: { version: remoteVersion }
-  } = await p2p.init(externalContent)
-
-  const localProfile = {
-    type: 'profile',
-    title: 'professorX'
-  }
-  await p2p2.init(localProfile)
-
-  // p2p2 clones the module
-  const { rawJSON: remoteJSON } = await p2p2.clone(rawJSON.url, remoteVersion)
-
-  t.same(remoteJSON, rawJSON, 'cloned module')
-  // some other peer clone the content module too
-  await p2p3.clone(rawJSON.url, remoteVersion)
-
-  // shutdown sdk instances
-  await p2p2.destroy()
-  await p2p3.destroy()
-
-  // content is updated remotely...
-  const {
-    metadata: { version: updatedVersion }
-  } = await p2p.set({ url: rawJSON.url, description: 'something updated' })
-  t.ok(updatedVersion > remoteVersion, 'version is incremented')
-
-  // restart other peer
-  const otherPeer = new SDK({
-    bootstrap: dhtBootstrap,
-    baseDir: p2p3.baseDir
-  })
-  await new Promise(resolve => {
-    setTimeout(resolve, 200)
-  })
-  await otherPeer.ready()
-
-  // now instantiate back p2p2 sdk (same storage, same db)
-  const p2p4 = new SDK({
-    bootstrap: dhtBootstrap,
-    baseDir: p2p2.baseDir
-  })
-
-  try {
-    await p2p4.ready()
-  } catch (err) {
-    t.fail(err)
-  }
-
-  t.pass('all good')
-  await otherPeer.destroy()
-  await p2p.destroy()
-  await p2p4.destroy()
-  t.end()
-})
+  await testSdk(dhtBootstrap)
+})()
 
 test('saveItem: should throw ValidationError with invalid metadata', async t => {
   const dir = tempy.directory()
