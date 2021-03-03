@@ -1,4 +1,5 @@
 const createSdk = require('./utils/create-sdk')
+const testGetMethod = require('./test-get-method')
 const testFollowMethod = require('./test-follow-method')
 
 const {
@@ -26,6 +27,7 @@ const localDHT = async () => {
   dhtBootstrap = url
 }
 
+testGetMethod()
 testFollowMethod()
 
 test('ready', async t => {
@@ -165,23 +167,6 @@ test('SDK emit warning', async t => {
   t.same(rawJSON.title, contentData.title)
   t.same(rawJSON.type, contentData.type)
   t.same(rawJSON.subtype, contentData.subtype)
-  await p2p.destroy()
-  t.end()
-})
-
-test('get: retrieve a value from the sdk', async t => {
-  const p2p = createSdk()
-  const sampleData = {
-    type: 'profile',
-    title: 'demo',
-    description: 'lorem ipsum'
-  }
-  const { rawJSON: init } = await p2p.init(sampleData)
-  const key = init.url
-
-  const { rawJSON: get } = await p2p.get(key)
-
-  t.deepLooseEqual(get, init)
   await p2p.destroy()
   t.end()
 })
