@@ -2,6 +2,11 @@ const createSdk = require('./utils/create-sdk')
 const testSdk = require('./test-sdk')
 const testRegisterMethod = require('./test-register-method')
 const testCloneMethod = require('./test-clone-method')
+const testList = require('./test-list')
+const testGetMethod = require('./test-get-method')
+const testFollowMethod = require('./test-follow-method')
+const testDeregisterMethod = require('./test-deregister-method')
+
 const {
   promises: { writeFile, readdir }
 } = require('fs')
@@ -26,6 +31,152 @@ const localDHT = async () => {
   await testRegisterMethod(dhtBootstrap)
   await testCloneMethod(dhtBootstrap)
 })()
+
+testList()
+testGetMethod()
+testFollowMethod()
+testDeregisterMethod()
+
+test('ready', async t => {
+  const p2p = createSdk()
+  t.doesNotThrow(async () => {
+    await p2p.ready()
+    await p2p.destroy()
+  }, 'ready method should not throw')
+  t.end()
+})
+
+test('sdk re-start', async t => {
+  await localDHT()
+  // issue arise when we have external content in our db, lets fix that
+
+  const p2p = createSdk({ swarm: true, persist: true, dhtBootstrap })
+
+  const p2p2 = createSdk({ swarm: true, persist: true, dhtBootstrap })
+
+  const p2p3 = createSdk({ swarm: true, persist: true, dhtBootstrap })
+
+  const externalContent = {
+    type: 'content',
+    title: 'demo content',
+    description: 'something remote'
+  }
+  const {
+    rawJSON,
+    metadata: { version: remoteVersion }
+  } = await p2p.init(externalContent)
+
+  const localProfile = {
+    type: 'profile',
+    title: 'professorX'
+  }
+  await p2p2.init(localProfile)
+
+  // p2p2 clones the module
+  const { rawJSON: remoteJSON } = await p2p2.clone(rawJSON.url, remoteVersion)
+
+  t.same(remoteJSON, rawJSON, 'cloned module')
+  // some other peer clone the content module too
+  await p2p3.clone(rawJSON.url, remoteVersion)
+
+  // shutdown sdk instances
+  await p2p2.destroy()
+  await p2p3.destroy()
+
+  // content is updated remotely...
+  const {
+    metadata: { version: updatedVersion }
+  } = await p2p.set({ url: rawJSON.url, description: 'something updated' })
+  t.ok(updatedVersion > remoteVersion, 'version is incremented')
+
+  // restart other peer
+  const otherPeer = new SDK({
+    bootstrap: dhtBootstrap,
+    baseDir: p2p3.baseDir
+  })
+  await new Promise(resolve => {
+    setTimeout(resolve, 200)
+  })
+  await otherPeer.ready()
+
+  // now instantiate back p2p2 sdk (same storage, same db)
+  const p2p4 = new SDK({
+    bootstrap: dhtBootstrap,
+    baseDir: p2p2.baseDir
+  })
+
+  try {
+    await p2p4.ready()
+  } catch (err) {
+    t.fail(err)
+  }
+
+  t.pass('all good')
+  await otherPeer.destroy()
+  await p2p.destroy()
+  await p2p4.destroy()
+  t.end()
+})
+
+test('SDK emit warning', async t => {
+  class EBUSYMock extends Error {
+    constructor (message) {
+      super(message)
+      this.code = 'EBUSY'
+    }
+  }
+
+  const mockDat = {
+    './lib/dat-helper.js': {
+      importFiles: async (drive, src, opts) => {
+        const finalOpts = { ...opts, watch: false }
+        await new Promise((resolve, reject) => {
+          mirror(src, { name: '/', fs: drive }, finalOpts, err => {
+            if (err) {
+              return reject(err)
+            }
+            return resolve()
+          })
+        })
+
+        const ee = new EventEmitter()
+
+        ee.destroy = () => {}
+        setTimeout(() => {
+          ee.emit('error', new EBUSYMock('EBUSY mock error'))
+        }, 1000)
+        return ee
+      }
+    }
+  }
+
+  const SDK = proxyquire('../', mockDat)
+
+  const p2p = new SDK({
+    disableSwarm: true,
+    baseDir: tempy.directory()
+  })
+  await p2p.ready()
+
+  const contentData = {
+    type: 'content',
+    subtype: 'Theory',
+    title: 'demo'
+  }
+  const { rawJSON } = await p2p.init(contentData)
+
+  const [warn] = await once(p2p, 'warn')
+
+  t.ok(
+    warn instanceof SDK.errors.EBUSYError,
+    'emits expected warning with EBUSYError'
+  )
+  t.same(rawJSON.title, contentData.title)
+  t.same(rawJSON.type, contentData.type)
+  t.same(rawJSON.subtype, contentData.subtype)
+  await p2p.destroy()
+  t.end()
+})
 
 test('saveItem: should throw ValidationError with invalid metadata', async t => {
   const dir = tempy.directory()
@@ -81,39 +232,6 @@ test('saveItem: should throw ValidationError with invalid metadata', async t => 
   t.end()
 })
 
-test('follows: must not self-reference', async t => {
-  const p2p = createSdk()
-
-  t.plan(1)
-
-  const sampleProfile = {
-    type: 'profile',
-    title: 'professorX',
-    subtype: '',
-    avatar: './test.png',
-    follows: [
-      'f7daadc2d624df738abbccc9955714d94cef656406f2a850bfc499c2080627d4'
-    ],
-    contents: [
-      '00a4f2f18bb6cb4e9ba7c2c047c8560d34047457500e415d535de0526c6b4f23+12'
-    ]
-  }
-
-  const { rawJSON: profile } = await p2p.init(sampleProfile)
-
-  try {
-    await p2p.follow(profile.url, profile.url)
-  } catch (err) {
-    t.ok(
-      err instanceof SDK.errors.ValidationError,
-      'should throw when tries to self-reference'
-    )
-  }
-
-  await p2p.destroy()
-  t.end()
-})
-
 test('update: check version change', async t => {
   const p2p = createSdk()
   const sampleData = {
@@ -143,194 +261,39 @@ test('update: check version change', async t => {
   t.end()
 })
 
-test('list content', async t => {
-  const p2p = createSdk()
-  const sampleDataContent = [
-    {
-      type: 'content',
-      title: 'demo',
-      description: 'lorem ipsum'
-    },
-    {
-      type: 'content',
-      title: 'demo 2'
-    },
-    { type: 'content', title: 'sample' }
-  ]
+test('multiple writes with persistance', async t => {
+  try {
+    const dir = tempy.directory()
 
-  const sampleDataProfile = { type: 'profile', title: 'Professor X' }
+    const p2p1 = new SDK({
+      disableSwarm: true,
+      watch: false,
+      baseDir: dir
+    })
 
-  await Promise.all(sampleDataContent.map(d => p2p.init(d)))
+    const { rawJSON } = await p2p1.init({ type: 'content', title: 'title' })
+    t.same(typeof rawJSON.url, 'string')
+    await p2p1.destroy()
 
-  const { rawJSON: profile } = await p2p.init(sampleDataProfile)
+    // create a new instance with same basedir
+    const p2p2 = new SDK({
+      watch: false,
+      disableSwarm: true,
+      baseDir: dir
+    })
 
-  const result = await p2p.listContent()
-  t.same(result.length, sampleDataContent.length, 'content list length OK')
-  const profiles = await p2p.listProfiles()
-  t.same(profiles.length, 1, 'profiles list length OK')
+    await p2p2.set({ url: rawJSON.url, title: 'beep' })
+    await p2p2.set({ url: rawJSON.url, description: 'boop' })
+    const { rawJSON: updated } = await p2p2.get(rawJSON.url)
 
-  const content1 = result[0].rawJSON
-  // update content1
-  await p2p.set({
-    url: content1.url,
-    description: 'A MORE ACCURATE DESCRIPTION'
-  })
+    t.same(updated.title, 'beep')
+    t.same(updated.description, 'boop')
+    await p2p2.destroy()
 
-  const result2 = await p2p.listContent()
-  t.same(
-    result2.length,
-    sampleDataContent.length,
-    'content list length stays the same'
-  )
-
-  // update content1
-  await p2p.set({
-    url: content1.url,
-    authors: [encode(profile.url)]
-  })
-
-  await p2p.set({
-    url: content1.url,
-    title: 'demo 1'
-  })
-
-  await p2p.listContent()
-  const result4 = await p2p.listContent()
-
-  t.ok(
-    result2[0].metadata.version < result4[0].metadata.version,
-    'latest metadata version should be bigger'
-  )
-  t.same(
-    result4.length,
-    sampleDataContent.length,
-    'content list length stays the same'
-  )
-
-  await p2p.destroy()
-  t.end()
-})
-
-test('list read-only content', async t => {
-  const p2p = createSdk()
-  const {
-    rawJSON: { url }
-  } = await p2p.init({ type: 'content', title: 'demo' })
-
-  await p2p.saveItem({
-    isWritable: false,
-    lastModified: new Date(),
-    version: '5',
-    indexJSON: {
-      url,
-      title: 'demo',
-      description: '',
-      links: {
-        license: [
-          {
-            href: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
-          }
-        ],
-        spec: [{ href: 'https://p2pcommons.com/specs/module/x.x.x' }]
-      },
-      p2pcommons: {
-        type: 'content',
-        subtype: '',
-        main: ''
-      }
-    }
-  })
-
-  const result = await p2p.listContent()
-  t.same(result.length, 1, 'content list length OK')
-
-  await p2p.destroy()
-  t.end()
-})
-
-test('list profiles', async t => {
-  const p2p = createSdk()
-  const sampleDataProfile = [
-    { type: 'profile', title: 'Professor X' },
-    { type: 'profile', title: 'Mystique' }
-  ]
-  const sampleDataContent = [
-    {
-      type: 'content',
-      title: 'demo',
-      description: 'lorem ipsum'
-    },
-    {
-      type: 'content',
-      title: 'demo 2'
-    },
-    { type: 'content', title: 'sample' }
-  ]
-  const [
-    {
-      rawJSON: { url }
-    }
-  ] = await Promise.all(
-    []
-      .concat(sampleDataProfile)
-      .concat(sampleDataContent)
-      .map(d => p2p.init(d))
-  )
-
-  await p2p.saveItem({
-    isWritable: false,
-    lastModified: new Date(),
-    version: '5',
-    indexJSON: {
-      url,
-      title: sampleDataProfile[0].title,
-      description: '',
-      links: {
-        license: [
-          {
-            href: 'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
-          }
-        ],
-        spec: [{ href: 'https://p2pcommons.com/specs/module/x.x.x' }]
-      },
-      p2pcommons: {
-        type: 'profile',
-        subtype: '',
-        main: '',
-        avatar: '',
-        follows: [],
-        contents: []
-      }
-    }
-  })
-
-  const result = await p2p.listProfiles()
-  t.same(result.length, sampleDataProfile.length)
-  await p2p.destroy()
-  t.end()
-})
-
-test('list modules', async t => {
-  const p2p = createSdk()
-  const sampleData = [
-    {
-      type: 'content',
-      title: 'demo',
-      description: 'lorem ipsum'
-    },
-    {
-      type: 'content',
-      title: 'demo 2'
-    },
-    { type: 'content', title: 'sample' },
-    { type: 'profile', title: 'Professor X' }
-  ]
-
-  await Promise.all([].concat(sampleData).map(d => p2p.init(d)))
-  const result = await p2p.list()
-  t.same(result.length, sampleData.length)
-  await p2p.destroy()
-  t.end()
+    t.end()
+  } catch (err) {
+    t.fail(err)
+  }
 })
 
 test.skip('register - local contents', async t => {
@@ -795,179 +758,6 @@ test('delete versioned module', async t => {
   t.ok(
     baseDir.includes(moduleVersioned),
     'Module folder has not been removed (deleteFiles)'
-  )
-
-  await p2p.destroy()
-  t.end()
-})
-
-test('deregister content module from profile', async t => {
-  const p2p = createSdk()
-  const sampleContent = {
-    type: 'content',
-    title: 'demo 1',
-    description: 'lorem ipsum'
-  }
-
-  const { rawJSON: content } = await p2p.init(sampleContent)
-
-  const sampleProfile = {
-    type: 'profile',
-    title: 'd'
-  }
-
-  const { rawJSON: profile } = await p2p.init(sampleProfile)
-
-  // Manually setting the author profile
-  await p2p.set({ url: content.url, authors: [encode(profile.url)] })
-
-  t.equal(profile.contents.length, 0, 'profile.contents is empty')
-
-  // manually writing a dummy file
-  await writeFile(
-    join(p2p.baseDir, encode(content.url), 'file.txt'),
-    'hola mundo'
-  )
-
-  await p2p.set({
-    url: content.url,
-    main: 'file.txt'
-  })
-
-  const { metadata: contentMeta } = await p2p.get(content.url)
-  const versioned = `${encode(content.url)}+${contentMeta.version}`
-  try {
-    await p2p.register(versioned, profile.url)
-  } catch (err) {
-    t.fail(err.message)
-  }
-
-  const { rawJSON: updatedProfile } = await p2p.get(profile.url)
-
-  t.equal(updatedProfile.contents.length, 1)
-
-  await p2p.deregister(versioned, profile.url)
-
-  const { rawJSON: deletedContent } = await p2p.get(profile.url)
-
-  t.equal(
-    deletedContent.contents.length,
-    0,
-    'content deregistered successfully'
-  )
-
-  await p2p.destroy()
-  t.end()
-})
-
-test('deregister content - more complex case', async t => {
-  const p2p = createSdk({ persist: true })
-  const sampleContent = {
-    type: 'content',
-    title: 'demo 1',
-    description: 'lorem ipsum'
-  }
-
-  const sampleContent2 = {
-    type: 'content',
-    title: 'demo 2',
-    description: 'lorem ipsum'
-  }
-
-  const sampleContent3 = {
-    type: 'content',
-    title: 'demo 3',
-    description: 'lorem ipsum'
-  }
-
-  // create multiple content
-  const {
-    rawJSON: { url: url1 }
-  } = await p2p.init(sampleContent)
-  const {
-    rawJSON: { url: url2 }
-  } = await p2p.init(sampleContent2)
-  const {
-    rawJSON: { url: url3 }
-  } = await p2p.init(sampleContent3)
-
-  const sampleProfile = {
-    type: 'profile',
-    title: 'd'
-  }
-
-  // create my profile
-  const { rawJSON: profile } = await p2p.init(sampleProfile)
-
-  const pUrl = encode(profile.url)
-  // Manually setting the author profile
-  await p2p.set({ url: url1, authors: [pUrl] })
-  await p2p.set({ url: url2, authors: [pUrl] })
-  await p2p.set({ url: url3, authors: [pUrl] })
-
-  // manually writing a file A
-  await writeFile(join(p2p.baseDir, encode(url1), 'fileA.txt'), 'main1')
-
-  await p2p.set({
-    url: url1,
-    main: 'fileA.txt'
-  })
-
-  // manually writing file B
-  await writeFile(join(p2p.baseDir, encode(url2), 'fileB.txt'), 'main2')
-
-  const {
-    metadata: { version: v2 }
-  } = await p2p.set({
-    url: url2,
-    main: 'fileB.txt'
-  })
-  // manually writing file C
-  await writeFile(join(p2p.baseDir, encode(url3), 'fileC.txt'), 'main3')
-
-  const {
-    metadata: { version: v3 }
-  } = await p2p.set({
-    url: url3,
-    main: 'fileC.txt'
-  })
-
-  // register the modules (unversioned)
-  await p2p.register(url1, profile.url)
-  await p2p.register(url2, profile.url)
-  await p2p.register(url3, profile.url)
-
-  const { rawJSON: updatedProfile } = await p2p.get(profile.url)
-  t.equal(updatedProfile.contents.length, 3, '3 registrations')
-  // make some changes
-  await writeFile(join(p2p.baseDir, encode(url1), 'new_file.txt'), 'hallo')
-  await p2p.refreshDrive(url1)
-
-  // deregister all modules
-  await p2p.deregister(url1, profile.url)
-  await p2p.deregister(url2, profile.url)
-  await p2p.deregister(url3, profile.url)
-
-  // register all modules again (versioned)
-  const {
-    metadata: { version: v1 }
-  } = await p2p.get(url1)
-  const versioned = `${url1}+${v1}`
-  const versioned2 = `${url2}+${v2}`
-  const versioned3 = `${url3}+${v3}`
-
-  await p2p.register(versioned, profile.url)
-
-  await p2p.register(versioned2, profile.url)
-
-  await p2p.register(versioned3, profile.url)
-
-  // deregister updated module
-  await p2p.deregister(versioned, profile.url)
-  const { rawJSON: finalProfile } = await p2p.get(profile.url)
-  t.notOk(
-    finalProfile.contents.includes(versioned),
-    'should deregister specific key'
   )
 
   await p2p.destroy()
