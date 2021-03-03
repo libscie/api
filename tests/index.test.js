@@ -1,3 +1,5 @@
+const createSdk = require('./utils/create-sdk')
+
 const {
   existsSync,
   promises: { writeFile, readdir, stat, copyFile }
@@ -24,24 +26,8 @@ const localDHT = async () => {
   dhtBootstrap = url
 }
 
-const defaultOpts = () => ({
-  swarm: false,
-  persist: false
-})
-
-const createDb = opts => {
-  const finalOpts = { ...defaultOpts(), ...opts }
-  return new SDK({
-    disableSwarm: !finalOpts.swarm,
-    persist: finalOpts.persist,
-    swarm: finalOpts.swarmFn,
-    baseDir: tempy.directory(),
-    bootstrap: finalOpts.dhtBootstrap
-  })
-}
-
 test('ready', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
   t.doesNotThrow(async () => {
     await p2p.ready()
     await p2p.destroy()
@@ -53,11 +39,11 @@ test('sdk re-start', async t => {
   await localDHT()
   // issue arise when we have external content in our db, lets fix that
 
-  const p2p = createDb({ swarm: true, persist: true, dhtBootstrap })
+  const p2p = createSdk({ swarm: true, persist: true, dhtBootstrap })
 
-  const p2p2 = createDb({ swarm: true, persist: true, dhtBootstrap })
+  const p2p2 = createSdk({ swarm: true, persist: true, dhtBootstrap })
 
-  const p2p3 = createDb({ swarm: true, persist: true, dhtBootstrap })
+  const p2p3 = createSdk({ swarm: true, persist: true, dhtBootstrap })
 
   const externalContent = {
     type: 'content',
@@ -182,7 +168,7 @@ test('SDK emit warning', async t => {
 })
 
 test('init: create content module', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
   const init = {
     type: 'content',
     subtype: 'Theory',
@@ -222,7 +208,7 @@ test('init: create content module', async t => {
 })
 
 test('init: title longer than 300 char should throw a ValidationError', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
   const metadata = {
     type: 'content',
     title:
@@ -243,7 +229,7 @@ test('init: title longer than 300 char should throw a ValidationError', async t 
 })
 
 test('init: empty creation should throw a ValidationError', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
   const metadata = {}
   try {
     await p2p.init(metadata)
@@ -262,7 +248,7 @@ test('init: empty creation should throw a ValidationError', async t => {
 })
 
 test('init: create profile module', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
   const metadata = {
     type: 'profile',
     title: 'demo',
@@ -295,7 +281,7 @@ test('init: create profile module', async t => {
 })
 
 test('get: retrieve a value from the sdk', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
   const sampleData = {
     type: 'profile',
     title: 'demo',
@@ -366,7 +352,7 @@ test('saveItem: should throw ValidationError with invalid metadata', async t => 
 })
 
 test('set: update modules', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
   const sampleContent = {
     type: 'content',
     title: 'demo',
@@ -406,7 +392,7 @@ test('set: update modules', async t => {
 })
 
 test('set: should throw InvalidKeyError with invalid update', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
   const sampleData = {
     type: 'content',
     title: 'demo',
@@ -434,7 +420,7 @@ test('set: should throw InvalidKeyError with invalid update', async t => {
 })
 
 test('set: should throw validation error with extra params', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
   const sampleData = {
     type: 'profile',
     title: 'professor',
@@ -463,7 +449,7 @@ test('set: should throw validation error with extra params', async t => {
 })
 
 test('set: should throw validation error with invalid main', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
   const sampleProfile = {
     type: 'profile',
     title: 'professor',
@@ -505,7 +491,7 @@ test('set: should throw validation error with invalid main', async t => {
 })
 
 test('set: should throw validation error with invalid main (not text)', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
 
   const sampleContent = {
     type: 'content',
@@ -542,7 +528,7 @@ test('set: should throw validation error with invalid main (not text)', async t 
 })
 
 test('set: main extension is case insensitive', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
 
   const sampleContent = {
     type: 'content',
@@ -573,7 +559,7 @@ test('set: main extension is case insensitive', async t => {
 })
 
 test('set: can update main', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
   const sampleProfile = {
     type: 'profile',
     title: 'professor',
@@ -623,7 +609,7 @@ test('set: can update main', async t => {
 })
 
 test('set: update should fail with bad data', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
   const sampleData = {
     type: 'content',
     title: 'demo',
@@ -648,7 +634,7 @@ test('set: update should fail with bad data', async t => {
 })
 
 test('set: content, follows, authors, parents idempotent with repeated values', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
 
   const followedProfile1 = {
     type: 'profile',
@@ -818,7 +804,7 @@ test('set: content, follows, authors, parents idempotent with repeated values', 
 })
 
 test('follows: must not self-reference', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
 
   t.plan(1)
 
@@ -851,7 +837,7 @@ test('follows: must not self-reference', async t => {
 })
 
 test('set: dont allow future parents versions nor self-reference', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
   const {
     rawJSON: { url: profileUrl }
   } = await p2p.init({
@@ -907,7 +893,7 @@ test('set: dont allow future parents versions nor self-reference', async t => {
 })
 
 test('init + set: versioned parent for unversioned registration', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
 
   const {
     rawJSON: { url: profileUrl }
@@ -996,7 +982,7 @@ test('init + set: versioned parent for unversioned registration', async t => {
 })
 
 test('update: check version change', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
   const sampleData = {
     type: 'content',
     title: 'demo',
@@ -1025,7 +1011,7 @@ test('update: check version change', async t => {
 })
 
 test('list content', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
   const sampleDataContent = [
     {
       type: 'content',
@@ -1093,7 +1079,7 @@ test('list content', async t => {
 })
 
 test('list read-only content', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
   const {
     rawJSON: { url }
   } = await p2p.init({ type: 'content', title: 'demo' })
@@ -1130,7 +1116,7 @@ test('list read-only content', async t => {
 })
 
 test('list profiles', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
   const sampleDataProfile = [
     { type: 'profile', title: 'Professor X' },
     { type: 'profile', title: 'Mystique' }
@@ -1192,7 +1178,7 @@ test('list profiles', async t => {
 })
 
 test('list modules', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
   const sampleData = [
     {
       type: 'content',
@@ -1250,7 +1236,7 @@ test('multiple writes with persistance', async t => {
 })
 
 test.skip('register - local contents', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
 
   const { rawJSON: profile } = await p2p.init({
     type: 'profile',
@@ -1304,7 +1290,7 @@ test.skip('register - local contents', async t => {
 })
 
 test('register - list versions', async t => {
-  const p2p = createDb({ persist: true })
+  const p2p = createSdk({ persist: true })
 
   const { rawJSON: profile } = await p2p.init({
     type: 'profile',
@@ -1416,12 +1402,12 @@ test('register, restart and list contents', async t => {
 })
 
 test('seed and register', async t => {
-  const p2p = createDb({
+  const p2p = createSdk({
     swarm: true,
     persist: true,
     dhtBootstrap
   })
-  const p2p2 = createDb({
+  const p2p2 = createSdk({
     swarm: true,
     persist: true,
     dhtBootstrap
@@ -1501,7 +1487,7 @@ test('seed and register', async t => {
 })
 
 test('verify', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
   const sampleData = [
     {
       type: 'content',
@@ -1563,12 +1549,12 @@ test('verify', async t => {
 })
 
 test('verify multiple authors', async t => {
-  const p2p = createDb({
+  const p2p = createSdk({
     swarm: true,
     persist: false,
     dhtBootstrap
   })
-  const p2p2 = createDb({
+  const p2p2 = createSdk({
     swarm: true,
     persist: false,
     dhtBootstrap
@@ -2025,7 +2011,7 @@ test('delete versioned module', async t => {
 })
 
 test('deregister content module from profile', async t => {
-  const p2p = createDb()
+  const p2p = createSdk()
   const sampleContent = {
     type: 'content',
     title: 'demo 1',
@@ -2084,7 +2070,7 @@ test('deregister content module from profile', async t => {
 })
 
 test('deregister content - more complex case', async t => {
-  const p2p = createDb({ persist: true })
+  const p2p = createSdk({ persist: true })
   const sampleContent = {
     type: 'content',
     title: 'demo 1',
@@ -2198,12 +2184,12 @@ test('deregister content - more complex case', async t => {
 })
 
 test('follow and unfollow a profile', async t => {
-  const p2p = createDb({
+  const p2p = createSdk({
     swarm: true,
     persist: false,
     dhtBootstrap
   })
-  const p2p2 = createDb({
+  const p2p2 = createSdk({
     swarm: true,
     persist: false,
     dhtBootstrap
