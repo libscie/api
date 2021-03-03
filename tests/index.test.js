@@ -3,6 +3,7 @@ const testList = require('./test-list')
 const testGetMethod = require('./test-get-method')
 const testFollowMethod = require('./test-follow-method')
 const testDeregisterMethod = require('./test-deregister-method')
+const testSaveItemMethod = require('./test-save-item-method')
 
 const {
   existsSync,
@@ -31,6 +32,7 @@ testList()
 testGetMethod()
 testFollowMethod()
 testDeregisterMethod()
+testSaveItemMethod()
 
 test('sdk re-start', async t => {
   await localDHT()
@@ -101,60 +103,6 @@ test('sdk re-start', async t => {
   await otherPeer.destroy()
   await p2p.destroy()
   await p2p4.destroy()
-  t.end()
-})
-
-test('saveItem: should throw ValidationError with invalid metadata', async t => {
-  const dir = tempy.directory()
-
-  const p2p = new SDK({
-    baseDir: dir,
-    bootstrap: dhtBootstrap
-  })
-
-  const sampleData = {
-    type: 'content',
-    title: 'demo',
-    description: 'lorem ipsum'
-  }
-
-  const { rawJSON } = await p2p.init(sampleData)
-
-  const key = rawJSON.url
-
-  try {
-    const { rawJSON: updated, metadata } = await p2p.saveItem({
-      isWritable: false,
-      lastModified: new Date(),
-      version: '5',
-      indexJSON: {
-        url: key,
-        title: 'demo',
-        description: 'something new',
-        links: {
-          license: [
-            {
-              href:
-                'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
-            }
-          ],
-          spec: [{ href: 'https://p2pcommons.com/specs/module/x.x.x' }]
-        },
-        p2pcommons: {
-          type: 'content',
-          subtype: '123',
-          main: '',
-          authors: [],
-          parents: []
-        }
-      }
-    })
-    t.same(updated.description, 'something new')
-    t.same(metadata.version, 5)
-  } catch (err) {
-    t.fail(err)
-  }
-  await p2p.destroy()
   t.end()
 })
 
