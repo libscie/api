@@ -6,7 +6,6 @@
   "scripts": {
     "test": "prettier-standard && standard && tape tests/*.test.js | tap-spec",
     "format": "prettier-standard --format",
-    "version": "chan release ${npm_package_version} --ghrelease && git add CHANGELOG.md",
     "prepublishOnly": "npm test",
     "release": "np"
   },
@@ -79,7 +78,6 @@
     "url-parse": "^1.4.7"
   },
   "devDependencies": {
-    "@geut/chan": "^2.1.1",
     "debug": "^4.2.0",
     "eslint": "^6.8.0",
     "eslint-config-standard": "^14.1.0",
