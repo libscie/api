@@ -1,20 +1,20 @@
 #!/usr/bin/env node
 'use strict'
 
-const P2PCommons = require('../')
+const SDK = require('../')
 
 const main = async () => {
   const dir = process.argv[2]
 
-  const commons = new P2PCommons({
+  const p2p = new SDK({
     disableSwarm: true,
     baseDir: dir
   })
 
-  await commons.ready()
-  const list = await commons.listContent()
+  await p2p.ready()
+  const list = await p2p.listContent()
   console.log(list.length)
-  await commons.destroy()
+  await p2p.destroy()
   process.exit(0)
 }
 

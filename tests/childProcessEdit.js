@@ -2,9 +2,7 @@
 'use strict'
 
 const { join } = require('path')
-const {
-  promises: { writeFile }
-} = require('fs')
+const { writeFile } = require('fs').promises
 
 const main = async () => {
   const contentUrl = process.argv[2]
