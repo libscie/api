@@ -59,7 +59,12 @@ const Codec = require('./codec')
 const ContentSchema = require('./schemas/content.json')
 const ProfileSchema = require('./schemas/profile.json')
 const ValidationTypes = require('./schemas/validation') // avro related validations
-const { driveWaitForFile, dlWaitForFile } = require('./lib/utils')
+const {
+  createIndexJSON,
+  collect,
+  driveWaitForFile,
+  dlWaitForFile
+} = require('./lib/utils')
 
 const chmodr = promisify(chmodrcb)
 
@@ -76,7 +81,6 @@ const {
   MissingParam,
   EBUSYError
 } = require('./lib/errors')
-const { createIndexJSON, collect } = require('./lib/utils')
 
 // helper assert fn
 const assertValid = (type, val) => {
