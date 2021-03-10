@@ -10,6 +10,8 @@ const _getAvroType = require('./lib/_get-avro-type')
 const assertModule = require('./lib/assert-module')
 const _flatten = require('./lib/_flatten')
 const assertMetadata = require('./lib/assert-metadata')
+const _log = require('./lib/_log')
+const sdkDestroy = require('./lib/sdk-destroy')
 
 const {
   promises: {
@@ -158,10 +160,8 @@ class SDK extends EventEmitter {
     debug(`watch enabled? ${this.watch}`)
   }
 
-  _log (msg, level = 'log') {
-    if (this.verbose) {
-      console[level](msg)
-    }
+  async destroy (db, swarm) {
+    sdkDestroy(this, db, swarm)
   }
 
   _watchErrHandler (err, key) {
@@ -278,12 +278,12 @@ class SDK extends EventEmitter {
 
       level(join(this.dbPath, 'db'), { valueEncoding: codec }, (err, db) => {
         if (err) {
-          this._log(err, 'error')
+          _log(this, err, 'error')
           return reject(err)
         }
 
         if (err instanceof level.errors.OpenError) {
-          this._log('failed to open database', 'error')
+          _log(this, 'failed to open database', 'error')
           return reject(err)
         }
         this.db = db
@@ -293,7 +293,7 @@ class SDK extends EventEmitter {
           valueEncoding: codec
         })
         this.localdb.on('error', err => {
-          this._log(err.message, 'error')
+          _log(this, err.message, 'error')
           this.emit('error', err)
         })
         // create seeded modules partitions
@@ -399,7 +399,7 @@ class SDK extends EventEmitter {
               metadata.isCheckout
             )
           } catch (err) {
-            this._log(`Unable to resume download. Err: ${err.message}`)
+            _log(this, `Unable to resume download. Err: ${err.message}`)
           }
         }
 
@@ -417,7 +417,7 @@ class SDK extends EventEmitter {
 
             driveWatch.on('put-end', (src, dst) =>
               this._updateLocalDB(urlString, dst).catch(err =>
-                this._log(err.message, 'error')
+                _log(this, err.message, 'error')
               )
             )
           }
@@ -429,7 +429,7 @@ class SDK extends EventEmitter {
             debug('refreshMTimes: re-attaching general drive watcher...')
             const unwatch = drive.watch('/', () => {
               this.refreshFS(moduleDir, drive).catch(err =>
-                this._log(err, 'warn')
+                _log(this, err, 'warn')
               )
             })
             this.driveUnwatches.set(dkey, unwatch)
@@ -441,14 +441,14 @@ class SDK extends EventEmitter {
             ) {
               const unwatcher = drive.watch('index.json', async () => {
                 this._updateLocalDB(urlString, { name: 'index.json' }).catch(
-                  err => this._log(err.message, 'error')
+                  err => _log(this, err.message, 'error')
                 )
               })
               this.externalUpdates.set(dkey, unwatcher)
             }
           }
         } catch (err) {
-          this._log(`refreshMTimes: downloadFiles error - ${err.msg}`, 'warn')
+          _log(this, `refreshMTimes: downloadFiles error - ${err.msg}`, 'warn')
         }
 
         // resume downloads
@@ -459,7 +459,7 @@ class SDK extends EventEmitter {
             metadata.isCheckout
           )
         } catch (err) {
-          this._log(`Unable to resume download. Err: ${err.message}`)
+          _log(this, `Unable to resume download. Err: ${err.message}`)
         }
 
         if (dirIndexJSON !== driveIndexJSON) {
@@ -512,7 +512,7 @@ class SDK extends EventEmitter {
           avroType: _getAvroType(this, indexJSON.p2pcommons.type).name
         })
       } catch (err) {
-        this._log(`refreshMTimes: ${err.message}`, 'error')
+        _log(this, `refreshMTimes: ${err.message}`, 'error')
       }
     }
   }
@@ -538,7 +538,7 @@ class SDK extends EventEmitter {
     })
 
     this.store.on('error', err => {
-      this._log(err.message, 'error')
+      _log(this, err.message, 'error')
     })
   }
 
@@ -583,7 +583,7 @@ class SDK extends EventEmitter {
 
         const downloadId = dlInfo.resume(() =>
           this.finishDownload(key, version, isCheckout).catch(err =>
-            this._log(err, 'warn')
+            _log(this, err, 'warn')
           )
         )
         const cancel = () => {
@@ -598,7 +598,7 @@ class SDK extends EventEmitter {
           drive = drive.checkout(version)
         }
       } catch (err) {
-        this._log(err, 'error')
+        _log(this, err, 'error')
         return
       }
     } else {
@@ -611,7 +611,7 @@ class SDK extends EventEmitter {
 
   async ready () {
     if (this.start) {
-      this._log('already started')
+      _log(this, 'already started')
       return
     }
     try {
@@ -639,7 +639,7 @@ class SDK extends EventEmitter {
       this.start = true
       return this.start
     } catch (err) {
-      this._log(`Error starting the SDK: ${err.message}`, 'error')
+      _log(this, `Error starting the SDK: ${err.message}`, 'error')
       throw err
     }
   }
@@ -651,7 +651,7 @@ class SDK extends EventEmitter {
     const dkey = DatEncoding.encode(crypto.discoveryKey(keyBuffer))
     let moduleHyper = this.drives.get(dkey)
     if (!moduleHyper) {
-      this._log(`module url (${moduleUrl}) not found, calling open`, 'warn')
+      _log(this, `module url (${moduleUrl}) not found, calling open`, 'warn')
       // call open
       moduleHyper = dat.open(this.store, keyBuffer, {
         sparse: true
@@ -680,7 +680,7 @@ class SDK extends EventEmitter {
     )
 
     if (indexJSON !== localRawJSON) {
-      this._log('overwriting with index.json from hyperdrive')
+      _log(this, 'overwriting with index.json from hyperdrive')
     }
     await this.localdb.put(DatEncoding.encode(moduleUrl), {
       ...metadata,
@@ -803,7 +803,8 @@ class SDK extends EventEmitter {
     })
     unwatch.destroy()
 
-    this._log(
+    _log(
+      this,
       `Initialized new ${indexJSON.p2pcommons.type}, hyper://${publicKeyString}`
     )
 
@@ -836,11 +837,12 @@ class SDK extends EventEmitter {
 
       driveWatch.on('put-end', (src, dst) =>
         this._updateLocalDB(publicKeyString, dst).catch(err =>
-          this._log(err.message, 'error')
+          _log(this, err.message, 'error')
         )
       )
     }
-    this._log(
+    _log(
+      this,
       `Saved new ${indexJSON.p2pcommons.type}, with key: ${publicKeyString}`
     )
     // Note(dk): flatten p2pcommons obj in order to have a more symmetrical API
@@ -1091,7 +1093,7 @@ class SDK extends EventEmitter {
     )
     const dw = this.drivesToWatch.get(dkey)
     if (dw) {
-      this._log(`pendings to import? ${dw.pending.length}`, 'info')
+      _log(this, `pendings to import? ${dw.pending.length}`, 'info')
       // actively wait for drive update
       while (dw.pending.length > 0) {
         await new Promise(resolve => setTimeout(resolve, 50))
@@ -1152,8 +1154,8 @@ class SDK extends EventEmitter {
    */
   async refreshFS (moduleDir, drive, opts = {}) {
     const diff = await dat.syncFS(moduleDir, drive, opts)
-    this._log(`Applying diff to FS (path: ${moduleDir})`)
-    this._log({ diff })
+    _log(this, `Applying diff to FS (path: ${moduleDir})`)
+    _log(this, { diff })
     this.emit('update-module', { diff, key: DatEncoding.encode(drive.key) })
     return diff
   }
@@ -1182,7 +1184,7 @@ class SDK extends EventEmitter {
       await drive.ready()
     }
     if (!drive.writable) {
-      this._log('drive is not writable -  nothing to sync')
+      _log(this, 'drive is not writable -  nothing to sync')
       return
     }
 
@@ -1489,7 +1491,7 @@ class SDK extends EventEmitter {
     const permString = stat.mode & 0o777
 
     if (permString === mode) {
-      this._log('module directory is already writable', 'warn')
+      _log(this, 'module directory is already writable', 'warn')
       return
     }
 
@@ -1513,7 +1515,7 @@ class SDK extends EventEmitter {
     const permString = stat.mode & 0o777
 
     if (permString === mode) {
-      this._log('module directory is already read only', 'warn')
+      _log(this, 'module directory is already read only', 'warn')
       return
     }
     await chmodr(moduleDir, mode)
@@ -1564,10 +1566,10 @@ class SDK extends EventEmitter {
       return true
     } catch (err) {
       if (err.code === 'EEXIST') {
-        this._log('moduleDir already exists', 'warn')
+        _log(this, 'moduleDir already exists', 'warn')
         return true
       } else if (err.code === 'EACCESS') {
-        this._log('moduleDir is readonly', 'warn')
+        _log(this, 'moduleDir is readonly', 'warn')
         return false
       } else {
         throw err
@@ -1635,7 +1637,8 @@ class SDK extends EventEmitter {
       debug('getFromSwarm: Reading modules index.json...')
       const content = await pRetry(getFile, {
         onFailedAttempt: error => {
-          this._log(
+          _log(
+            this,
             `Failed attempt fetching index.json. ${error.attemptNumber}/${
               error.retriesLeft
             }`
@@ -1653,7 +1656,7 @@ class SDK extends EventEmitter {
         this.drives.set(dkey, moduleVersion)
       }
     } catch (err) {
-      this._log(err.message, 'error')
+      _log(this, err.message, 'error')
       if (this.canceledClone) {
         return { canceled: true }
       }
@@ -1685,7 +1688,7 @@ class SDK extends EventEmitter {
         }
         const downloadId = dlInfo.resume(() =>
           this.finishDownload(mKeyString, version, isCheckout).catch(err =>
-            this._log(err, 'warn')
+            _log(this, err, 'warn')
           )
         )
         const cancel = () => {
@@ -1698,7 +1701,7 @@ class SDK extends EventEmitter {
         // watch files
         const unwatch = moduleVersion.watch('/', async () => {
           await this.refreshFS(folderPath, moduleVersion).catch(err => {
-            this._log(err, 'warn')
+            _log(this, err, 'warn')
           })
         })
         this.driveUnwatches.set(dkey, unwatch)
@@ -1723,7 +1726,7 @@ class SDK extends EventEmitter {
     if (!this.externalUpdates.has(dkey)) {
       const unwatcher = moduleHyper.watch('index.json', async () => {
         this._updateLocalDB(mKeyString, { name: 'index.json' }).catch(err =>
-          this._log(err.message, 'error')
+          _log(this, err.message, 'error')
         )
       })
       this.externalUpdates.set(dkey, unwatcher)
@@ -1781,7 +1784,7 @@ class SDK extends EventEmitter {
       rawJSON = out.rawJSON
       metadata = out.metadata
     } catch (err) {
-      this._log('module not found in local db', 'warn')
+      _log(this, 'module not found in local db', 'warn')
       throw err
     }
 
@@ -1838,7 +1841,7 @@ class SDK extends EventEmitter {
           .then(() => {
             this.emit('download-drive-completed', { key })
           })
-          .catch(err => this._log(err, 'error'))
+          .catch(err => _log(this, err, 'error'))
       }
 
       contentFeed.on('download', downloadStats)
@@ -1928,7 +1931,7 @@ class SDK extends EventEmitter {
         module = out.rawJSON
         meta = out.metadata
       } catch (_) {
-        this._log('module not found in db', 'warn')
+        _log(this, 'module not found in db', 'warn')
       }
     }
 
@@ -1950,7 +1953,7 @@ class SDK extends EventEmitter {
       mKeyString,
       mVersion,
       meta.isCheckout
-    ).catch(err => this._log(err, 'warn'))
+    ).catch(err => _log(this, err, 'warn'))
 
     return {
       rawJSON: _flatten(module),
@@ -1993,7 +1996,7 @@ class SDK extends EventEmitter {
       contents: [parseUrl(contentKey)]
     })
 
-    this._log('register: profile updated successfully')
+    _log(this, 'register: profile updated successfully')
   }
 
   /**
@@ -2078,12 +2081,12 @@ class SDK extends EventEmitter {
 
     const { host: cKey, version: contentVersion } = parse(contentKey)
     if (!contentVersion) {
-      this._log('content url does not include version', 'warn')
+      _log(this, 'content url does not include version', 'warn')
     }
 
     const { rawJSON: content } = await this.clone(cKey, contentVersion, false)
     if (!content) {
-      this._log(`content with key ${cKey} not found`)
+      _log(this, `content with key ${cKey} not found`)
       return
     }
 
@@ -2091,7 +2094,7 @@ class SDK extends EventEmitter {
     const finalCkey = contentVersion ? `${cKey}+${contentVersion}` : `${cKey}`
 
     if (!profile.contents.includes(finalCkey)) {
-      this._log('contentKey is not included in profiles contents', 'warn')
+      _log(this, 'contentKey is not included in profiles contents', 'warn')
       return
     }
 
@@ -2123,7 +2126,7 @@ class SDK extends EventEmitter {
       follows: [targetProfileKey]
     })
 
-    this._log('follow: profile updated successfully')
+    _log(this, 'follow: profile updated successfully')
   }
 
   /**
@@ -2199,7 +2202,7 @@ class SDK extends EventEmitter {
       true
     )
 
-    this._log('unfollow: profile updated successfully')
+    _log(this, 'unfollow: profile updated successfully')
   }
 
   /**
@@ -2248,7 +2251,7 @@ class SDK extends EventEmitter {
 
     const { rawJSON: module, metadata } = await this.get(key)
     if (!metadata.isWritable) {
-      this._log('delete: drive is not writable')
+      _log(this, 'delete: drive is not writable')
       return
     }
     try {
@@ -2301,68 +2304,8 @@ class SDK extends EventEmitter {
       }
     } catch (err) {
       debug('delete: %O', err)
-      this._log(`Something went wrong with delete: ${err.message}`, 'error')
+      _log(this, `Something went wrong with delete: ${err.message}`, 'error')
     }
-  }
-
-  /**
-   * shutdown a sdk instance closing all the open hyperdrives
-   *
-   * @public
-   * @async
-   * @param {Boolean} db=true - if true it will close all the internal databases
-   * @param {Boolean} swarm=true - if true it will close the swarm
-   */
-  async destroy (db = true, swarm = true) {
-    // index.json watcher for external drives
-    for (const unwatch of this.externalUpdates.values()) {
-      unwatch.destroy()
-    }
-    this.externalUpdates = new Map()
-    // general drive watch for external drives
-    for (const unwatch of this.driveUnwatches.values()) {
-      unwatch.destroy()
-    }
-    this.driveUnwatches = new Map()
-    // Close importFiles watches (mirror folder instances)
-    for (const mirror of this.drivesToWatch.values()) {
-      mirror.destroy()
-    }
-    this.drivesToWatch = new Map()
-    // cancel active downloads (feed.download calls)
-
-    for (const cancelActiveDl of this.activeFeedDownloads.values()) {
-      cancelActiveDl()
-    }
-    this.activeFeedDownloads = new Map()
-
-    if (db) {
-      debug('closing db...')
-      try {
-        if (this.localdb) await this.localdb.close()
-        if (this.seeddb) await this.seeddb.close()
-        if (this.db) await this.db.close()
-      } catch (err) {
-        this._log(err.message, 'error')
-      }
-      debug('db successfully closed')
-    }
-
-    if (swarm && this.networker) {
-      await Promise.all(Array.from(this.drives, ([_, drive]) => drive.close()))
-      this.drives = new Map()
-
-      debug('closing swarm...')
-      try {
-        await this.networker.close()
-      } catch (err) {
-        this._log(err.message, 'error')
-      }
-
-      debug('swarm successfully closed')
-    }
-
-    this.start = false
   }
 }
 
