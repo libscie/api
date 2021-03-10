@@ -9,7 +9,8 @@ const assertModuleType = require('./lib/assert-module-type')
 const _getAvroType = require('./lib/_get-avro-type')
 const assertModule = require('./lib/assert-module')
 const _flatten = require('./lib/_flatten')
-const _dbItemError = require('./lib/_db-item-error')
+const assertMetadata = require('./lib/assert-metadata')
+
 const {
   promises: {
     open,
@@ -155,18 +156,6 @@ class SDK extends EventEmitter {
     debug(`persist drives? ${!!this.persist}`)
     debug(`swarm enabled? ${!this.disableSwarm}`)
     debug(`watch enabled? ${this.watch}`)
-  }
-
-  assertMetadata (meta) {
-    assert(typeof meta === 'object', 'metadata object expected')
-    const dbitem = {
-      ...meta,
-      rawJSON: Buffer.alloc(0) // we test validity of this property separately
-    }
-
-    this.dbItemType.isValid(dbitem, {
-      errorHook: _dbItemError
-    })
   }
 
   _log (msg, level = 'log') {
@@ -514,7 +503,7 @@ class SDK extends EventEmitter {
         metadata.lastModified = mtime
         metadata.version = Number(drive.version)
 
-        this.assertMetadata(metadata)
+        assertMetadata(this, metadata)
 
         // update localdb
         await this.localdb.put(urlString, {
@@ -829,7 +818,7 @@ class SDK extends EventEmitter {
       isCheckout: false
     }
 
-    this.assertMetadata(metadata)
+    assertMetadata(this, metadata)
 
     await this.localdb.put(publicKeyString, {
       ...metadata,
@@ -936,7 +925,7 @@ class SDK extends EventEmitter {
       isCheckout
     }
 
-    this.assertMetadata(metadata)
+    assertMetadata(this, metadata)
 
     await this.localdb.put(DatEncoding.encode(indexJSON.url), {
       ...metadata,
@@ -1758,7 +1747,7 @@ class SDK extends EventEmitter {
       !lastMeta ||
       stat[0].mtime.getTime() > lastMeta.lastModified.getTime()
     ) {
-      this.assertMetadata(metadata)
+      assertMetadata(this, metadata)
       await this.localdb.put(DatEncoding.encode(module.url), {
         ...metadata,
         rawJSON: module,
