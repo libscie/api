@@ -12,6 +12,7 @@ const _flatten = require('./lib/_flatten')
 const assertMetadata = require('./lib/assert-metadata')
 const _log = require('./lib/_log')
 const sdkDestroy = require('./lib/sdk-destroy')
+const _watchErrHandler = require('./lib/_watch-err-handler')
 
 const {
   promises: {
@@ -162,13 +163,6 @@ class SDK extends EventEmitter {
 
   async destroy (db, swarm) {
     sdkDestroy(this, db, swarm)
-  }
-
-  _watchErrHandler (err, key) {
-    if (err.code === 'EBUSY') {
-      const busyErr = new EBUSYError(err.message, key)
-      this.emit('warn', busyErr)
-    }
   }
 
   async _seed (archive, joinOpts = {}) {
@@ -829,7 +823,9 @@ class SDK extends EventEmitter {
 
     await this._seed(archive)
     if (this.watch) {
-      driveWatch.on('error', err => this._watchErrHandler(err, publicKeyString))
+      driveWatch.on('error', err =>
+        _watchErrHandler(this, err, publicKeyString)
+      )
       this.drivesToWatch.set(
         DatEncoding.encode(archive.discoveryKey),
         driveWatch
