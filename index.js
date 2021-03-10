@@ -9,7 +9,7 @@ const assertModuleType = require('./lib/assert-module-type')
 const _getAvroType = require('./lib/_get-avro-type')
 const assertModule = require('./lib/assert-module')
 const _flatten = require('./lib/_flatten')
-
+const _dbItemError = require('./lib/_db-item-error')
 const {
   promises: {
     open,
@@ -165,7 +165,7 @@ class SDK extends EventEmitter {
     }
 
     this.dbItemType.isValid(dbitem, {
-      errorHook: this._dbItemError
+      errorHook: _dbItemError
     })
   }
 
@@ -180,14 +180,6 @@ class SDK extends EventEmitter {
       const busyErr = new EBUSYError(err.message, key)
       this.emit('warn', busyErr)
     }
-  }
-
-  _dbItemError (path, any, type) {
-    throw new ValidationError(
-      `Valid Metadata: ${type}`,
-      `${any} (${typeof any})`,
-      path.join()
-    )
   }
 
   async _seed (archive, joinOpts = {}) {
