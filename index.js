@@ -3,6 +3,8 @@ const { join, isAbsolute, basename } = require('path')
 const { platform } = require('os')
 const assertValid = require('./lib/assert-valid')
 const allowedProperties = require('./lib/allowed-properties')
+const assertHyperUrl = require('./lib/assert-hyper-url')
+
 
 const {
   promises: {
@@ -149,16 +151,6 @@ class SDK extends EventEmitter {
     debug(`persist drives? ${!!this.persist}`)
     debug(`swarm enabled? ${!this.disableSwarm}`)
     debug(`watch enabled? ${this.watch}`)
-  }
-
-  assertHyperUrl (hyperUrl) {
-    assert(
-      typeof hyperUrl === 'string' || Buffer.isBuffer(hyperUrl),
-      TypeError,
-      "'string' or Buffer",
-      hyperUrl,
-      'hyperUrl'
-    )
   }
 
   assertHyperUrlVersioned (hyperUrl) {
@@ -1443,7 +1435,7 @@ class SDK extends EventEmitter {
   }
 
   async addFiles (key, filePaths = []) {
-    this.assertHyperUrl(key)
+    assertHyperUrl(key)
     debug(`addFiles: key ${key}`)
     debug(`addFiles: key ${filePaths}`)
 
@@ -1476,7 +1468,7 @@ class SDK extends EventEmitter {
   }
 
   async removeFile (key, filePaths = []) {
-    this.assertHyperUrl(key)
+    assertHyperUrl(key)
     debug(`addFiles: key ${key}`)
     debug(`addFiles: key ${filePaths}`)
 
@@ -1954,7 +1946,7 @@ class SDK extends EventEmitter {
     // get module from localdb, if absent will query it from the swarm
     // this fn will also call seed() after retrieving the module from the swarm
 
-    this.assertHyperUrl(mKey)
+    assertHyperUrl(mKey)
 
     if (typeof mVersion === 'boolean') {
       download = mVersion
@@ -2207,8 +2199,8 @@ class SDK extends EventEmitter {
    * @param {(string|buffer)} targetProfileKey - version that is followed
    */
   async unfollow (localProfileKey, targetProfileKey) {
-    this.assertHyperUrl(localProfileKey)
-    this.assertHyperUrl(targetProfileKey)
+    assertHyperUrl(localProfileKey)
+    assertHyperUrl(targetProfileKey)
 
     debug('unfollow')
 
