@@ -7,6 +7,7 @@ const assertHyperUrl = require('./lib/assert-hyper-url')
 const _unflatten = require('./lib/_unflatten')
 const assertModuleType = require('./lib/assert-module-type')
 const _getAvroType = require('./lib/_get-avro-type')
+const assertModule = require('./lib/assert-module')
 
 const {
   promises: {
@@ -153,14 +154,6 @@ class SDK extends EventEmitter {
     debug(`persist drives? ${!!this.persist}`)
     debug(`swarm enabled? ${!this.disableSwarm}`)
     debug(`watch enabled? ${this.watch}`)
-  }
-
-  assertModule (module) {
-    const unflatten = _unflatten(module)
-    const localProfileType = _getAvroType(this, unflatten.p2pcommons.type)
-    if (!localProfileType.isValid(unflatten)) {
-      throw new Error('Invalid local profile module')
-    }
   }
 
   assertMetadata (meta) {
@@ -2188,8 +2181,7 @@ class SDK extends EventEmitter {
     }
 
     assertModuleType(localProfile, 'profile')
-
-    this.assertModule(localProfile)
+    assertModule(this, localProfile)
 
     const {
       host: targetProfileKeyUnversioned,
@@ -2211,8 +2203,7 @@ class SDK extends EventEmitter {
     }
 
     assertModuleType(targetProfile, 'profile')
-
-    this.assertModule(targetProfile)
+    assertModule(this, targetProfile)
 
     // everything is valid, removing profile
     const finalTargetProfileKey = targetProfileVersion
