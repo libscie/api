@@ -2,6 +2,7 @@ const { EventEmitter } = require('events')
 const { join, isAbsolute, basename } = require('path')
 const { platform } = require('os')
 const assertValid = require('./lib/assert-valid')
+const allowedProperties = require('./lib/allowed-properties')
 
 const {
   promises: {
@@ -148,19 +149,6 @@ class SDK extends EventEmitter {
     debug(`persist drives? ${!!this.persist}`)
     debug(`swarm enabled? ${!this.disableSwarm}`)
     debug(`watch enabled? ${this.watch}`)
-  }
-
-  allowedProperties () {
-    return [
-      'title',
-      'description',
-      'main',
-      'subtype',
-      'authors',
-      'contents',
-      'parents',
-      'follows'
-    ]
   }
 
   assertHyperUrl (hyperUrl) {
@@ -1059,9 +1047,8 @@ class SDK extends EventEmitter {
     debug('set params', params)
     // Check if received keys are valid (editable)
     const receivedKeys = Object.keys(mod)
-    const allowedProperties = this.allowedProperties()
     for (const key of receivedKeys) {
-      if (!allowedProperties.includes(key)) {
+      if (!allowedProperties().includes(key)) {
         throw new InvalidKeyError(key)
       }
     }
