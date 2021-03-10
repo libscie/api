@@ -8,6 +8,7 @@ const _unflatten = require('./lib/_unflatten')
 const assertModuleType = require('./lib/assert-module-type')
 const _getAvroType = require('./lib/_get-avro-type')
 const assertModule = require('./lib/assert-module')
+const _flatten = require('./lib/_flatten')
 
 const {
   promises: {
@@ -187,12 +188,6 @@ class SDK extends EventEmitter {
       `${any} (${typeof any})`,
       path.join()
     )
-  }
-
-  _flatten (data) {
-    if (typeof data.type === 'string') return data
-    const { p2pcommons, ...rest } = data
-    return { ...rest, ...p2pcommons }
   }
 
   async _seed (archive, joinOpts = {}) {
@@ -868,7 +863,7 @@ class SDK extends EventEmitter {
       `Saved new ${indexJSON.p2pcommons.type}, with key: ${publicKeyString}`
     )
     // Note(dk): flatten p2pcommons obj in order to have a more symmetrical API
-    return { rawJSON: this._flatten(indexJSON), metadata, driveWatch }
+    return { rawJSON: _flatten(indexJSON), metadata, driveWatch }
   }
 
   async saveItem ({
@@ -958,7 +953,7 @@ class SDK extends EventEmitter {
     })
 
     return {
-      rawJSON: this._flatten(indexJSON),
+      rawJSON: _flatten(indexJSON),
       metadata
     }
   }
@@ -1160,7 +1155,7 @@ class SDK extends EventEmitter {
     const dbitem = await this.localdb.get(key)
     debug('get', dbitem)
     const { rawJSON, ...metadata } = dbitem
-    return { rawJSON: this._flatten(rawJSON), metadata }
+    return { rawJSON: _flatten(rawJSON), metadata }
   }
 
   /**
@@ -1251,7 +1246,7 @@ class SDK extends EventEmitter {
 
         if (!Array.isArray(data)) return resolve([data])
         const { rawJSON, metadata } = data
-        return resolve({ rawJSON: this._flatten(rawJSON), metadata })
+        return resolve({ rawJSON: _flatten(rawJSON), metadata })
       })
     })
   }
@@ -1282,7 +1277,7 @@ class SDK extends EventEmitter {
         ) {
           const { rawJSON, ...metadata } = v
           const flattened = {
-            rawJSON: this._flatten(rawJSON),
+            rawJSON: _flatten(rawJSON),
             metadata
           }
           out.push(flattened)
@@ -1310,7 +1305,7 @@ class SDK extends EventEmitter {
         const { rawJSON, ...metadata } = val
         if (rawJSON.p2pcommons.type === 'content') {
           const flattened = {
-            rawJSON: this._flatten(rawJSON),
+            rawJSON: _flatten(rawJSON),
             metadata
           }
           out.push(flattened)
@@ -1337,7 +1332,7 @@ class SDK extends EventEmitter {
         const { rawJSON, ...metadata } = val
         if (rawJSON.p2pcommons.type === 'profile') {
           const flattened = {
-            rawJSON: this._flatten(rawJSON),
+            rawJSON: _flatten(rawJSON),
             metadata
           }
           out.push(flattened)
@@ -1357,7 +1352,7 @@ class SDK extends EventEmitter {
         const { rawJSON, ...metadata } = val
         if (metadata.isWritable) {
           const flattened = {
-            rawJSON: this._flatten(rawJSON),
+            rawJSON: _flatten(rawJSON),
             metadata
           }
           out.push(flattened)
@@ -1977,7 +1972,7 @@ class SDK extends EventEmitter {
     ).catch(err => this._log(err, 'warn'))
 
     return {
-      rawJSON: this._flatten(module),
+      rawJSON: _flatten(module),
       versionedKey: `${mKeyString}+${meta.version}`,
       metadata: meta,
       dlHandle,
