@@ -155,6 +155,7 @@ class SDK extends EventEmitter {
     // memoize methods
     this.ready = pMemoize(this.ready)
     // cancelable methods
+    this.init = PCancelable.fn(this.init.bind(this))
     this.clone = PCancelable.fn(this.clone.bind(this))
     // debug constructor
     debug(`platform: ${this.platform}`)
