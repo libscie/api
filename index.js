@@ -4,8 +4,6 @@ const { platform } = require('os')
 const assertValid = require('./lib/assert-valid')
 const allowedProperties = require('./lib/allowed-properties')
 const assertHyperUrl = require('./lib/assert-hyper-url')
-
-
 const {
   promises: {
     open,
@@ -151,15 +149,6 @@ class SDK extends EventEmitter {
     debug(`persist drives? ${!!this.persist}`)
     debug(`swarm enabled? ${!this.disableSwarm}`)
     debug(`watch enabled? ${this.watch}`)
-  }
-
-  assertHyperUrlVersioned (hyperUrl) {
-    assert(typeof hyperUrl === 'string', TypeError, 'string', 'hyperUrl')
-    const { version } = parse(hyperUrl)
-    if (version !== 0 && !version) {
-      throw new TypeError('versioned hyper url', hyperUrl, 'hyperUrl')
-    }
-    return true
   }
 
   assertModuleType (module, mType) {
