@@ -4,6 +4,8 @@ const { platform } = require('os')
 const assertValid = require('./lib/assert-valid')
 const allowedProperties = require('./lib/allowed-properties')
 const assertHyperUrl = require('./lib/assert-hyper-url')
+const _unflatten = require('./lib/_unflatten')
+
 const {
   promises: {
     open,
@@ -152,7 +154,7 @@ class SDK extends EventEmitter {
   }
 
   assertModuleType (module, mType) {
-    const unflatten = this._unflatten(module)
+    const unflatten = _unflatten(module)
     assert(
       unflatten.p2pcommons.type === mType,
       TypeError,
@@ -163,7 +165,7 @@ class SDK extends EventEmitter {
   }
 
   assertModule (module) {
-    const unflatten = this._unflatten(module)
+    const unflatten = _unflatten(module)
     const localProfileType = this._getAvroType(unflatten.p2pcommons.type)
     if (!localProfileType.isValid(unflatten)) {
       throw new Error('Invalid local profile module')
@@ -210,12 +212,6 @@ class SDK extends EventEmitter {
       `${any} (${typeof any})`,
       path.join()
     )
-  }
-
-  _unflatten (data) {
-    if (typeof data.p2pcommons === 'object') return data
-    const { title, description, url, links, ...p2pcommons } = data
-    return { title, description, url, links, p2pcommons }
   }
 
   _flatten (data) {
@@ -541,7 +537,7 @@ class SDK extends EventEmitter {
         const module = overwriteIndex
           ? dirIndexJSON
           : await drive.readFile('index.json')
-        const indexJSON = this._unflatten(JSON.parse(module))
+        const indexJSON = _unflatten(JSON.parse(module))
 
         // check indexJSON is still valid
         const avroType = this._getAvroType(indexJSON.p2pcommons.type)
@@ -1071,8 +1067,8 @@ class SDK extends EventEmitter {
 
     const overwriteMerge = (dest, source, options) => source
     const finalJSON = deepMerge(
-      this._unflatten(rawJSONFlatten),
-      prepareMergeData(this._unflatten(mod)),
+      _unflatten(rawJSONFlatten),
+      prepareMergeData(_unflatten(mod)),
       {
         arrayMerge: force ? overwriteMerge : null
       }
