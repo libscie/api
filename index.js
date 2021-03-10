@@ -5,6 +5,7 @@ const assertValid = require('./lib/assert-valid')
 const allowedProperties = require('./lib/allowed-properties')
 const assertHyperUrl = require('./lib/assert-hyper-url')
 const _unflatten = require('./lib/_unflatten')
+const assertModuleType = require('./lib/assert-module-type')
 
 const {
   promises: {
@@ -151,17 +152,6 @@ class SDK extends EventEmitter {
     debug(`persist drives? ${!!this.persist}`)
     debug(`swarm enabled? ${!this.disableSwarm}`)
     debug(`watch enabled? ${this.watch}`)
-  }
-
-  assertModuleType (module, mType) {
-    const unflatten = _unflatten(module)
-    assert(
-      unflatten.p2pcommons.type === mType,
-      TypeError,
-      mType,
-      unflatten.p2pcommons.type,
-      'type'
-    )
   }
 
   assertModule (module) {
@@ -2205,7 +2195,7 @@ class SDK extends EventEmitter {
       throw new Error('local profile is not writable')
     }
 
-    this.assertModuleType(localProfile, 'profile')
+    assertModuleType(localProfile, 'profile')
 
     this.assertModule(localProfile)
 
@@ -2228,7 +2218,7 @@ class SDK extends EventEmitter {
       throw new Error('Module not found')
     }
 
-    this.assertModuleType(targetProfile, 'profile')
+    assertModuleType(targetProfile, 'profile')
 
     this.assertModule(targetProfile)
 
