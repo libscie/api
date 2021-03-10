@@ -6,6 +6,7 @@ const allowedProperties = require('./lib/allowed-properties')
 const assertHyperUrl = require('./lib/assert-hyper-url')
 const _unflatten = require('./lib/_unflatten')
 const assertModuleType = require('./lib/assert-module-type')
+const _getAvroType = require('./lib/_get-avro-type')
 
 const {
   promises: {
@@ -156,7 +157,7 @@ class SDK extends EventEmitter {
 
   assertModule (module) {
     const unflatten = _unflatten(module)
-    const localProfileType = this._getAvroType(unflatten.p2pcommons.type)
+    const localProfileType = _getAvroType(this, unflatten.p2pcommons.type)
     if (!localProfileType.isValid(unflatten)) {
       throw new Error('Invalid local profile module')
     }
@@ -184,15 +185,6 @@ class SDK extends EventEmitter {
     if (err.code === 'EBUSY') {
       const busyErr = new EBUSYError(err.message, key)
       this.emit('warn', busyErr)
-    }
-  }
-
-  _getAvroType (appType) {
-    if (appType === 'content') {
-      return this.contentType
-    }
-    if (appType === 'profile') {
-      return this.profileType
     }
   }
 
@@ -530,7 +522,7 @@ class SDK extends EventEmitter {
         const indexJSON = _unflatten(JSON.parse(module))
 
         // check indexJSON is still valid
-        const avroType = this._getAvroType(indexJSON.p2pcommons.type)
+        const avroType = _getAvroType(this, indexJSON.p2pcommons.type)
         try {
           assertValid(avroType, indexJSON)
         } catch (err) {
@@ -548,7 +540,7 @@ class SDK extends EventEmitter {
         await this.localdb.put(urlString, {
           ...metadata,
           rawJSON: indexJSON,
-          avroType: this._getAvroType(indexJSON.p2pcommons.type).name
+          avroType: _getAvroType(this, indexJSON.p2pcommons.type).name
         })
       } catch (err) {
         this._log(`refreshMTimes: ${err.message}`, 'error')
@@ -724,7 +716,7 @@ class SDK extends EventEmitter {
     await this.localdb.put(DatEncoding.encode(moduleUrl), {
       ...metadata,
       rawJSON: indexJSON,
-      avroType: this._getAvroType(indexJSON.p2pcommons.type).name
+      avroType: _getAvroType(this, indexJSON.p2pcommons.type).name
     })
 
     // emit update-profile|content event
@@ -821,7 +813,7 @@ class SDK extends EventEmitter {
     }
 
     // Note(dk): validate earlier
-    const avroType = this._getAvroType(type)
+    const avroType = _getAvroType(this, type)
 
     assertValid(avroType, indexJSON)
 
@@ -969,7 +961,7 @@ class SDK extends EventEmitter {
     await this.localdb.put(DatEncoding.encode(indexJSON.url), {
       ...metadata,
       rawJSON: indexJSON,
-      avroType: this._getAvroType(indexJSON.p2pcommons.type).name
+      avroType: _getAvroType(this, indexJSON.p2pcommons.type).name
     })
 
     return {
@@ -1139,7 +1131,7 @@ class SDK extends EventEmitter {
 
     debug('set', { finalJSON })
     // Check if keys values are valid (ie: non empty, etc)
-    const avroType = this._getAvroType(rawJSONFlatten.type)
+    const avroType = _getAvroType(this, rawJSONFlatten.type)
 
     assertValid(avroType, finalJSON)
 
@@ -1241,7 +1233,7 @@ class SDK extends EventEmitter {
       await this.localdb.put(DatEncoding.encode(key), {
         ...metadata,
         rawJSON: indexJSON,
-        avroType: this._getAvroType(indexJSON.p2pcommons.type).name
+        avroType: _getAvroType(this, indexJSON.p2pcommons.type).name
       })
     }
 
@@ -1790,7 +1782,7 @@ class SDK extends EventEmitter {
       await this.localdb.put(DatEncoding.encode(module.url), {
         ...metadata,
         rawJSON: module,
-        avroType: this._getAvroType(module.p2pcommons.type).name
+        avroType: _getAvroType(this, module.p2pcommons.type).name
       })
     }
 
