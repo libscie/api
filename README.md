@@ -315,7 +315,7 @@ The following only validate a specific part of the supplied metadata:
 
 > _async_ `validateLinks({ indexMetadata: object })`
 
-> _async_ `validateP2pcommons({ indexMetadata: object })`
+> _async_ `validateP2Pcommons({ indexMetadata: object })`
 
 Validates the `p2pcommons` object structure (not its contents)
 
